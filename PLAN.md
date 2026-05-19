@@ -1,20 +1,19 @@
-<!-- /autoplan restore point: /home/azureuser/.gstack/projects/atomize-hq-spec/main-autoplan-restore-20260518-191503.md -->
-# I2: Rust V1 Contract Stack Mechanics Landing Plan
+# I3: Rust V1 Contract Stack Mechanics Landing Plan
 
-Status: **authoritative implementation plan**  
-Iteration: **I2**  
-Milestone family: **Rust V1 benchmark and truth-surface mechanics**  
-Implementation readiness: **ready for implementation**  
-Plan scope: **land the full M68 mechanics surface on top of the locked M65-M67 contract stack: benchmark registry, shared benchmark projection, schema-v4 `spec status --format json`, schema-v4 `spec export`, benchmark snapshots, readability review anchoring, reserved-gate projection for `BENCH-SERVICE`, and the exact anti-laundering/path-scope rules. Preserve all M66 support boundaries and defer supported-core expansion to M69.**  
-Base branch: **main**  
-Working branch: **main**  
-Validated at commit: **`aca0307`**  
+Status: **authoritative implementation plan**
+Iteration: **I3**
+Milestone family: **Rust V1 benchmark and truth-surface mechanics**
+Implementation readiness: **ready for implementation**
+Plan scope: **land the locked M68 mechanics surface on top of the live M61-era repo baseline: benchmark registry, shared benchmark projection core, schema-v4 `spec status --format json`, schema-v4 `spec export`, benchmark snapshots, readability review anchoring, reserved-gate projection for `BENCH-SERVICE`, and the exact anti-laundering/path-scope rules. Preserve all M66 support boundaries and keep M69 supported-core closure out of scope.**
+Base branch: **main**
+Working branch: **main**
+Validated at commit: **`3af2526`**
 Last rewritten: **2026-05-18**
 
 Supersedes:
 
-- the stale M61 TypeScript authority plan previously maintained at this path
-- `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-rust-completion-execution-plan-20260517-161417.md` as execution context only
+- the prior I2 plan previously maintained at this path
+- `ORCH_PLAN.md` as historical execution context only
 
 Locked authority inputs:
 
@@ -25,22 +24,22 @@ Locked authority inputs:
 
 Historical context, not authority:
 
-- `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-rust-completion-execution-plan-20260517-161417.md`
-- `CLAUDE.md`
+- `README.md`
+- `CHANGELOG.md`
 - `TODOS.md`
+- `ORCH_PLAN.md`
 
 Primary repo surfaces:
 
-- `spec-cli/src/commands.rs`
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/fixtures/*.json`
 - `spec-core/src/lib.rs`
 - `spec-core/src/export.rs`
 - `spec-core/src/passport.rs`
 - `spec-core/src/molecule_evidence.rs`
-- `spec-core/src/types.rs`
 - `spec-core/src/graph.rs`
-- `benchmarks/**`
+- `spec-core/src/types.rs`
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/*.json`
 - `examples/ecommerce/units/**`
 - `examples/crosslib-app/units/**`
 - `examples/shared-spec/units/**`
@@ -50,73 +49,65 @@ Primary repo surfaces:
 
 ## Executive Summary
 
-The repo already has the hard parts of proof truth.
+The locked M65-M68 stack already answered the strategic questions.
 
-It can author specs, validate them, build them, test them, persist unit proof in
-`.spec.passport.json`, persist molecule proof in `*.test.evidence.json`, and
-project current truth through `spec status --format json` and `spec export`.
-What it does not have is the benchmark-accounting layer that turns those proof
-surfaces into an honest Rust V1 product claim.
+`M65` split the artifact family. `M66` locked the narrow-core support rows.
+`M67` locked the benchmark roster and writer-versus-reader wall. `M68` locked
+the mechanics. What is still missing is the code.
 
-That is the whole I2 job.
+That is the whole I3 job.
 
-I2 does not widen M66 support rows. It does not re-open bounded generics,
-async, IO, traits, lifetimes, or macro-heavy authored surfaces. It does not add
-benchmark fields to `.unit.spec`, `.test.spec`, passports, or molecule
-evidence. It adds one benchmark registry, one shared read-side projection core,
-one snapshot writer, one readability review anchor, and one schema-v4 machine
-surface for `status` and `export`.
-
-After I2, the repo can finally say this truthfully:
+I3 is not a new product direction. It is the live-code landing of the already
+locked benchmark and truth-surface contract:
 
 ```text
-the Rust V1 contract stack has an explicit benchmark roster,
-explicit writer-vs-reader boundaries,
-explicit anti-laundering rules,
-explicit reserved-gate projection for BENCH-SERVICE,
-and one machine-readable read-side benchmark surface shared by status and export
+one benchmark registry,
+one shared benchmark projection core,
+one schema-v4 benchmark surface in status and export,
+one read-only snapshot command,
+one readability-review anchor surface,
+and one exact reserved-gate story for BENCH-SERVICE
 ```
 
-That closes M68.
-
-It does not close M69.
+I3 does not widen M66 support rows. It does not implement `BENCH-SERVICE`. It
+does not reopen bounded generics, async/IO, or any larger Rust V1 claim.
 
 ## Frozen Implementation Decisions
 
-These are inherited from M65-M68 and are locked for I2.
+These are inherited from M65-M68 and are locked for I3.
 
 1. **M66 remains the only source of truth for supported, deferred, and explicitly-out Rust rows and interactions.**
-   - I2 may not widen or narrow those rows.
-   - I2 may not reinterpret fallback policy.
+   - I3 may not widen or narrow those rows.
+   - I3 may not reinterpret fallback policy.
 
 2. **M67 remains the only source of truth for benchmark roles.**
-   - `BENCH-ECOM` is the only active positive benchmark in I2.
+   - `BENCH-ECOM` is the only active positive benchmark in I3.
    - `BENCH-SERVICE` remains `reserved` and required for final V1 proof.
    - `BENCH-CROSSLIB` remains `companion_negative_proof`, never positive credit.
 
 3. **Benchmark accounting is label-driven, not discovered ad hoc.**
    - `benchmarks/labels.json` is authoritative for benchmark membership and classification.
-   - Unlabeled or duplicated carriers under an active benchmark root are benchmark-accounting failures.
+   - Unlabeled, duplicated, or unknown active-benchmark carriers are accounting failures.
 
 4. **Proof writers stay where they already are.**
    - `.spec.passport.json` remains the authoritative unit proof write surface.
    - `*.test.evidence.json` remains the authoritative molecule proof write surface.
-   - `spec status`, `spec export`, and benchmark snapshotting stay read/projection surfaces only.
+   - `spec status`, `spec export`, and `spec benchmark snapshot` remain read/projection surfaces only.
 
-5. **No benchmark metadata is authored inside workload specs or proof artifacts in I2.**
+5. **No benchmark metadata is authored inside workload specs or proof artifacts in I3.**
    - no benchmark fields in `.unit.spec`
    - no benchmark fields in `.test.spec`
    - no benchmark fields in passports
    - no benchmark fields in molecule evidence
 
 6. **Path scope is explicit.**
-   - benchmark projection is `full` only when the command scope loads the entire benchmark root
+   - benchmark projection is `full` only when the command loads the entire benchmark root
    - otherwise it is `partial`
    - partial projections never mint positive credit
 
 7. **Reserved-state visibility is mandatory.**
    - repo-broad `spec status . --format json` and repo-broad `spec export` must surface `BENCH-SERVICE`
-   - reserved state may not collapse into silence or “missing data”
+   - reserved state may not collapse into silence, “missing data”, or implied green
 
 8. **Readability is benchmark-scoped human observation, not proof truth.**
    - positive benchmarks only
@@ -125,44 +116,47 @@ These are inherited from M65-M68 and are locked for I2.
 
 9. **The shared generated tree stays shared.**
    - readability scope includes shared `mod.rs` and benchmark-relevant `molecule_tests.rs`
-   - there is no fake per-benchmark generated tree split
+   - there is no fake per-benchmark generated-tree split
 
-10. **Schema bumps are part of the milestone.**
+10. **Public machine-contract bumps are part of the milestone.**
     - `spec status --format json`: `schema_version 3 -> 4`
     - `spec export`: `schema_version 3 -> 4`
 
 ## Current Validated Basis
 
-Validated on `main` at `aca0307`.
+Validated on `main` at `3af2526`.
 
 Observed repo truth:
 
-- `spec-cli/src/commands.rs` already owns both `spec status --format json` and
-  `spec export --format json` shape emission.
-- `spec-core/src/export.rs` already builds the export bundle from authored
-  specs, passports, molecule evidence, and graph edges.
-- `spec-core/src/passport.rs` already projects current unit truth from authored
-  specs plus stored proof.
-- `spec-core/src/molecule_evidence.rs` already persists and reads molecule proof
-  truth.
-- `spec-cli/tests/fixtures/` already carries JSON fixture baselines for status
-  and export schema contracts.
-- `examples/ecommerce/units/**` already gives one positive benchmark candidate
-  with current unit passports and checked-in molecule evidence for
-  `pricing/checkout_flow` and `pricing/discount_plus_tax`.
-- `examples/crosslib-app/units/**` already gives one maintained companion
-  negative-proof workload root.
-- `examples/service/units` does not exist today, which is acceptable only
-  because `BENCH-SERVICE` is still a reserved benchmark and must remain
-  machine-visible without pretending the workload exists yet.
-- there is no `benchmarks/` directory today
-- there is no benchmark registry today
-- there is no shared benchmark projection module today
-- there is no benchmark snapshot command today
-- there is no readability review artifact today
-- `spec status --format json` and `spec export` have no benchmark surface today
+- `spec-cli/src/commands.rs` currently owns `spec status --format json` and exposes `schema_version: 3`.
+- `spec-core/src/export.rs` currently owns `spec export` bundle assembly and exposes `schema_version: 3`.
+- `spec-core/src/passport.rs` already projects current unit proof truth, freshness, portability, and semantic review.
+- `spec-core/src/molecule_evidence.rs` already persists and reads molecule proof truth.
+- `spec-core/src/graph.rs` already provides a typed local graph surface that status/export/projection work can reuse.
+- `spec-cli/tests/cli.rs` already carries end-to-end CLI contract tests and fixture-backed schema assertions.
+- `examples/ecommerce/units/**` already provides the positive benchmark workload candidates:
+  - `money/round`
+  - `pricing/apply_discount`
+  - `pricing/apply_tax`
+  - `pricing/calculate_total`
+  - `pricing/calculate_total_guarded_tax`
+  - `pricing/discount_strategy`
+  - `pricing/pricing_quote`
+  - molecule tests `pricing/checkout_flow`, `pricing/discount_plus_tax`, and non-required `pricing/discount_strategy_checkout_flow`
+- `examples/crosslib-app/units/**` already provides the maintained companion-negative workload candidates:
+  - `pricing/apply_discount`
+  - `pricing/apply_tax`
+  - `pricing/calculate_total`
+  - `pricing/checkout_nested_chain3`
+- `examples/shared-spec/units/**` already provides supporting sibling-library inputs that the cross-library workload depends on.
+- `benchmarks/` does not exist today.
+- there is no benchmark registry today.
+- there is no benchmark projection module today.
+- there is no benchmark snapshot command today.
+- there is no readability review artifact today.
+- `README.md` and `CHANGELOG.md` still describe the shipped surface as M61-era TypeScript and family work, not benchmark mechanics.
 
-The gap is therefore structural, not speculative.
+The gap is therefore structural and implementation-level, not product-discovery-level.
 
 ## Step 0: Scope Challenge
 
@@ -173,875 +167,624 @@ The problem is not “finish Rust V1.”
 The problem is narrower:
 
 ```text
-the repo already has workload truth and proof truth,
-but it still lacks the benchmark-accounting and projection layer
-that makes the Rust V1 contract observable without laundering fallback,
-partial scope, or reserved gates into fake green state
+the repo already has authored workload truth, unit proof truth,
+molecule proof truth, semantic projection, and machine-readable status/export,
+but it still lacks the benchmark-accounting and read-side projection layer
+that makes the Rust V1 contract observable without laundering partial scope,
+fallback-backed cases, or reserved gates into fake green state
 ```
 
-If I2 expands beyond that sentence, it is overbuilt.
+If I3 expands beyond that sentence, it is overbuilt.
 
 ### What already exists
 
-| Sub-problem | Existing owner | I2 action |
+| Sub-problem | Existing owner | I3 action |
 | --- | --- | --- |
-| authored workload discovery | `spec-core::loader`, `spec-cli/src/commands.rs` | reuse; do not add a second discovery model |
-| unit proof persistence | `spec-core/src/passport.rs` | reuse as-is; benchmark code only reads projected truth |
-| molecule proof persistence | `spec-core/src/molecule_evidence.rs` | reuse as-is; benchmark code only reads current molecule evidence |
-| semantic truth projection | `spec-core/src/passport.rs`, `spec-core/src/export.rs` | reuse; benchmark projection consumes projected semantic support status, it does not re-evaluate semantics separately |
+| authored workload discovery | `spec-core::loader`, `spec-cli/src/commands.rs` | reuse; do not invent a second discovery model |
+| unit proof projection | `spec-core/src/passport.rs` | reuse; benchmark code reads projected truth only |
+| molecule proof projection | `spec-core/src/molecule_evidence.rs` plus CLI status paths | reuse; benchmark code reads current molecule truth only |
+| machine export bundle | `spec-core/src/export.rs` | extend; append benchmark projection instead of inventing a second export artifact |
 | status JSON emission | `spec-cli/src/commands.rs` | extend to schema v4 with additive `benchmarks[]` |
-| export JSON emission | `spec-core/src/export.rs` plus `spec-cli/src/commands.rs` | extend to schema v4 with additive `benchmarks[]` |
-| current canonical positive workload | `examples/ecommerce/units/**` | reuse as `BENCH-ECOM`; add label accounting, readability scope, and snapshot support |
-| current canonical cross-library pressure workload | `examples/crosslib-app/units/**` | reuse as `BENCH-CROSSLIB`; project as companion negative proof only |
-| JSON fixture contract testing | `spec-cli/tests/cli.rs`, `spec-cli/tests/fixtures/*.json` | extend; do not invent a second snapshot-only test harness |
+| local graph traversal | `spec-core/src/graph.rs` | reuse for benchmark case iteration and related coverage lookups where helpful |
+| proof digests / hash style | `spec-core/src/passport.rs`, `spec-core/src/molecule_evidence.rs`, `spec-core/src/portability.rs` | reuse the existing `sha256:` digest convention |
+| benchmark input workloads | `examples/ecommerce`, `examples/crosslib-app`, `examples/shared-spec` | reuse; do not author new benchmark workloads in I3 |
+| CLI fixture contract testing | `spec-cli/tests/cli.rs`, `spec-cli/tests/fixtures/*.json` | extend; do not invent a parallel benchmark-only harness |
 
 ### Minimum complete slice
 
-The minimum honest I2 slice is:
+The minimum honest I3 slice is:
 
-1. add `benchmarks/labels.json` and strict registry validation
-2. add one shared benchmark projection core in `spec-core`
-3. add canonical `label_digest` and `projection_digest`
-4. add path-scope `full` versus `partial` behavior with explicit anti-laundering
-5. add schema-v4 additive `benchmarks[]` to both `spec status --format json`
-   and `spec export`
-6. add `spec benchmark snapshot <benchmark-id>` as a read-only derived writer
-7. add readability review artifact loading and projection for positive
-   full-scope benchmarks
-8. add the reserved `BENCH-SERVICE` gate state and keep it visible at broad
-   scope
-9. add fixture-backed CLI coverage for full, partial, invalid, reserved, and
-   companion-negative cases
-10. seed the repo with the initial benchmark registry and initial readability
-    review anchor for `BENCH-ECOM`
+1. add `benchmarks/labels.json` with strict typed validation
+2. add one shared `spec-core` benchmark projection module
+3. add deterministic `label_digest` and `projection_digest`
+4. add exact path-scope `full` versus `partial` behavior with anti-laundering
+5. add schema-v4 additive `benchmarks[]` to `spec status --format json`
+6. add schema-v4 additive `benchmarks[]` to `spec export`
+7. add `spec benchmark snapshot <benchmark-id>` as a read-only derived writer
+8. add readability review artifact loading and projection for positive full-scope benchmarks
+9. seed the repo with the initial benchmark registry, readability review anchor, and canonical snapshots
+10. add fixture-backed CLI coverage for full, partial, invalid, reserved, and companion-negative cases
 
 Anything smaller is fake done.
 
 Examples:
 
-- adding `benchmarks/labels.json` without path-scope rules is fake done
-- adding path-scope rules without shared projection code is fake done
-- adding schema-v4 output without digest stability is fake done
-- adding a snapshot command without a strict writer-vs-reader wall is fake done
-- adding benchmark JSON without reserved `BENCH-SERVICE` projection is fake done
+- adding `benchmarks/labels.json` without shared projection code is fake done
+- adding schema-v4 output without the snapshot/readability/digest contract is fake done
+- adding a snapshot command without the strict writer-versus-reader wall is fake done
+- adding benchmark JSON without reserved `BENCH-SERVICE` visibility is fake done
 
 ### Complexity and blast radius
 
 This plan crosses the 8-file smell threshold.
 
-That is acceptable here because the extra files are contract surfaces, not
-infrastructure vanity:
+That is acceptable here because the extra files are contract surfaces, not subsystem vanity:
 
-- one new benchmark registry under `benchmarks/`
-- one new core projection module
-- one core export integration surface
-- one CLI status/export/snapshot surface
-- one CLI integration test file
+- one new repo-root benchmark artifact tree under `benchmarks/`
+- one new shared benchmark module in `spec-core`
+- one `spec-core` export integration surface
+- one CLI status/export/snapshot integration surface
+- one CLI test file expansion
 - multiple JSON fixture baselines
-- one benchmark review artifact
-- one doc-surface refresh for `README.md`, `TODOS.md`, and `CHANGELOG.md`
+- docs sync in `README.md`, `CHANGELOG.md`, and `TODOS.md`
 
-The smaller shortcut would leave the repo with yet another half-contract.
-Boil the lake.
+The smaller shortcut is the dangerous version here. It would leave the repo with
+another plan that sounds precise while the live code still cannot tell the truth
+about benchmarks.
 
 ### Search check
 
-No framework built-in replaces this work.
+Search unavailable for external framework advice, so this plan stays inside live repo truth and known Rust CLI architecture.
 
-- **[Layer 1]** Reuse the existing authored-spec loaders
-- **[Layer 1]** Reuse the existing passport and molecule-evidence truth writers
-- **[Layer 1]** Reuse the existing status/export JSON fixture harness
-- **[Layer 3]** The right architecture is not a benchmark subsystem rewrite, it
-  is one shared projection layer that reads authoritative proof truth and emits
-  benchmark truth without writing any new proof
+In-repo first-principles conclusions:
+
+- **[Layer 1]** Reuse existing loaders, passports, molecule evidence, and CLI fixture harness.
+- **[Layer 1]** Reuse the repo’s existing `sha256:` digest convention.
+- **[Layer 3]** Do not build a benchmark subsystem. Build one shared projection module and let status, export, and snapshot consume it.
 
 ### TODOS cross-reference
 
-`TODOS.md` already carries the long-term Rust-completion direction, but it does
-not yet name the benchmark registry or benchmark-projection mechanics as a
-separate closure step.
+`TODOS.md` does not currently carry an honest benchmark-mechanics closure step.
 
-I2 should end with:
+I3 should end with:
 
-- `M68 mechanics landing` closed
-- `M69 supported-core closure` still open
-- `BENCH-SERVICE` still explicitly reserved
+- the M68 mechanics landing represented in live code
+- `M69 supported-core closure` still explicitly open
+- `BENCH-SERVICE` still explicitly reserved and unimplemented
 
 ### Completeness and distribution check
 
-No new repo-external artifact is introduced.
+No new external distribution surface is introduced.
 
 This remains a CLI and JSON-contract milestone inside the existing `spec`
-distribution surface. Completeness here means:
+binary. Completeness here means:
 
 - every benchmark role is explicit
 - every broad-scope and narrow-scope projection is honest
-- every schema change is fixture-tested
-- every writer-versus-reader boundary is enforced
-
-## Milestone Contract
-
-### Exact shipped behavior after I2
-
-After I2:
-
-- `benchmarks/labels.json` exists and is the authoritative benchmark-accounting file
-- `benchmarks/snapshots/<BENCHMARK_ID>.snapshot.json` exists as a derived
-  artifact written only by `spec benchmark snapshot <benchmark-id>`
-- `benchmarks/reviews/<BENCHMARK_ID>.readability.review.json` exists as the
-  benchmark-scoped readability verdict surface
-- `spec status --format json` emits `schema_version: 4` with additive
-  top-level `benchmarks[]`
-- `spec export` emits `schema_version: 4` with additive top-level
-  `benchmarks[]`
-- both surfaces use the same projection engine, the same enums, the same
-  path-scope rules, and the same anti-laundering rules
-- `BENCH-ECOM` can project `full` or `partial` benchmark truth depending on
-  command scope
-- `BENCH-CROSSLIB` stays visible but never contributes positive credit
-- `BENCH-SERVICE` stays visible at broad scope as `reserved`, never positive
-  and never silently omitted
-- readability review status is benchmark-scoped and projection-digest-bound
-- `status`, `export`, and snapshotting remain read/projection surfaces only
-
-### Exact initial benchmark roster
-
-I2 seeds exactly this roster:
-
-| Benchmark id | Kind | Lifecycle | Required for V1 | Root | Generated root | Readability scope |
-| --- | --- | --- | --- | --- | --- | --- |
-| `BENCH-ECOM` | `positive` | `active` | `true` | `examples/ecommerce/units` | `examples/ecommerce/src/generated` | `supported_closure` |
-| `BENCH-SERVICE` | `positive` | `reserved` | `true` | `examples/service/units` | `examples/service/src/generated` | `supported_closure` |
-| `BENCH-CROSSLIB` | `companion_negative_proof` | `active` | `false` | `examples/crosslib-app/units` | `examples/crosslib-app/src/generated` | `none` |
-
-Initial `BENCH-ECOM` required molecule proofs:
-
-- `pricing/checkout_flow`
-- `pricing/discount_plus_tax`
-
-Initial `BENCH-ECOM` supported unit carriers:
-
-- `money/round`
-- `pricing/apply_discount`
-- `pricing/apply_tax`
-- `pricing/calculate_total`
-- `pricing/calculate_total_guarded_tax`
-- `pricing/discount_strategy`
-- `pricing/pricing_quote`
-
-Initial `BENCH-CROSSLIB` companion-negative unit carriers:
-
-- `pricing/apply_discount`
-- `pricing/apply_tax`
-- `pricing/calculate_total`
-- `pricing/checkout_nested_chain3`
-
-### Exact preserved boundaries
-
-These must still be true after I2:
-
-- no benchmark fields in authored workload specs
-- no benchmark fields in passports
-- no benchmark fields in molecule evidence
-- `spec build` does not mint benchmark truth
-- `spec generate` does not mint benchmark truth
-- `spec status` does not mint proof truth
-- `spec export` does not mint proof truth
-- benchmark snapshots do not refresh proof truth
-- `M66` support rows do not change
-- `BENCH-SERVICE` does not become implemented
-- `BENCH-CROSSLIB` never becomes positive-credit workload proof
-- partial-scope benchmark queries never emit positive supported credit
-
-### Exact machine contract
-
-This plan is the implementation contract.
-
-An implementer should not need to reopen the upstream M68 design doc to know
-what the JSON and enum surfaces have to do.
-
-#### Registry contract
-
-`benchmarks/labels.json` is `schema_version: 1` and each benchmark entry must
-declare:
-
-- `id`
-- `kind`
-- `lifecycle`
-- `required_for_v1`
-- `root`
-- `generated_root`
-- `readability_scope`
-- `required_molecule_ids[]`
-- `cases[]`
-
-Exact allowed values:
-
-- `kind`: `positive`, `companion_negative_proof`
-- `lifecycle`: `active`, `reserved`
-- `classification`: `supported`, `deferred`, `fallback_backed`,
-  `explicitly_out`, `companion_negative_proof`
-- `readability_scope`: `supported_closure`, `none`
-
-Hard rules:
-
-- `cases[]` may contain only unit carriers in I2
-- molecule tests are benchmark obligations only through
-  `required_molecule_ids[]`, never through `cases[]`
-- `BENCH-ECOM` and `BENCH-SERVICE` are `kind: positive`
-- `BENCH-CROSSLIB` is `kind: companion_negative_proof`
-- a `reserved` benchmark may legally have `cases: []` and a missing on-disk
-  root
-- an `active` benchmark may not silently rely on unlabeled authored units under
-  its root
-
-#### Projection contract
-
-Every full-scope benchmark projection in `status`, `export`, and snapshotting
-uses one shared shape with these fields:
-
-- `benchmark_id`
-- `kind`
-- `lifecycle`
-- `required_for_v1`
-- `path_scope`
-- `accounting_status`
-- `benchmark_status`
-- `gate_status`
-- `readability_review_status`
-- `readability_verdict` when a review exists
-- `label_digest`
-- `projection_digest`
-- `summary`
-- `required_molecule_proofs[]`
-- `cases[]`
-- `readability_generated_files[]` when readability applies
-
-Each projected case must carry:
-
-- `case_id`
-- `carrier_kind`
-- `carrier_id`
-- `classification`
-- `status`
-- `reason`
-- `semantic_support_status` when present
-- `proof_refs.passport` when present
-- `proof_refs.covering_molecule_evidence[]` when present
-- `counts_as_supported_positive`
-
-`counts_as_supported_positive` is true only when all of these are true:
-
-1. parent benchmark kind is `positive`
-2. parent benchmark lifecycle is `active`
-3. `path_scope == full`
-4. `accounting_status == valid`
-5. case classification is `supported`
-6. case status is `valid`
-7. semantic support status is absent or exactly `supported`
-
-Otherwise it is false. No exceptions.
-
-#### Enum contract
-
-Exact benchmark-level enums:
-
-- `accounting_status`: `valid`, `invalid`, `reserved_missing_cases`,
-  `partial_valid`, `partial_invalid`
-- `benchmark_status`: `passing`, `failing`, `incomplete`, `invalid`,
-  `reserved`
-- `gate_status`: `satisfied`, `open`, `reserved`, `not_applicable`
-- `readability_review_status`: `current`, `stale`, `missing`,
-  `not_applicable`
-
-The reserved `BENCH-SERVICE` full-scope state is locked:
-
-- `lifecycle: reserved`
-- `accounting_status: reserved_missing_cases`
-- `benchmark_status: reserved`
-- `gate_status: reserved`
-
-That state must never be collapsed into “missing”, omitted from broad scope, or
-coerced into green.
-
-#### Path-scope contract
-
-Benchmark projection is in scope when the command path equals the benchmark
-root, is an ancestor of it, is a descendant inside it, or is a single
-`.unit.spec` / `.test.spec` file under it.
-
-`path_scope: full` is allowed only when the command loaded the entire benchmark
-root.
-
-`path_scope: partial` is required for namespace and single-file projections and
-must omit:
-
-- `benchmark_status`
-- `gate_status`
-- `label_digest`
-- `projection_digest`
-- `summary`
-- `readability_review_status`
-- `readability_verdict`
-- `readability_generated_files[]`
-
-Partial scope may emit only `partial_valid` or `partial_invalid`, and every
-partial-scope case must emit `counts_as_supported_positive: false`.
-
-#### Digest contract
-
-`label_digest` and `projection_digest` must both be deterministic SHA-256 over
-canonical JSON payloads.
-
-Implementation rules:
-
-- no hashing pretty JSON
-- no hashing map iteration order
-- no hashing temp paths
-- sort `required_molecule_ids[]`, case lists, proof-ref lists, and readability
-  file lists before canonical encoding
-- `projection_digest` excludes `generated_at`, readability review verdict
-  fields, snapshot output location, and any ambient runtime-only path detail
-
-#### Snapshot and readability contract
-
-`spec benchmark snapshot <benchmark-id>` is full-scope only.
-
-It may read authored specs, labels, passports, molecule evidence, readability
-review files, and generated output. It writes only:
-
-- `benchmarks/snapshots/<BENCHMARK_ID>.snapshot.json`
-
-It may not write:
-
-- passports
-- molecule evidence
-- semantic review
-- readability review files
-
-For active positive benchmarks it must validate that every path listed in
-`readability_generated_files[]` exists. For `BENCH-SERVICE`, it must write the
-reserved snapshot state without trying to fake generated-file freshness.
+- every schema bump is fixture-backed
+- every writer-versus-reader boundary is enforced in code and docs
 
 ## Architecture Review
 
-### Chosen architecture
+### Proposed module shape
 
-One shared projection core.
-
-Not one benchmark implementation for `status`, one for `export`, and one for
-snapshotting. That would drift immediately.
-
-The implementation should introduce exactly one new `spec-core` module for
-benchmark accounting, projection, digesting, and snapshot assembly. CLI
-commands own parsing arguments and writing files. Core owns truth.
+| Surface | Action | Why |
+| --- | --- | --- |
+| `spec-core/src/benchmark.rs` | new | one shared typed home for registry parsing, enums, case projection, path-scope evaluation, digest payloads, readability scope, and snapshot records |
+| `spec-core/src/lib.rs` | extend | export the benchmark module to CLI/tests |
+| `spec-core/src/export.rs` | extend | append additive benchmark projection into the existing export bundle and bump schema to 4 |
+| `spec-cli/src/commands.rs` | extend | own status emission, export wiring, and `benchmark snapshot` command orchestration |
+| `spec-cli/tests/cli.rs` | extend | own end-to-end CLI contract coverage for schema-v4 and snapshot behavior |
+| `spec-cli/tests/fixtures/*.json` | add/update | freeze full, partial, reserved, and invalid machine surfaces |
+| `benchmarks/labels.json` | new | authoritative benchmark accounting input that the projection layer reads |
+| `benchmarks/reviews/BENCH-ECOM.readability.review.json` | new | authored readability anchor for the positive benchmark |
+| `benchmarks/snapshots/*.snapshot.json` | new | canonical derived full-benchmark projections committed as inspectable truth artifacts |
 
 ### Dependency graph
 
 ```text
-                           authored inputs
-                    +---------------------------+
-                    | benchmarks/labels.json    |
-                    | .unit.spec / .test.spec   |
-                    +-------------+-------------+
-                                  |
-                                  v
-                       +----------------------+
-                       | loader + scope set   |
-                       | existing commands.rs |
-                       +----------+-----------+
-                                  |
-                +-----------------+------------------+
-                |                                    |
-                v                                    v
-   +---------------------------+         +---------------------------+
-   | passport projected truth  |         | molecule evidence truth   |
-   | spec-core/passport.rs     |         | spec-core/molecule_*.rs   |
-   +-------------+-------------+         +-------------+-------------+
-                 \                               /
-                  \                             /
-                   \                           /
-                    v                         v
-                +-----------------------------------+
-                | spec-core benchmark projection    |
-                | - label validation                |
-                | - path_scope full/partial         |
-                | - case accounting                 |
-                | - digest computation              |
-                | - reserved gate projection        |
-                | - readability file selection      |
-                +----------------+------------------+
-                                 |
-                +----------------+-----------------+
-                |                                  |
-                v                                  v
-     +-------------------------+      +------------------------------+
-     | spec status --format    |      | spec export / benchmark      |
-     | schema v4 benchmarks[]  |      | snapshot writer              |
-     +-------------------------+      +------------------------------+
+benchmarks/labels.json
+        │
+        ▼
++---------------------------+
+| spec-core::benchmark      |
+| - registry types          |
+| - label validation        |
+| - case projection         |
+| - path-scope evaluation   |
+| - digest payloads         |
+| - readability scope       |
++---------------------------+
+        │                 │
+        │                 ├───────────────► benchmarks/reviews/*.readability.review.json
+        │
+        ├───────────────► spec-core/src/export.rs
+        │                    │
+        │                    ▼
+        │               spec export (schema v4)
+        │
+        └───────────────► spec-cli/src/commands.rs
+                             │
+                             ├────────────► spec status --format json (schema v4)
+                             └────────────► spec benchmark snapshot <id>
+                                              │
+                                              ▼
+                                   benchmarks/snapshots/*.snapshot.json
 ```
 
-### Module layout
+### Shared projection flow
 
-Preferred minimal-diff layout:
+`spec status --format json` and `spec export`:
 
-| Surface | Ownership | Change |
+```text
+authored specs + benchmark labels + passports + molecule evidence + readability review
+        │
+        ▼
+shared benchmark projection core
+        │
+        ├── full benchmark root loaded? yes ──► full projection with status/gate/digests/summary
+        │
+        └── no ──────────────────────────────► partial projection with no positive credit
+```
+
+`spec benchmark snapshot <benchmark-id>`:
+
+```text
+benchmark id
+   │
+   ▼
+load full benchmark root + labels + current proof artifacts + readability review
+   │
+   ▼
+shared benchmark projection core (must produce full scope)
+   │
+   ▼
+write one snapshot file only
+```
+
+### Exact projection contract
+
+This is the core ambiguity killer. The benchmark core must expose one benchmark
+projection model, but that model has two legal shapes depending on path scope.
+
+| Projection shape | Must include | Must omit |
 | --- | --- | --- |
-| `spec-core/src/benchmark.rs` | new | benchmark label schema, enums, projection structs, digest helpers, readability file selection, snapshot struct |
-| `spec-core/src/lib.rs` | existing | export new benchmark module |
-| `spec-core/src/export.rs` | existing | thread benchmark projections into export bundle and schema v4 |
-| `spec-cli/src/commands.rs` | existing | load registry, compute benchmark scope, emit schema v4 `benchmarks[]`, add `spec benchmark snapshot <benchmark-id>` |
-| `spec-cli/tests/cli.rs` | existing | full/partial/reserved/invalid benchmark integration tests |
-| `spec-cli/tests/fixtures/*.json` | existing | schema-v4 benchmark fixtures |
-| `benchmarks/labels.json` | new | initial authoritative benchmark registry |
-| `benchmarks/reviews/BENCH-ECOM.readability.review.json` | new | initial readability review anchor |
+| `path_scope: full` | `benchmark_id`, `kind`, `lifecycle`, `required_for_v1`, `root`, `generated_root`, `path_scope`, `accounting_status`, `benchmark_status`, `gate_status`, `label_digest`, `projection_digest`, case projections, benchmark summary, readability review status, readability verdict when present, `readability_generated_files[]` when applicable | nothing from the M68 full-scope contract |
+| `path_scope: partial` | `benchmark_id`, `kind`, `lifecycle`, `required_for_v1`, `root`, `generated_root`, `path_scope`, `accounting_status`, intersecting case projections with `counts_as_supported_positive: false` | `benchmark_status`, `gate_status`, `label_digest`, `projection_digest`, benchmark summary, readability review status, readability verdict, `readability_generated_files[]` |
 
-Avoid introducing both `benchmark.rs` and `benchmark_projection.rs` unless the
-single module becomes unreadable during implementation. Minimal diff wins here.
+If a partial projection carries any whole-benchmark health or readability claim,
+the implementation is wrong.
 
-### File-by-file change map
+### Snapshot contract
 
-This is the concrete ownership map for the implementation, not just a module
-wishlist.
+`spec benchmark snapshot <benchmark-id>` is not a second benchmark subsystem. It
+is a single derived writer over the same full-scope projection.
 
-| File or directory | Exact responsibility | Must not do |
-| --- | --- | --- |
-| `spec-core/src/benchmark.rs` | own label parsing, validation, full/partial projection, enums, digests, readability file selection, snapshot assembly structs | duplicate CLI path parsing or write files |
-| `spec-core/src/lib.rs` | export the new benchmark module cleanly | add side effects |
-| `spec-core/src/export.rs` | append shared benchmark projections into export bundle schema v4 | reimplement benchmark logic locally |
-| `spec-cli/src/commands.rs` | compute command scope, call shared projection core, serialize schema v4 output, own snapshot subcommand file writing | classify cases or compute digests inline |
-| `spec-cli/tests/cli.rs` | own end-to-end repo-root, root-path, subtree, single-file, reserved, invalid-registry, and snapshot behavior coverage | become the only place benchmark rules are specified |
-| `spec-cli/tests/fixtures/*.json` | lock the exact schema-v4 machine surfaces | drift from the shared projection contract |
-| `benchmarks/labels.json` | seed the canonical roster and case classifications | encode proof truth or readability verdicts |
-| `benchmarks/reviews/BENCH-ECOM.readability.review.json` | seed the initial human readability anchor for one projection digest | masquerade as generated data |
-| `benchmarks/snapshots/` | hold derived snapshot artifacts only | become source-of-truth inputs |
-| `README.md`, `CHANGELOG.md`, `TODOS.md` | document the benchmark roster, reserved gate behavior, and M68 closure/M69 deferral clearly | widen the product claim beyond this exact contract |
+Hard rules:
 
-### Security and trust boundaries
+1. snapshotting always forces full-scope projection
+2. if full scope cannot be loaded, the command fails instead of degrading to partial
+3. the only write target is `benchmarks/snapshots/<BENCHMARK_ID>.snapshot.json`
+4. the command never writes passports, molecule evidence, or readability review files
+5. reserved `BENCH-SERVICE` writes the reserved snapshot state without inventing fake cases or generated files
 
-The critical trust wall is simple:
+### Architecture decisions
 
-- authored specs define workload truth
-- passports and molecule evidence define proof truth
-- benchmark labels define accounting truth
-- readability review defines readability truth
-- status/export/snapshot only read and project those truths
+1. **One shared benchmark core, not duplicated status/export logic.**
+   - Status, export, and snapshot must consume the same types and projection function.
 
-If any implementation path lets `status`, `export`, or snapshotting write
-passports, molecule evidence, or benchmark labels, the milestone failed.
+2. **Keep snapshot writing in CLI, not `spec-core`.**
+   - `spec-core` stays projection and validation heavy.
+   - `spec-cli` already owns filesystem-facing orchestration.
+
+3. **Seed the actual registry early, not at the very end.**
+   - `benchmarks/labels.json` is an input contract, not a finishing touch.
+   - Phase 1 should land the real file shape so every downstream phase tests against the real registry contract.
+
+4. **Commit the canonical benchmark artifacts.**
+   - This repo already commits derived proof-adjacent artifacts for canonical examples.
+   - Committing labels, reviews, and snapshots keeps the benchmark contract inspectable on a fresh clone.
+
+5. **Do not create a second benchmark test harness.**
+   - Extend `spec-cli/tests/cli.rs` and fixture baselines that already gate status/export contract changes.
 
 ## Code Quality Review
 
-### Non-negotiable code quality rules
+### Guardrails
 
-1. **One projection implementation, many consumers.**
-   - `status`, `export`, and snapshotting must not each implement their own
-     benchmark case classification logic.
+- Keep all benchmark enums typed in one place. No stringly enums repeated across CLI and core.
+- Keep all path-scope logic in the benchmark core. `commands.rs` may decide which command path was loaded, but it must not re-derive benchmark semantics.
+- Keep all `sha256:` digest formatting centralized in the benchmark core. No ad hoc hashing in multiple call sites.
+- Reuse existing proof projection functions from `passport.rs` and molecule evidence reads from `molecule_evidence.rs`. Benchmark code may not reinterpret support truth independently.
+- Keep the CLI layer boring. Parse args, load scope, call the benchmark core, print or write the result.
+- Keep the diff boring. One new `spec-core` benchmark module is enough. Do not split into a mini-package tree unless the code proves it is necessary.
 
-2. **Enums, not string soup.**
-   - `accounting_status`
-   - `benchmark_status`
-   - `gate_status`
-   - `readability_review_status`
-   - `classification`
-   must be typed in core code, then serialized.
+### Ownership boundaries
 
-3. **Digest code must be isolated and deterministic.**
-   - no hashing pretty JSON
-   - no hashing map iteration order
-   - no hashing temp paths
-
-4. **Label validation must fail loudly.**
-   - duplicate cases
-   - unknown classification
-   - carrier outside root
-   - required molecule id not under benchmark root
-   - unlabeled loaded carrier under active benchmark root
-   must produce explicit benchmark-accounting failure, not silent omission
-
-5. **Readability selection logic stays benchmark-local.**
-   - shared `mod.rs` reuse is expected
-   - do not invent fake ownership splits
-
-6. **Reserved-state logic stays explicit.**
-   - no “if root missing, drop benchmark”
-   - reserved is a first-class state, not an error shortcut
-
-### Naming and API guidance
-
-Use names that describe the contract, not the implementation accident.
-
-Good:
-
-- `BenchmarkLabelRegistry`
-- `BenchmarkProjection`
-- `BenchmarkCaseProjection`
-- `BenchmarkPathScope`
-- `BenchmarkAccountingStatus`
-- `BenchmarkSnapshot`
-
-Bad:
-
-- `BenchData`
-- `ScopeInfo`
-- `MaybeGreen`
-- `ProjectionHelper2`
+| Concern | Single owner | Why |
+| --- | --- | --- |
+| label parsing and validation | `spec-core::benchmark` | prevents CLI and export code from drifting |
+| full versus partial scope classification | `spec-core::benchmark` | this is contract logic, not command glue |
+| digest payload construction | `spec-core::benchmark` | one place to guarantee deterministic sorting |
+| JSON schema version bump for export | `spec-core/src/export.rs` | keep export machine contract local to the export bundle |
+| JSON schema version bump for status | `spec-cli/src/commands.rs` | keep status machine contract local to the status emitter |
+| snapshot file IO | `spec-cli/src/commands.rs` | keeps `spec-core` free of filesystem writes |
 
 ### Diagram maintenance
 
-This plan introduces new benchmark concepts, not just code.
-
-If implementation adds or updates nearby ASCII diagrams in `commands.rs`,
-`export.rs`, or the new benchmark module, those diagrams must ship accurate in
-the same change. Stale diagrams are worse than none.
+No nearby code comments currently carry benchmark ASCII diagrams, so I3 should
+add diagrams in `PLAN.md` only. Do not sprinkle speculative inline code
+diagrams into unrelated files.
 
 ## Test Review
 
-Rust test framework is already present and authoritative in-repo:
-
-- unit tests in `spec-core`
-- integration tests in `spec-cli/tests/cli.rs`
-- JSON fixture baselines in `spec-cli/tests/fixtures/*.json`
-
-I2 must land with full benchmark-projection coverage from the start.
+I3 must land with full benchmark-projection coverage from the start. This is not
+a "wire it up, then test it later" milestone.
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] spec-core/src/benchmark.rs
-    |
-    ├── load_labels()
-    │   ├── [GAP] valid registry parse
-    │   ├── [GAP] duplicate benchmark id rejection
-    │   ├── [GAP] duplicate case id rejection within one benchmark
-    │   ├── [GAP] unknown classification rejection
-    │   └── [GAP] reserved benchmark with non-empty cases rejection
-    |
-    ├── project_benchmark(scope = full)
-    │   ├── [GAP] active positive benchmark passes
-    │   ├── [GAP] active positive benchmark incomplete
-    │   ├── [GAP] active positive benchmark invalid accounting
-    │   ├── [GAP] companion-negative benchmark passes without positive credit
-    │   └── [GAP] reserved benchmark emits reserved gate state
-    |
-    ├── project_benchmark(scope = partial)
-    │   ├── [GAP] partial_valid when selected carriers are fully labeled
-    │   ├── [GAP] partial_invalid when selected carrier is unlabeled
-    │   └── [GAP] partial projections always emit counts_as_supported_positive = false
-    |
-    ├── compute_label_digest()
-    │   ├── [GAP] stable across outer benchmark ordering
-    │   └── [GAP] stable across case ordering
-    |
-    ├── compute_projection_digest()
-    │   ├── [GAP] excludes generated_at
-    │   ├── [GAP] excludes readability verdict
-    │   └── [GAP] changes when cases/summary/proof refs change
-    |
-    └── readability_generated_files()
-        ├── [GAP] includes supported case files
-        ├── [GAP] includes ancestor mod.rs chain
-        ├── [GAP] includes benchmark-required molecule_tests.rs
-        └── [GAP] excludes deferred/fallback/companion files
+[+] benchmark registry load
+    │
+    ├── [GAP] valid labels file -> typed registry
+    ├── [GAP] duplicate / unknown / unlabeled carrier failure
+    └── [GAP] reserved positive benchmark with missing root stays legal
 
-[+] spec-cli/src/commands.rs
-    |
-    ├── status --format json
-    │   ├── [GAP] repo-root full BENCH-ECOM + reserved BENCH-SERVICE + BENCH-CROSSLIB
-    │   ├── [GAP] benchmark root full projection
-    │   ├── [GAP] subtree partial projection
-    │   └── [GAP] single-file partial projection
-    |
-    ├── export
-    │   ├── [GAP] schema_version 4
-    │   ├── [GAP] same benchmark projection as status
-    │   └── [GAP] reserved benchmark visible at broad scope only
-    |
-    └── benchmark snapshot <benchmark-id>
-        ├── [GAP] writes snapshot only
-        ├── [GAP] full-scope active benchmark snapshot
-        ├── [GAP] reserved benchmark snapshot
-        └── [GAP] fails when readability-generated files are missing for active benchmark
+[+] status json projection
+    │
+    ├── [GAP] repo-root full BENCH-ECOM + BENCH-CROSSLIB + reserved BENCH-SERVICE
+    ├── [GAP] benchmark-root full BENCH-ECOM
+    ├── [GAP] namespace partial BENCH-ECOM
+    ├── [GAP] single-file partial BENCH-ECOM
+    ├── [GAP] active benchmark accounting invalid -> benchmark invalid/open
+    └── [GAP] companion-negative benchmark visible with zero positive credit
+
+[+] export json projection
+    │
+    ├── [GAP] repo-root full benchmark bundle at schema v4
+    ├── [GAP] benchmark-root full benchmark bundle at schema v4
+    └── [GAP] single-file partial benchmark bundle omits full-scope fields
+
+[+] snapshot command
+    │
+    ├── [GAP] BENCH-ECOM full snapshot writes exactly one file
+    ├── [GAP] BENCH-CROSSLIB full snapshot writes companion-negative projection
+    ├── [GAP] BENCH-SERVICE reserved snapshot writes reserved state without fake generated files
+    └── [GAP] partial or missing full-root snapshot invocation fails cleanly
+
+[+] readability review
+    │
+    ├── [GAP] current review -> current/readable
+    ├── [GAP] mismatched projection_digest -> stale
+    └── [GAP] missing review on positive benchmark -> incomplete, not passing
+
+[+] anti-laundering
+    │
+    ├── [GAP] deferred case visible but non-credit
+    ├── [GAP] fallback-backed case visible but non-credit
+    ├── [GAP] unlabeled active carrier -> accounting invalid
+    └── [GAP] partial scope always forces counts_as_supported_positive=false
 ```
 
-### Developer-flow coverage
+### User flow coverage
 
 ```text
-DEVELOPER FLOW COVERAGE
+USER FLOW COVERAGE
 ===========================
-[+] Registry authoring
-    ├── [GAP] invalid label file produces machine-readable failure
-    └── [GAP] valid label file projects through both status and export
+[+] Maintainer asks for repo truth
+    │
+    ├── [GAP] `spec status . --format json` shows full benchmark roster honestly
+    └── [GAP] `spec export .` carries the same benchmark truth for downstream tooling
 
-[+] Broad-scope proof query
-    ├── [GAP] repo-root status shows BENCH-SERVICE reserved gate
-    ├── [GAP] repo-root export shows same benchmark truth
-    └── [GAP] companion-negative benchmark stays visible without positive credit
+[+] Maintainer inspects one namespace or one file
+    │
+    ├── [GAP] partial scope keeps intersecting cases visible
+    └── [GAP] partial scope withholds full benchmark claims and positive credit
 
-[+] Narrow-scope proof query
-    ├── [GAP] benchmark root path gets full projection
-    ├── [GAP] namespace path gets partial projection
-    └── [GAP] single-unit path gets partial projection with no positive credit
+[+] Maintainer refreshes benchmark snapshot
+    │
+    ├── [GAP] successful BENCH-ECOM snapshot
+    ├── [GAP] successful BENCH-CROSSLIB snapshot
+    └── [GAP] truthful reserved BENCH-SERVICE snapshot
 
-[+] Snapshot maintenance
-    ├── [GAP] BENCH-ECOM snapshot generation
-    ├── [GAP] BENCH-CROSSLIB snapshot generation
-    └── [GAP] BENCH-SERVICE reserved snapshot generation
-
-[+] Readability review anchoring
-    ├── [GAP] matching projection_digest => current
-    ├── [GAP] mismatched projection_digest => stale
-    └── [GAP] missing review => missing
+[+] Reviewer checks generated readability
+    │
+    ├── [GAP] matching readability review stays current
+    └── [GAP] stale or missing review reopens benchmark completeness
 ```
 
-### Required test files and assertions
+### Required test matrix
 
-1. `spec-core` unit tests for:
-   - registry parsing and validation
-   - digest determinism
-   - full/partial projection rules
-   - reserved-state projection
-   - readability file set selection
+| Surface | Test type | Required coverage |
+| --- | --- | --- |
+| `spec-core/src/benchmark.rs` | unit | label validation, duplicate detection, reserved-root legality, path-scope classification, deterministic digest ordering, summary formulas, readability file selection |
+| `spec-core/src/export.rs` | unit | schema v4 export bundle includes additive `benchmarks[]` and does not regress existing units, passports, graph, or plan export fields |
+| `spec-cli/tests/cli.rs` | integration | repo-root full status/export, benchmark-root full status/export, namespace partial, single-file partial, invalid accounting, companion-negative, reserved `BENCH-SERVICE`, snapshot command |
+| `spec-cli/tests/fixtures/status-*.json` | fixture | full, partial, reserved, and invalid benchmark status baselines |
+| `spec-cli/tests/fixtures/export-*.json` | fixture | full and partial benchmark export baselines |
+| snapshot artifact assertions | integration + fixture | output path, deterministic bytes, no writes outside `benchmarks/snapshots/` |
 
-2. `spec-cli/tests/cli.rs` integration tests for:
-   - repo-root full-scope `status --format json`
-   - benchmark-root full-scope `status --format json`
-   - subtree partial `status --format json`
-   - single-file partial `export`
-   - snapshot command write behavior
-   - invalid registry failure path
+### Failure modes registry
 
-3. JSON fixture updates for:
-   - full-scope positive benchmark
-   - partial-scope positive benchmark
-   - reserved benchmark projection
-   - companion-negative benchmark projection
-   - schema-v4 export bundle
+| Failure mode | Surface | Test required | Error handling required | User-visible result |
+| --- | --- | --- | --- | --- |
+| unlabeled active carrier under benchmark root | registry + status/export | yes | yes | explicit invalid accounting, never silent green |
+| duplicate `case_id` or duplicate `carrier_id` in one benchmark | registry load | yes | yes | explicit invalid benchmark, never merged implicitly |
+| reserved `BENCH-SERVICE` omitted at repo root | status/export | yes | yes | explicit reserved entry, never silent omission |
+| partial scope emits positive credit | status/export | yes | yes | hard false on every partial `counts_as_supported_positive` |
+| stale readability review treated as passing | status/export/snapshot | yes | yes | benchmark incomplete, not passing |
+| snapshot command mutates passports or evidence | snapshot command | yes | yes | zero writes outside `benchmarks/snapshots/` |
+| benchmark digest depends on serialization order | benchmark core | yes | yes | deterministic digest across runs |
+| companion-negative benchmark counted as positive | status/export/snapshot | yes | yes | visible but zero positive credit |
 
-### Regression rule
+Critical gaps:
 
-Any divergence between `status` and `export` benchmark projection for the same
-scope is a regression and requires a regression test in the same milestone.
+- Any failure mode with silent positive credit is release-blocking.
+- Any failure mode that hides `BENCH-SERVICE` at broad scope is release-blocking.
+- Any failure mode that makes snapshotting a proof writer is release-blocking.
 
-Same rule for:
+### Test artifact to refresh
 
-- reserved benchmark omission
-- partial-scope positive credit leakage
-- companion-negative positive credit leakage
-- digest instability from ordering-only changes
+The implementation should refresh the benchmark-oriented eng-review test plan
+artifact at:
+
+- `/home/azureuser/.gstack/projects/atomize-hq-spec/azureuser-main-eng-review-test-plan-20260518-233552.md`
+
+That file already names the user-facing command matrix for status, export, and
+snapshot verification. The code change should make that artifact true.
 
 ## Performance Review
 
-This is not a throughput milestone, but there are still real footguns.
+This is not a throughput milestone, but there are still real performance
+guardrails:
 
-### Expected hot paths
+- load the registry once per command invocation
+- build benchmark projections from already-loaded specs, tests, passports, and evidence, not from repeated filesystem rescans
+- compute full digests only for full-scope projections
+- sort once inside the benchmark core before digesting or serializing
+- treat readability file selection as a bounded walk rooted at declared supported cases, not a blind generated-tree scan
 
-1. loading and validating the benchmark registry
-2. mapping loaded authored carriers to label entries
-3. computing digests for full-scope projections
-4. assembling readability-generated file sets
-5. emitting large schema-v4 JSON fixtures
+N+1 risks to avoid:
 
-### Performance decisions
-
-1. Build carrier lookups once per command scope.
-   - Do not rescan labels benchmark-by-benchmark with repeated path walks.
-
-2. Keep projection assembly in-memory and map-backed.
-   - The repo size is small now, but O(n^2) benchmark-case matching is still
-     needless churn.
-
-3. Compute `projection_digest` only for full-scope entries.
-   - Partial scope explicitly omits it. Use that.
-
-4. Resolve readability files from projected supported cases, not by walking the
-   generated tree blindly.
-   - This is both faster and more truthful.
-
-5. Snapshot command may validate file existence, but it must not rebuild
-   generated output or rerun proof commands.
-
-### Production failure scenario
-
-If projection assembly silently recomputes benchmark membership from directory
-layout instead of labels, a new spec file under `examples/ecommerce/units` can
-start counting toward V1 without any explicit benchmark classification.
-
-That is a correctness bug disguised as convenience.
-
-## Failure Modes Registry
-
-| Failure mode | Where it happens | User-visible impact | Test required | Error handling required | Critical |
-| --- | --- | --- | --- | --- | --- |
-| unlabeled unit under active benchmark root | registry validation / full projection | benchmark turns fake green or silently drops workload | yes | yes, `accounting_status: invalid` plus explicit error | yes |
-| duplicate case id or duplicate carrier mapping | registry validation | benchmark accounting becomes ambiguous | yes | yes, hard validation failure | yes |
-| partial path leaks positive credit | partial projection | single green unit looks like benchmark closure | yes | yes, force `counts_as_supported_positive: false` | yes |
-| `BENCH-SERVICE` omitted at repo-root scope | broad status/export | reserved final gate disappears | yes | yes, explicit reserved projection | yes |
-| `BENCH-CROSSLIB` counts toward positive denominator | benchmark summary | negative fixture launders into product claim | yes | yes, hard classification wall | yes |
-| readability review matches wrong generated file set | full positive benchmark | stale review looks current | yes | yes, `projection_digest` gate and exact path set match | yes |
-| snapshot command refreshes passports or molecule evidence | snapshot CLI | reader becomes writer and mutates proof truth | yes | yes, write-surface wall in tests | yes |
-| export and status diverge on same benchmark scope | read-side consumers | machine clients see conflicting truth | yes | yes, shared core and integration regression tests | yes |
-
-There are no acceptable silent failures in this milestone.
+- status and export must not re-read the same passport or molecule evidence per benchmark and per case
+- snapshot generation must reuse the same loaded proof inputs as status and export, not rebuild them ad hoc
 
 ## Implementation Plan
 
-### Phase 1: Registry and core projection types
+### Sequence overview
 
-Deliver:
+There are five implementation phases, but only one real architectural freeze:
 
-- `spec-core/src/benchmark.rs`
-- registry loader and validator
-- typed enums and structs
-- carrier-to-label matching
-- benchmark scope intersection logic
+```text
+Phase 1: benchmark core + real registry
+        │
+        ├── freeze projection contract
+        │
+        ├── Phase 2: export schema-v4 wiring
+        ├── Phase 3: status schema-v4 wiring
+        └── Phase 4: snapshot + readability wiring
+                 │
+                 ▼
+          Phase 5: canonical artifacts + docs + TODO sync
+```
 
-Acceptance:
+Do not start status, export, or snapshot wiring until the Phase-1 benchmark
+projection structs and rules are frozen. That is the seam that keeps the rest of
+the work boring.
 
-- full parse/validation unit tests pass
-- invalid registry surfaces explicit machine-readable failure
+### Phase 1: Registry and shared benchmark core
 
-### Phase 2: Shared projection engine and digests
+Objective: land the new shared benchmark module in `spec-core` and the real
+authoritative registry file shape it reads.
 
-Deliver:
+Must land:
 
-- full/partial projection builder
-- case projection with anti-laundering
-- summary computation
-- `label_digest`
-- `projection_digest`
-- readability-generated file selection
+- typed benchmark enums and structs
+- registry loader and validator for `benchmarks/labels.json`
+- shared case projection record
+- benchmark-level projection record
+- path-scope classifier
+- summary formulas
+- deterministic digest builders
+- readability scope file selection
+- initial `benchmarks/labels.json` with `BENCH-ECOM`, `BENCH-SERVICE`, and `BENCH-CROSSLIB`
 
-Acceptance:
+Files:
 
-- full positive, companion-negative, and reserved benchmark unit tests pass
-- digest stability tests pass
+- `spec-core/src/benchmark.rs` new
+- `spec-core/src/lib.rs` export module
+- `benchmarks/labels.json` new
 
-### Phase 3: `status` and `export` schema-v4 integration
+Exit gate:
 
-Deliver:
+- core types compile
+- registry validation tests pass
+- the benchmark core can produce full and partial projections without CLI printing logic
 
-- additive top-level `benchmarks[]` in `spec status --format json`
-- additive top-level `benchmarks[]` in `spec export`
-- shared projection core wired into both
-- repo-root and path-scoped scope handling
+### Phase 2: Export integration
 
-Acceptance:
+Objective: extend the export bundle to schema v4 and append additive
+`benchmarks[]`.
 
-- schema-v4 fixture baselines pass
-- repo-root full scope and single-file partial scope behave exactly as locked
+Must land:
 
-### Phase 4: Snapshot writer and readability review loading
+- `ExportBundle.schema_version = 4`
+- additive benchmark bundle projection
+- full versus partial benchmark entries mirror the shared core exactly
+- no regressions to existing unit, passport, graph, or plan export behavior
 
-Deliver:
+Files:
+
+- `spec-core/src/export.rs`
+- export tests in `spec-core/src/export.rs`
+
+Exit gate:
+
+- export bundle tests pass
+- fixture or assertion coverage proves `benchmarks[]` is additive, not disruptive
+
+### Phase 3: Status integration
+
+Objective: extend CLI JSON status output to schema v4 and append additive
+`benchmarks[]`.
+
+Must land:
+
+- `STATUS_JSON_SCHEMA_VERSION = 4`
+- repo-root full benchmark projection
+- benchmark-root full benchmark projection
+- namespace and single-file partial benchmark projection
+- explicit broad-scope reserved `BENCH-SERVICE` visibility
+
+Files:
+
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/status-*.json`
+
+Exit gate:
+
+- repo-root, benchmark-root, namespace, and single-file status fixtures all match
+- partial scope omits whole-benchmark fields and forces `counts_as_supported_positive=false`
+
+### Phase 4: Snapshot and readability integration
+
+Objective: add the benchmark snapshot command and wire readability-review
+loading without changing any proof writer.
+
+Must land:
 
 - `spec benchmark snapshot <benchmark-id>`
-- snapshot artifact writing under `benchmarks/snapshots/`
-- readability review file loading
-- full-scope readability status and verdict projection
+- snapshot file writing under `benchmarks/snapshots/`
+- readability review status projection
+- reserved `BENCH-SERVICE` snapshot behavior
+- failure when snapshotting cannot load full scope
 
-Acceptance:
+Files:
 
-- snapshot command writes only snapshot files
-- matching and stale readability review states are test-covered
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `benchmarks/reviews/BENCH-ECOM.readability.review.json`
 
-### Phase 5: Repo seeding and docs sync
+Exit gate:
 
-Deliver:
+- snapshot command writes exactly one file under the snapshot tree
+- stale or missing readability review never produces passing positive status
+- reserved snapshot writes reserved state without fake generated closure claims
 
-- initial `benchmarks/labels.json`
-- initial `BENCH-ECOM` readability review record
-- generated snapshots for seeded benchmarks
-- README, TODOS, and CHANGELOG updates
+### Phase 5: Canonical artifacts, fixtures, and docs sync
 
-Acceptance:
+Objective: seed the committed benchmark artifacts and teach every user-facing
+truth surface.
 
-- fresh repo commands show benchmark truth without manual spelunking
-- docs describe benchmark roles and schema-v4 change accurately
+Must land:
 
-### Phase handoff contract
+- `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
+- `benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json`
+- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`
+- any remaining status/export fixture baselines required by Phases 2-4
+- docs updated in `README.md`, `CHANGELOG.md`, and `TODOS.md`
 
-The milestone is sequential until the shared projection contract freezes.
+Files:
 
-The exact freeze point is the end of Phase 2. Before any parallel lane starts,
-the branch must have these stable and reviewed:
+- `benchmarks/snapshots/*.snapshot.json`
+- `spec-cli/tests/fixtures/*.json`
+- `README.md`
+- `CHANGELOG.md`
+- `TODOS.md`
 
-- the benchmark enums
-- the full versus partial projection field set
-- the digest payload rules
-- the reserved benchmark state contract
-- the case-level anti-laundering rule
+Exit gate:
 
-After that freeze:
-
-- Phase 3 may wire schema-v4 `status` and `export`
-- Phase 4 may wire snapshot writing and readability loading
-- neither phase may mutate the shared core contract without rebasing on a
-  deliberate Phase-2 contract change
+- canonical snapshots are reproducible from the landing branch
+- docs explain the benchmark roster, reserved-gate truth, and writer-versus-reader wall accurately
 
 ## Worktree Parallelization Strategy
+
+This plan has one safe parallelization seam: after the benchmark core contract is
+frozen. Before that, parallel work is fake parallel because everyone is really
+editing the same semantics.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| Phase 1 registry types | `spec-core/`, `benchmarks/` | — |
-| Phase 2 projection core | `spec-core/` | Phase 1 |
-| Phase 3 status/export integration | `spec-cli/`, `spec-core/` | Phase 2 |
-| Phase 4 snapshot + readability | `spec-cli/`, `benchmarks/`, `spec-core/` | Phase 2 |
-| Phase 5 fixtures and docs | `spec-cli/tests/`, `spec-cli/tests/fixtures/`, repo-root docs | Phase 3 for schema shape, Phase 4 for snapshot/readability wording |
+| Phase 1 registry + shared core | `spec-core/`, `benchmarks/` | — |
+| Phase 2 export integration | `spec-core/` | Phase 1 |
+| Phase 3 status integration | `spec-cli/`, `spec-cli/tests/`, fixtures | Phase 1 |
+| Phase 4 snapshot + readability | `spec-cli/`, `benchmarks/`, `spec-cli/tests/` | Phase 1 |
+| Phase 5 canonical artifacts + docs | `benchmarks/`, repo-root docs, fixtures | Phases 2, 3, and 4 |
 
 ### Parallel lanes
 
-Lane A: Phase 1 -> Phase 2  
-Sequential, shared `spec-core/`
+Lane A: Phase 1 -> Phase 2
+Sequential, shared `spec-core/` ownership. This lane defines and freezes the
+benchmark projection contract, then wires export.
 
-Lane B: Phase 3  
-Depends on Lane A, owns `spec-cli/` command integration and schema-v4 read surfaces
+Lane B: Phase 3
+Depends on the Phase-1 freeze. Owns status JSON benchmark emission plus status
+fixture baselines.
 
-Lane C: Phase 4  
-Depends on Lane A, owns snapshot mechanics, readability review loading, and benchmark artifact IO
+Lane C: Phase 4
+Depends on the Phase-1 freeze. Owns snapshot routing, snapshot writing,
+readability loading, and snapshot-specific assertions.
 
-Lane D: Phase 5  
-Depends on Lane B and Lane C, owns fixtures and docs sync
+Lane D: Phase 5
+Depends on B + C + the Phase-2 export contract. Owns canonical artifact refresh,
+remaining fixture reconciliation, and docs/TODO sync.
 
 ### Execution order
 
-1. Launch Lane A first and finish it completely.
-2. Launch Lane B and Lane C in parallel from the post-A integration state.
-3. Merge B and C.
-4. Launch Lane D after both are green.
+1. Launch Lane A first and finish the shared benchmark core.
+2. Freeze the benchmark core contract and merge it.
+3. Launch Lane B and Lane C in parallel from that freeze.
+4. Merge B and C.
+5. Launch Lane D after both are green.
 
 ### Conflict flags
 
-- Lanes B and C both touch `spec-cli/src/commands.rs` if snapshot subcommand and
-  status/export integration live in one file. That is a merge-conflict hotspot.
-  To keep them parallel, freeze a narrow ownership split:
-  - Lane B owns `status` and `export` wiring plus schema-v4 emission
-  - Lane C owns new `benchmark snapshot` argument parsing and file-writing path
-- Lanes B and C both consume shared `spec-core` benchmark types. Do not let
-  either lane mutate core projection contracts after A freezes them.
+- Lanes B and C both touch `spec-cli/src/commands.rs`.
+  - Recommended split:
+    - Lane B owns status JSON benchmark emission and status-only serialization helpers.
+    - Lane C owns the new benchmark subcommand branch, snapshot writing helpers, and readability loading helpers.
+  - If that split proves noisy in practice, collapse B then C sequentially. Do not fight a merge war inside one giant command file.
+- Lanes B and C both touch `spec-cli/tests/cli.rs`.
+  - Keep assertions grouped by command surface so merges are mechanical.
+  - If the test file becomes a collision magnet, accept one follow-up rebase instead of inventing a second harness.
+- Lane D touches artifacts that B and C both read.
+  - Do not launch Lane D until both merges are complete and fixture shapes are stable.
+
+### Worktree recommendation
+
+Recommended worktree split:
+
+- Worktree 1: Lane A, then Phase 2 export follow-through
+- Worktree 2: Lane B status integration after Lane A merges
+- Worktree 3: Lane C snapshot + readability integration after Lane A merges
+- Worktree 4: optional short-lived finalization tree for Lane D if artifact/doc sync is noisy
+
+That gives real parallelism without pretending `commands.rs` can support three
+independent semantic rewrites at once.
 
 ## NOT in scope
 
 These were considered and are explicitly deferred:
 
 - M69 supported-core closure
-  - Why: I2 lands mechanics only. It must not reopen row-support arguments.
+  - Why: I3 lands mechanics only. It must not reopen row-support arguments.
 - bounded generics admission into V1
   - Why: still a forced later scope decision from M65/M66.
 - async / IO admission into V1
   - Why: still a forced later scope decision from M65/M66.
-- `BENCH-SERVICE` implementation
+- `BENCH-SERVICE` workload implementation
   - Why: reserved gate must stay visible, not silently faked closed.
-- benchmark score reports or historical benchmark dashboards
-  - Why: M68 needs projection truth, not a reporting subsystem.
+- benchmark score dashboards, history, or reporting subsystems
+  - Why: M68 needs projection truth, not a reporting empire.
 - text-mode benchmark summaries as a gating surface
   - Why: M68 explicitly makes JSON the contract surface.
 - benchmark metadata inside workload specs, passports, or molecule evidence
-  - Why: violates the writer-vs-reader wall.
+  - Why: violates the writer-versus-reader wall.
 - generated-tree isolation per benchmark
   - Why: the repo already uses shared generated trees and M68 freezes that choice.
 
@@ -1055,6 +798,8 @@ cargo test -p spec-cli
 cargo run -p spec-cli -- status . --format json
 cargo run -p spec-cli -- status examples/ecommerce/units --format json
 cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json
+cargo run -p spec-cli -- export .
 cargo run -p spec-cli -- export examples/ecommerce/units
 cargo run -p spec-cli -- export examples/ecommerce/units/pricing/apply_discount.unit.spec
 cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
@@ -1064,37 +809,40 @@ cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
 
 Verification expectations:
 
-- repo-root status/export show `BENCH-ECOM`, `BENCH-CROSSLIB`, and reserved `BENCH-SERVICE`
-- benchmark-root status/export show full-scope `BENCH-ECOM`
-- namespace and single-file status/export show partial-scope `BENCH-ECOM`
+- repo-root status and export show `BENCH-ECOM`, `BENCH-CROSSLIB`, and reserved `BENCH-SERVICE`
+- benchmark-root status and export show full-scope `BENCH-ECOM`
+- namespace and single-file status and export show partial-scope `BENCH-ECOM`
 - partial scope never emits positive supported credit
 - companion-negative scope never emits positive supported credit
 - snapshots write only under `benchmarks/snapshots/`
+- snapshotting does not mutate passports or molecule evidence
 
 ## Exit Criteria
 
-I2 is done only when all of these are true:
+I3 is done only when all of these are true:
 
-1. `benchmarks/labels.json` exists and validates
+1. `benchmarks/labels.json` exists, validates, and carries the locked `BENCH-ECOM` / `BENCH-SERVICE` / `BENCH-CROSSLIB` roster
 2. shared benchmark projection core exists in `spec-core`
-3. `status` and `export` both emit schema-v4 additive `benchmarks[]`
-4. path-scoped `full` versus `partial` rules match M68 exactly
-5. `BENCH-SERVICE` reserved projection is visible at broad scope
-6. companion-negative cases stay visible but never count as positive
-7. readability review state projects correctly for full positive benchmarks
-8. benchmark snapshots can be written without mutating proof truth
-9. JSON fixtures cover full, partial, invalid, reserved, and companion-negative states
-10. docs explain the benchmark roster and writer-vs-reader wall truthfully
+3. `spec status --format json` emits schema v4 additive `benchmarks[]`
+4. `spec export` emits schema v4 additive `benchmarks[]`
+5. path-scoped `full` versus `partial` rules match M68 exactly
+6. `BENCH-SERVICE` reserved projection is visible at broad scope and absent from unrelated narrow scope
+7. companion-negative cases stay visible but never count as positive
+8. readability review state projects correctly for full positive benchmarks
+9. benchmark snapshots can be written without mutating proof truth
+10. CLI fixtures cover full, partial, invalid, reserved, and companion-negative states
+11. repo docs explain the benchmark roster and writer-versus-reader wall truthfully
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — scope accepted as the full M68 mechanics landing, not M69 support expansion
-- Architecture Review: one shared projection core, one registry, one snapshot writer, one schema-v4 benchmark surface
-- Code Quality Review: typed enums, deterministic digests, strict label validation, no duplicate read-side logic
-- Test Review: full benchmark projection matrix required across core and CLI layers
-- Performance Review: map-backed projection, full-scope digesting only, no generated-tree blind scans
+- Step 0: Scope Challenge — scope accepted as the full M68 mechanics landing on the live M61-era codebase, not M69 support expansion
+- Architecture Review: one shared benchmark core, one exact full-versus-partial projection contract, one snapshot command, one repo-root benchmark artifact tree
+- Code Quality Review: typed enums, centralized path-scope logic, centralized digest logic, and strict CLI/core ownership boundaries
+- Test Review: full benchmark projection matrix required across `spec-core`, `spec-cli`, fixtures, and snapshot behavior
+- Performance Review: single-load registry and proof inputs, full-scope digesting only, bounded readability selection
+- Implementation Plan: five phases with one projection-contract freeze and explicit per-phase exit gates
 - NOT in scope: written
 - What already exists: written
-- Failure modes: eight critical gaps explicitly blocked
-- Parallelization: four lanes, two parallel after core freeze
+- Failure modes: eight release-blocking benchmark truth gaps identified and covered
+- Parallelization: four lanes, with real parallelism only after the shared-core freeze
 - Lake Score: every recommendation chooses the complete mechanics landing over the shortcut
