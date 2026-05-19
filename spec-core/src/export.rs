@@ -12,6 +12,7 @@
 //! `"covers"` edges have `test`/`unit` string fields.
 
 use crate::AUTHORED_SPEC_VERSION;
+use crate::benchmark::BenchmarkProjection;
 use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
 use crate::passport::{
@@ -30,7 +31,7 @@ use std::fs;
 use std::path::Path;
 
 /// Export schema version. Bumped in M9 for structured dep refs.
-const EXPORT_SCHEMA_VERSION: u8 = 3;
+const EXPORT_SCHEMA_VERSION: u8 = 4;
 const PLAN_EXPORT_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -44,6 +45,8 @@ pub struct ExportBundle {
     pub molecule_tests: Vec<ExportMoleculeTest>,
     pub passports: Vec<Passport>,
     pub graph: ExportGraph,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub benchmarks: Vec<BenchmarkProjection>,
     pub warnings: Vec<ExportWarning>,
 }
 
@@ -138,6 +141,16 @@ pub fn build_export_bundle(
     exported_at: &str,
     provenance: Option<&ArtifactProvenance>,
 ) -> ExportBundle {
+    build_export_bundle_with_benchmarks(specs, molecule_tests, exported_at, provenance, Vec::new())
+}
+
+pub fn build_export_bundle_with_benchmarks(
+    specs: &[LoadedSpec],
+    molecule_tests: &[LoadedMoleculeTest],
+    exported_at: &str,
+    provenance: Option<&ArtifactProvenance>,
+    benchmarks: Vec<BenchmarkProjection>,
+) -> ExportBundle {
     let (passports, warnings) = read_passports_for_specs(specs);
     let specs_by_id: HashMap<String, LoadedSpec> = specs
         .iter()
@@ -183,6 +196,7 @@ pub fn build_export_bundle(
         molecule_tests: export_molecule_tests,
         passports,
         graph: ExportGraph { edges },
+        benchmarks,
         warnings,
     }
 }
@@ -391,6 +405,9 @@ impl From<&LoadedMoleculeTest> for ExportMoleculeTest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::benchmark::{
+        BenchmarkAccountingStatus, BenchmarkKind, BenchmarkLifecycle, BenchmarkPathScope,
+    };
     use crate::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus, EscapeHatchProofSurface};
     use crate::molecule_evidence::{
         MoleculeEvidenceStatus, build_molecule_evidence, write_molecule_evidence,
@@ -1203,7 +1220,7 @@ mod tests {
 
         let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", None);
 
-        assert_eq!(bundle.schema_version, 3);
+        assert_eq!(bundle.schema_version, 4);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
     }
@@ -2634,6 +2651,48 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn build_export_bundle_with_benchmarks_adds_benchmarks_without_disrupting_existing_fields() {
+        let dir = TempDir::new().unwrap();
+        let spec = loaded_spec(
+            &dir,
+            "units/pricing/apply_tax.unit.spec",
+            "pricing/apply_tax",
+            vec![],
+        );
+        let projection = BenchmarkProjection {
+            benchmark_id: "BENCH-ECOM".to_string(),
+            kind: BenchmarkKind::Positive,
+            lifecycle: BenchmarkLifecycle::Active,
+            required_for_v1: true,
+            path_scope: BenchmarkPathScope::Partial,
+            accounting_status: BenchmarkAccountingStatus::PartialValid,
+            benchmark_status: None,
+            gate_status: None,
+            readability_review_status: None,
+            readability_verdict: None,
+            label_digest: None,
+            projection_digest: None,
+            summary: None,
+            required_molecule_proofs: vec![],
+            cases: vec![],
+            readability_generated_files: None,
+        };
+
+        let bundle = build_export_bundle_with_benchmarks(
+            &[spec],
+            &[],
+            "2026-05-19T00:00:00Z",
+            None,
+            vec![projection.clone()],
+        );
+
+        assert_eq!(bundle.schema_version, 4);
+        assert_eq!(bundle.units.len(), 1);
+        assert_eq!(bundle.graph.edges.len(), 0);
+        assert_eq!(bundle.benchmarks, vec![projection]);
     }
 
     #[test]
