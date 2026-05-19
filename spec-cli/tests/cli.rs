@@ -14753,6 +14753,38 @@ fn status_partial_scope_benchmark_fixture_never_counts_positive_credit() {
 }
 
 #[test]
+fn export_emits_full_and_partial_benchmark_fixtures() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let full_output = run_in(&repo_dir, &["export", "examples/ecommerce/units"]);
+    assert_output_success("full benchmark export should succeed", &full_output);
+    let full_json = parse_stdout_json(&full_output);
+    assert_eq!(full_json["schema_version"], 4);
+    assert_eq!(
+        full_json["benchmarks"],
+        fixture_json("benchmarks/export-ecommerce-full-benchmarks.json")
+    );
+
+    let partial_output = run_in(
+        &repo_dir,
+        &[
+            "export",
+            "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+        ],
+    );
+    assert_output_success(
+        "single-file benchmark export should succeed",
+        &partial_output,
+    );
+    let partial_json = parse_stdout_json(&partial_output);
+    assert_eq!(partial_json["schema_version"], 4);
+    assert_eq!(
+        partial_json["benchmarks"],
+        fixture_json("benchmarks/export-apply-discount-partial-benchmarks.json")
+    );
+}
+
+#[test]
 fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
 

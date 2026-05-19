@@ -1,0 +1,28 @@
+[
+  {
+    "benchmark_id": "BENCH-ECOM",
+    "kind": "positive",
+    "lifecycle": "active",
+    "required_for_v1": true,
+    "path_scope": "partial",
+    "accounting_status": "partial_valid",
+    "cases": [
+      {
+        "case_id": "pricing/apply_discount",
+        "carrier_kind": "unit",
+        "carrier_id": "pricing/apply_discount",
+        "classification": "supported",
+        "status": "valid",
+        "semantic_support_status": "supported",
+        "proof_refs": {
+          "passport": "examples/ecommerce/units/pricing/apply_discount.spec.passport.json",
+          "covering_molecule_evidence": [
+            "examples/ecommerce/units/pricing/checkout_flow.test.evidence.json",
+            "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+          ]
+        },
+        "counts_as_supported_positive": false
+      }
+    ]
+  }
+]

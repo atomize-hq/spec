@@ -15,7 +15,7 @@ use spec_core::benchmark::{
     project_benchmark, readability_review_path,
 };
 use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
-use spec_core::export::{build_export_bundle, build_plan_export_bundle};
+use spec_core::export::{build_export_bundle_with_benchmarks, build_plan_export_bundle};
 use spec_core::generator::{
     GenerateOptions, clean_output_dir, generate_and_write_molecule_tests, generate_mod_rs,
     generate_typescript_output_tree, generate_unit_code_with_options,
@@ -2360,11 +2360,13 @@ fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> R
         );
     }
 
-    let bundle = build_export_bundle(
+    let benchmarks = benchmark_projections_for_command(path, &context, TargetLanguage::Rust)?;
+    let bundle = build_export_bundle_with_benchmarks(
         &validation_specs.root_specs,
         &molecule_tests,
         &rfc3339_now(),
         provenance.as_ref(),
+        benchmarks,
     );
     let json = serde_json::to_string_pretty(&bundle)?;
 
