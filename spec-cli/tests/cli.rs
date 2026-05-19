@@ -2618,7 +2618,7 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 3);
+    assert_eq!(bundle["schema_version"], 4);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
     assert!(bundle.get("molecule_tests").is_some());
@@ -6225,7 +6225,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
     let export_output = run_in(&project_dir, &["export", "units"]);
     assert_output_success("supported data export should succeed", &export_output);
     let export_json = parse_stdout_json(&export_output);
-    assert_eq!(export_json["schema_version"], 3);
+    assert_eq!(export_json["schema_version"], 4);
     let passport = export_json["passports"]
         .as_array()
         .unwrap()
@@ -12980,7 +12980,7 @@ fn export_emits_schema_v3_bundle_for_valid_cross_library_dep() {
     assert!(output.status.success(), "export should succeed");
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 3);
+    assert_eq!(bundle["schema_version"], 4);
     let edges = bundle["graph"]["edges"].as_array().unwrap();
     assert!(
         edges.iter().any(|edge| {
@@ -14645,7 +14645,7 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
     let spec_export = run_in(&ecommerce_dir, &["export", "units"]);
     assert_output_success("spec export should remain unchanged", &spec_export);
     let spec_export_json = parse_stdout_json(&spec_export);
-    assert_eq!(spec_export_json["schema_version"], 3);
+    assert_eq!(spec_export_json["schema_version"], 4);
     assert!(spec_export_json.get("plan").is_none(), "{spec_export_json}");
     assert!(
         spec_export_json.get("units").is_some(),
