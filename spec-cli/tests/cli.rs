@@ -14753,6 +14753,57 @@ fn status_partial_scope_benchmark_fixture_never_counts_positive_credit() {
 }
 
 #[test]
+fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let ecom_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-ECOM"]);
+    assert_output_success("BENCH-ECOM snapshot should succeed", &ecom_output);
+    let crosslib_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-CROSSLIB"]);
+    assert_output_success("BENCH-CROSSLIB snapshot should succeed", &crosslib_output);
+    let service_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-SERVICE"]);
+    assert_output_success("BENCH-SERVICE snapshot should succeed", &service_output);
+
+    let ecom_snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-ECOM.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(ecom_snapshot["projection"]["benchmark_status"], "passing");
+    assert_eq!(
+        ecom_snapshot["projection"]["readability_review_status"],
+        "current"
+    );
+
+    let crosslib_snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        crosslib_snapshot["projection"]["kind"],
+        "companion_negative_proof"
+    );
+    assert!(
+        crosslib_snapshot["projection"]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(false))
+    );
+
+    let service_snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-SERVICE.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        service_snapshot["projection"]["benchmark_status"],
+        "reserved"
+    );
+    assert_eq!(service_snapshot["projection"]["gate_status"], "reserved");
+}
+
+#[test]
 fn status_json_surfaces_invalid_benchmark_registry_root_machine_readably() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
     replace_in_file(
