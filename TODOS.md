@@ -205,3 +205,9 @@
 - [x] **Recursive local-plus-cross-library TypeScript closure across shipped families** — Completed by M61 (2026-05-15). M61 extends the bounded Bun-backed TypeScript lane to recursive local-plus-cross-library closure across the already-supported function families, while preserving family-specific direct-dep contracts, additive proof, atom-only execution, and the broader bans on arbitrary 4+ topology parity and molecule TypeScript execution.
 
 - [ ] **Remaining TypeScript oceans after M61** — After M61, the shipped lane covers recursive local-plus-cross-library closure across the already-supported function families. The broader TypeScript oceans still explicitly deferred are arbitrary authored 4+ direct-dep topology parity, new semantic-family promotion, molecule TypeScript execution, and seam-kind TypeScript execution.
+
+## Post-M68 benchmark mechanics
+
+- [x] **M68: Rust V1 benchmark mechanics landing** — Completed main (2026-05-18). The repo now ships `benchmarks/labels.json`, a shared benchmark projection core, additive schema-version-4 `benchmarks[]` in `spec status` / `spec export`, `spec benchmark snapshot <id>`, seeded readability review anchoring for `BENCH-ECOM`, reserved `BENCH-SERVICE` visibility, committed snapshot artifacts, and repo-facing CLI fixtures/docs for the full-versus-partial benchmark contract.
+
+- [ ] **M69: benchmark expansion beyond mechanics-only landing** — Deferred after M68. Keep `BENCH-SERVICE` reserved-only with no `examples/service/**` workload tree, keep benchmark accounting read-only over specs/passports/evidence, and treat any roster widening, new positive-credit support rows, or service-workload authoring as explicit follow-on scope instead of implicit cleanup.
