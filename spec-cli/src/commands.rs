@@ -4,11 +4,15 @@ use crate::config::{
 };
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use spec_core::benchmark::{
-    BenchmarkCaseTruth, BenchmarkMoleculeTruth, BenchmarkProjection, BenchmarkProjectionRequest,
-    BenchmarkTruthStatus, benchmark_labels_path, benchmark_path_scope, benchmark_root_path,
-    load_labels, project_benchmark,
+    BenchmarkCaseTruth, BenchmarkKind, BenchmarkLabel, BenchmarkLifecycle, BenchmarkMoleculeTruth,
+    BenchmarkPathScope, BenchmarkProjection, BenchmarkProjectionRequest,
+    BenchmarkReadabilityReviewInput, BenchmarkReadabilityReviewStatus, BenchmarkReadabilityScope,
+    BenchmarkStatus, BenchmarkTruthStatus, benchmark_labels_path, benchmark_path_scope,
+    benchmark_root_path, benchmark_snapshot_path, compute_projection_digest, load_labels,
+    project_benchmark, readability_review_path,
 };
 use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle, build_plan_export_bundle};
@@ -423,6 +427,8 @@ pub enum Command {
     Test(TestArgs),
     #[command(about = "Export spec metadata as a JSON bundle")]
     Export(ExportArgs),
+    #[command(about = "Write derived benchmark snapshot artifacts")]
+    Benchmark(BenchmarkArgs),
     #[command(about = "Validate and export .plan.spec files")]
     Plan(PlanArgs),
     #[command(about = "Print shell completion script to stdout")]
@@ -462,6 +468,9 @@ impl Command {
                 )
             }
             Self::Export(args) => export_command(&args.path, args.output.as_deref(), args.format),
+            Self::Benchmark(args) => match args.command {
+                BenchmarkCommand::Snapshot(args) => benchmark_snapshot_command(&args.benchmark_id),
+            },
             Self::Plan(args) => match args.command {
                 PlanCommand::Validate(args) => plan_validate_command(&args.path, args.format),
                 PlanCommand::Export(args) => {
@@ -477,6 +486,24 @@ impl Command {
 pub struct PlanArgs {
     #[command(subcommand)]
     pub command: PlanCommand,
+}
+
+#[derive(Args, Debug)]
+pub struct BenchmarkArgs {
+    #[command(subcommand)]
+    pub command: BenchmarkCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum BenchmarkCommand {
+    #[command(about = "Write one full-scope benchmark snapshot artifact")]
+    Snapshot(BenchmarkSnapshotArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct BenchmarkSnapshotArgs {
+    #[arg(value_name = "BENCHMARK_ID")]
+    pub benchmark_id: String,
 }
 
 #[derive(Subcommand, Debug)]
@@ -1838,6 +1865,401 @@ fn suppress_cross_library_dep_not_found_for_failed_imports(
             _ => true,
         })
         .collect()
+}
+
+#[derive(Deserialize)]
+struct SnapshotReadabilityReviewFile {
+    benchmark_id: String,
+    projection_digest: String,
+    #[serde(default)]
+    readability_generated_files: Vec<String>,
+    #[serde(default)]
+    verdict: Option<Value>,
+}
+
+#[derive(Serialize)]
+struct BenchmarkSnapshotFile {
+    generated_at: String,
+    projection: BenchmarkProjection,
+}
+
+fn benchmark_snapshot_command(benchmark_id: &str) -> Result<()> {
+    let current_dir =
+        std::env::current_dir().context("failed to resolve current working directory")?;
+    let context = load_workspace_context(&current_dir)?;
+    let repo_root = context
+        .repo_root
+        .clone()
+        .or_else(|| repo_root_for(&current_dir))
+        .unwrap_or(current_dir);
+    let snapshot_path = write_benchmark_snapshot(&repo_root, benchmark_id, TargetLanguage::Rust)?;
+    println!("Wrote benchmark snapshot to {}", snapshot_path.display());
+    Ok(())
+}
+
+fn write_benchmark_snapshot(
+    repo_root: &Path,
+    benchmark_id: &str,
+    target_language: TargetLanguage,
+) -> Result<PathBuf> {
+    let labels_path = benchmark_labels_path(repo_root);
+    let registry = load_labels(&labels_path)?;
+    let benchmark = registry
+        .benchmarks
+        .into_iter()
+        .find(|benchmark| benchmark.id == benchmark_id)
+        .with_context(|| {
+            format!(
+                "benchmark '{}' not found in {}",
+                benchmark_id,
+                labels_path.display()
+            )
+        })?;
+    let benchmark_root = benchmark_root_path(repo_root, &benchmark)?;
+    if matches!(benchmark.lifecycle, BenchmarkLifecycle::Active) && !benchmark_root.is_dir() {
+        bail!(
+            "❌ benchmark snapshot '{}' requires benchmark root {} to exist",
+            benchmark.id,
+            benchmark_root.display()
+        );
+    }
+
+    let mut request = build_full_benchmark_projection_request(&benchmark_root, target_language)?;
+    request.readability_review = load_snapshot_readability_review(repo_root, &benchmark, &request)?;
+    let projection = apply_snapshot_readability_gate(project_benchmark(&benchmark, &request));
+    let snapshot_path = benchmark_snapshot_path(repo_root, &benchmark.id);
+    if let Some(parent) = snapshot_path.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "Failed to create benchmark snapshot directory {}",
+                parent.display()
+            )
+        })?;
+    }
+    let snapshot = BenchmarkSnapshotFile {
+        generated_at: rfc3339_now(),
+        projection,
+    };
+    let json = serde_json::to_string_pretty(&snapshot)?;
+    fs::write(&snapshot_path, json).with_context(|| {
+        format!(
+            "Failed to write benchmark snapshot to {}",
+            snapshot_path.display()
+        )
+    })?;
+    Ok(snapshot_path)
+}
+
+fn load_snapshot_readability_review(
+    repo_root: &Path,
+    benchmark: &BenchmarkLabel,
+    request: &BenchmarkProjectionRequest,
+) -> Result<Option<BenchmarkReadabilityReviewInput>> {
+    if !snapshot_readability_applies(benchmark) {
+        return Ok(None);
+    }
+
+    let review_path = readability_review_path(repo_root, &benchmark.id);
+    let content = match fs::read_to_string(&review_path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(err).with_context(|| {
+                format!(
+                    "Failed to read readability review {}",
+                    review_path.display()
+                )
+            });
+        }
+    };
+    let review: SnapshotReadabilityReviewFile =
+        serde_json::from_str(&content).with_context(|| {
+            format!(
+                "Failed to parse readability review JSON {}",
+                review_path.display()
+            )
+        })?;
+    if review.benchmark_id != benchmark.id {
+        bail!(
+            "readability review {} targets benchmark '{}' instead of '{}'",
+            review_path.display(),
+            review.benchmark_id,
+            benchmark.id
+        );
+    }
+
+    let current_input = BenchmarkReadabilityReviewInput {
+        status: BenchmarkReadabilityReviewStatus::Current,
+        verdict: review.verdict.clone(),
+    };
+    let mut candidate_request = request.clone();
+    candidate_request.readability_review = Some(current_input);
+    let current_projection = project_benchmark(benchmark, &candidate_request);
+    let current_status = current_projection
+        .projection_digest
+        .as_deref()
+        .zip(current_projection.readability_generated_files.as_deref())
+        .is_some_and(|(projection_digest, generated_files)| {
+            projection_digest == review.projection_digest
+                && generated_files == review.readability_generated_files.as_slice()
+        });
+
+    Ok(Some(BenchmarkReadabilityReviewInput {
+        status: if current_status {
+            BenchmarkReadabilityReviewStatus::Current
+        } else {
+            BenchmarkReadabilityReviewStatus::Stale
+        },
+        verdict: review.verdict,
+    }))
+}
+
+fn snapshot_readability_applies(benchmark: &BenchmarkLabel) -> bool {
+    matches!(benchmark.kind, BenchmarkKind::Positive)
+        && matches!(
+            benchmark.readability_scope,
+            BenchmarkReadabilityScope::SupportedClosure
+        )
+}
+
+fn apply_snapshot_readability_gate(mut projection: BenchmarkProjection) -> BenchmarkProjection {
+    if matches!(projection.kind, BenchmarkKind::Positive)
+        && matches!(projection.lifecycle, BenchmarkLifecycle::Active)
+        && matches!(
+            projection.readability_review_status,
+            Some(
+                BenchmarkReadabilityReviewStatus::Missing | BenchmarkReadabilityReviewStatus::Stale
+            )
+        )
+        && matches!(projection.benchmark_status, Some(BenchmarkStatus::Passing))
+    {
+        projection.benchmark_status = Some(BenchmarkStatus::Incomplete);
+        if let Some(gate_status) = projection.gate_status.as_mut() {
+            *gate_status = spec_core::benchmark::BenchmarkGateStatus::Open;
+        }
+        projection.projection_digest = Some(compute_projection_digest(&projection));
+    }
+    projection
+}
+
+fn build_full_benchmark_projection_request(
+    benchmark_root: &Path,
+    target_language: TargetLanguage,
+) -> Result<BenchmarkProjectionRequest> {
+    if !benchmark_root.is_dir() {
+        return Ok(BenchmarkProjectionRequest {
+            benchmark_root_exists: false,
+            path_scope: BenchmarkPathScope::Full,
+            root_case_truths: BTreeMap::new(),
+            selected_carrier_ids: BTreeSet::new(),
+            required_molecule_truths: BTreeMap::new(),
+            readability_review: None,
+        });
+    }
+
+    let benchmark_context = load_workspace_context(benchmark_root)?;
+    let validation_options = ValidationOptions {
+        strict_deps: true,
+        allow_unsafe_local_test_expect: benchmark_context
+            .config
+            .validation
+            .allow_unsafe_local_test_expect,
+    };
+    let mut validation_specs = collect_validation_specs(benchmark_root, &benchmark_context)?;
+    let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
+    let selected_libraries: Vec<ResolvedLibrary> = benchmark_context
+        .libraries
+        .iter()
+        .filter(|library| {
+            validation_specs
+                .imported_libraries
+                .iter()
+                .any(|imported| imported.alias == library.alias)
+        })
+        .cloned()
+        .collect();
+    let failed_import_aliases =
+        imported_library_aliases_with_loader_errors(&loader_errors, &selected_libraries);
+    let (validation_errors, _validation_warnings) =
+        finish_validation_with_imports(&validation_specs, &validation_options);
+    let mut validation_errors = suppress_cross_library_dep_not_found_for_failed_imports(
+        validation_errors,
+        &failed_import_aliases,
+    );
+    validation_errors.extend(validate_library_crate_aliases(
+        validation_specs.local_specs(),
+        benchmark_root,
+        &benchmark_context,
+    ));
+
+    let allowed_root = benchmark_root.parent().unwrap_or(benchmark_root);
+    let mut molecule_report = if includes_directory_molecule_tests(benchmark_root) {
+        load_molecule_test_directory_report_bounded(benchmark_root, allowed_root)?
+    } else {
+        spec_core::loader::MoleculeTestLoadReport::default()
+    };
+    validation_errors.extend(std::mem::take(&mut molecule_report.errors));
+    let (molecule_errors, _molecule_warnings) =
+        validate_molecule_tests(&molecule_report.tests, &validation_specs.root_specs);
+    validation_errors.extend(molecule_errors);
+
+    let id_by_path: HashMap<String, String> = validation_specs
+        .all_specs()
+        .into_iter()
+        .map(|spec| (spec.source.file_path.clone(), spec.spec.id.clone()))
+        .chain(
+            molecule_report
+                .tests
+                .iter()
+                .map(|test| (test.source.file_path.clone(), test.test.id.clone())),
+        )
+        .collect();
+    let unit_paths: HashSet<String> = validation_specs
+        .root_specs
+        .iter()
+        .map(|spec| spec.source.file_path.clone())
+        .collect();
+    let molecule_paths: HashSet<String> = molecule_report
+        .tests
+        .iter()
+        .map(|test| test.source.file_path.clone())
+        .collect();
+
+    let mut unit_errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+    let mut molecule_errors_by_path: HashMap<String, Vec<JsonErrorEntry>> = HashMap::new();
+    for err in validation_errors {
+        let entry = spec_error_to_json_entry(&err, &id_by_path);
+        let error_paths_for_entry = error_paths(&err);
+        let mut attached = false;
+        for error_path in &error_paths_for_entry {
+            if unit_paths.contains(error_path) {
+                unit_errors_by_path
+                    .entry(error_path.clone())
+                    .or_default()
+                    .push(entry.clone());
+                attached = true;
+            }
+            if molecule_paths.contains(error_path) {
+                molecule_errors_by_path
+                    .entry(error_path.clone())
+                    .or_default()
+                    .push(entry.clone());
+                attached = true;
+            }
+        }
+        if !attached && let Some(first_path) = error_paths_for_entry.first() {
+            unit_errors_by_path
+                .entry(first_path.clone())
+                .or_default()
+                .push(entry);
+        }
+    }
+
+    let specs_by_id: HashMap<String, LoadedSpec> = validation_specs
+        .local_specs()
+        .into_iter()
+        .map(|spec| (spec.spec.id.clone(), (*spec).clone()))
+        .collect();
+    let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+    let molecule_evidence_by_id: HashMap<String, MoleculeEvidence> = molecule_report
+        .tests
+        .iter()
+        .filter_map(|test| {
+            read_molecule_evidence(Path::new(&test.source.file_path))
+                .ok()
+                .flatten()
+                .map(|evidence| (test.test.id.clone(), evidence))
+        })
+        .collect();
+    let projection_context = PassportProjectionContext {
+        molecule_tests: &molecule_report.tests,
+        molecule_evidence_by_id: &molecule_evidence_by_id,
+        specs_by_id: &specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Preserve,
+    };
+
+    let mut root_case_truths = BTreeMap::new();
+    for spec in &validation_specs.root_specs {
+        let source_path = Path::new(&spec.source.file_path);
+        let passport = match read_passport(source_path) {
+            Ok(passport) => passport,
+            Err(_) => None,
+        };
+        let projected_truth = project_passport_truth_with_context(
+            spec,
+            passport.as_ref(),
+            &projection_context,
+            &semantic_review_context,
+        );
+        let target_evidence = passport
+            .as_ref()
+            .and_then(|passport| passport_evidence_for_target(passport, target_language));
+        let freshness =
+            resolve_passport_freshness_for_target(spec, passport.as_ref(), target_language)
+                .filter(|_| target_language == TargetLanguage::Rust || target_evidence.is_some());
+        let escape_hatch_gate = projected_truth.escape_hatch_gate.clone();
+        let semantic_review = projected_truth.semantic_review.clone();
+        let errors = unit_errors_by_path
+            .remove(&spec.source.file_path)
+            .unwrap_or_default();
+        let health = apply_semantic_review_to_health(
+            apply_escape_hatch_gate_to_health(
+                compute_health_status(&errors, target_evidence, freshness.as_ref()),
+                escape_hatch_gate.as_ref(),
+            ),
+            semantic_review.as_ref(),
+        );
+        root_case_truths.insert(
+            spec.spec.id.clone(),
+            BenchmarkCaseTruth {
+                status: snapshot_benchmark_truth_status_from_health(health.status),
+                reason: health.reason,
+                semantic_support_status: semantic_review
+                    .as_ref()
+                    .map(|review| review.effective_support_status()),
+            },
+        );
+    }
+
+    let mut required_molecule_truths = BTreeMap::new();
+    for test in &molecule_report.tests {
+        let errors = molecule_errors_by_path
+            .remove(&test.source.file_path)
+            .unwrap_or_default();
+        let evidence = match read_molecule_evidence(Path::new(&test.source.file_path)) {
+            Ok(evidence) => evidence,
+            Err(_) => None,
+        };
+        let health = compute_molecule_health_status(&errors, evidence.as_ref(), test, &specs_by_id);
+        required_molecule_truths.insert(
+            test.test.id.clone(),
+            BenchmarkMoleculeTruth {
+                covers: test.test.covers.clone(),
+                status: snapshot_benchmark_truth_status_from_health(health.status),
+                reason: health.reason,
+            },
+        );
+    }
+
+    Ok(BenchmarkProjectionRequest {
+        benchmark_root_exists: true,
+        path_scope: BenchmarkPathScope::Full,
+        root_case_truths,
+        selected_carrier_ids: BTreeSet::new(),
+        required_molecule_truths,
+        readability_review: None,
+    })
+}
+
+fn snapshot_benchmark_truth_status_from_health(status: HealthState) -> BenchmarkTruthStatus {
+    match status {
+        HealthState::Invalid => BenchmarkTruthStatus::Invalid,
+        HealthState::Failing => BenchmarkTruthStatus::Failing,
+        HealthState::Stale => BenchmarkTruthStatus::Stale,
+        HealthState::Incomplete => BenchmarkTruthStatus::Incomplete,
+        HealthState::Untested => BenchmarkTruthStatus::Untested,
+        HealthState::Valid => BenchmarkTruthStatus::Valid,
+    }
 }
 
 fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> Result<()> {
@@ -6035,6 +6457,89 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn benchmark_snapshot_command_parses_benchmark_id() {
+        let cli = TestCli::try_parse_from(["spec", "benchmark", "snapshot", "BENCH-ECOM"])
+            .expect("benchmark snapshot should parse");
+        assert!(matches!(
+            cli.command,
+            Command::Benchmark(BenchmarkArgs {
+                command: BenchmarkCommand::Snapshot(BenchmarkSnapshotArgs { benchmark_id, }),
+            }) if benchmark_id == "BENCH-ECOM"
+        ));
+    }
+
+    #[test]
+    fn write_benchmark_snapshot_writes_reserved_snapshot_without_workload_tree() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("benchmarks")).unwrap();
+        fs::write(
+            temp_dir.path().join("benchmarks/labels.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": 1,
+                "benchmarks": [
+                    {
+                        "id": "BENCH-SERVICE",
+                        "kind": "positive",
+                        "lifecycle": "reserved",
+                        "required_for_v1": true,
+                        "root": "examples/service/units",
+                        "generated_root": "examples/service/src/generated",
+                        "readability_scope": "supported_closure",
+                        "required_molecule_ids": [],
+                        "cases": []
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let snapshot_path =
+            write_benchmark_snapshot(temp_dir.path(), "BENCH-SERVICE", TargetLanguage::Rust)
+                .unwrap();
+        let snapshot: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&snapshot_path).unwrap()).unwrap();
+
+        assert_eq!(
+            snapshot["projection"]["benchmark_id"],
+            serde_json::Value::String("BENCH-SERVICE".to_string())
+        );
+        assert_eq!(snapshot["projection"]["benchmark_status"], "reserved");
+        assert_eq!(snapshot["projection"]["gate_status"], "reserved");
+    }
+
+    #[test]
+    fn write_benchmark_snapshot_requires_active_benchmark_root_to_exist() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("benchmarks")).unwrap();
+        fs::write(
+            temp_dir.path().join("benchmarks/labels.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": 1,
+                "benchmarks": [
+                    {
+                        "id": "BENCH-ECOM",
+                        "kind": "positive",
+                        "lifecycle": "active",
+                        "required_for_v1": true,
+                        "root": "examples/ecommerce/units",
+                        "generated_root": "examples/ecommerce/src/generated",
+                        "readability_scope": "supported_closure",
+                        "required_molecule_ids": [],
+                        "cases": []
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let err = write_benchmark_snapshot(temp_dir.path(), "BENCH-ECOM", TargetLanguage::Rust)
+            .unwrap_err();
+        assert!(format!("{err:#}").contains("requires benchmark root"));
     }
 
     fn benchmark_loaded_spec(index: usize, tests_per_spec: usize) -> LoadedSpec {
