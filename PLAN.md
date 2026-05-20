@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /home/azureuser/.gstack/projects/atomize-hq-spec/codex-i4-prep-autoplan-restore-20260520-014047.md -->
 # I4: Rust V1 Command-Wall Fixture and Contract-Test Hardening Plan
 
 Status: **authoritative implementation plan**
@@ -56,21 +57,20 @@ I3.5 froze what the public command wall means:
 - repo-root `status . --format json` is supported, but only as `inventory_only`
 - repo-root `export .` is unsupported and must fail with `SPEC_UNSUPPORTED_SCOPE`
 
-I4 does not invent anything new.
+I4 does not add a new behavior surface.
 
-Its only job is to make that frozen contract hard to regress accidentally.
+I4 turns that frozen wall into a deliberate regression boundary. Today the repo
+already has meaningful CLI coverage, but it still locks too much by fragments
+and implication:
 
-Today the repo already has meaningful coverage in `spec-cli/tests/cli.rs`, but
-that coverage is still too soft in three ways:
+1. selected JSON fragments are locked, but the full command outputs are not
+2. the final I3.5 proof wall is archived under `.runs/`, not promoted into one
+   maintained in-repo contract suite
+3. single-file `status` is part of the frozen wall, but not yet represented as
+   a first-class checked-in fixture
 
-1. it locks only selected fragments of the frozen JSON contract instead of the
-   whole command-wall shape
-2. the full I3.5 acceptance wall is not represented as one deliberate,
-   maintainable golden suite
-3. single-file `status` is part of the frozen wall in I3.5 proof artifacts, but
-   it is not promoted to an equally explicit checked-in contract fixture
-
-That is the whole I4 problem.
+That is the whole I4 problem. If implementation grows beyond that, it is scope
+creep.
 
 ## Frozen Decisions
 
@@ -101,8 +101,8 @@ I3.5 freeze. I4 implements them. It does not reopen them.
 
 5. **Golden fixtures must encode command truth, not incidental noise.**
    - Absolute paths, wall-clock timestamps, and commit SHAs may be normalized.
-   - Contract fields, enum values, scope-authority signals, benchmark visibility,
-     and error codes may not be normalized away.
+   - Contract fields, enum values, scope-authority signals, benchmark
+     classifications, and error codes may not be normalized away.
 
 6. **The authoritative source for full-command baselines is the I3.5 final-main proof wall.**
    - `.runs/i3_5_authority_alignment/validation/final-main/*.stdout` is the
@@ -120,13 +120,12 @@ I3.5 freeze. I4 implements them. It does not reopen them.
 
 9. **This is a CLI contract hardening milestone, not a docs milestone.**
    - Docs already teach the frozen wall after I3.5.
-   - I4 only touches docs if a test-driven ambiguity proves the shipped wording
-     is incomplete.
+   - I4 touches docs only if a test-driven ambiguity proves the shipped wording
+     incomplete.
 
 10. **Minimal diff wins.**
-   - Prefer a tighter fixture harness over new abstractions.
-   - Prefer dedicated contract helpers over spreading more ad hoc assertions
-     through an already-large `cli.rs`.
+    - Prefer a tighter fixture harness over new abstractions.
+    - Prefer test-local helpers over product refactors.
 
 ## Current Validated Basis
 
@@ -155,16 +154,16 @@ Observed repo truth on `main` at `ede7fa7`:
   - benchmark-root `export`
   - repo-root `export`
 
-The remaining gap is not “we have no tests.”
+The gap is not "we have no tests."
 
-The gap is “the frozen command wall is not yet promoted into one exact,
-maintained golden contract suite.”
+The gap is "the frozen command wall is not yet promoted into one exact,
+maintained golden contract suite."
 
 ## Step 0: Scope Challenge
 
 ### Premise correction
 
-The problem is not “do more Rust V1 work.”
+The problem is not "do more Rust V1 work."
 
 The problem is narrower:
 
@@ -182,7 +181,7 @@ If I4 expands beyond that sentence, it is overbuilt.
 | --- | --- | --- |
 | benchmark mechanics and path-scope semantics | `spec-cli/src/commands.rs`, `spec-core/src/export.rs`, `spec-core/src/benchmark.rs` | reuse; do not redesign |
 | authoritative final command outputs | `.runs/i3_5_authority_alignment/validation/final-main/*.stdout` | reuse as fixture seed truth |
-| benchmark fixture corpus | `spec-cli/tests/fixtures/benchmarks/*.json` | extend and reorganize; do not replace with a second fixture system |
+| benchmark fixture corpus | `spec-cli/tests/fixtures/benchmarks/*.json` | extend in place; do not replace with a second fixture system |
 | integration test harness | `spec-cli/tests/cli.rs` | tighten and isolate contract-wall assertions |
 | repo-root unsupported export contract | `spec-cli/src/commands.rs` | preserve; add stronger golden coverage |
 | repo-root `inventory_only` status signal | `spec-cli/src/commands.rs` | preserve; add stronger golden coverage |
@@ -192,16 +191,14 @@ If I4 expands beyond that sentence, it is overbuilt.
 
 The minimum honest I4 slice is:
 
-1. define the exact I4 command-wall fixture roster from the frozen I3.5 wall
-2. add stable normalization helpers for nondeterministic fields
-3. add full-command golden fixtures for each frozen status/export surface
-4. wire dedicated regression tests that compare normalized full outputs, not
-   just selective fragments
+1. define the exact I4 command roster from the frozen I3.5 wall
+2. map each frozen command to one checked-in fixture and one named regression test
+3. add stable normalization helpers for nondeterministic fields
+4. compare normalized full command outputs, not just selected fragments
 5. explicitly add the missing single-file `status` golden wall
-6. preserve targeted assertions for critical semantic invariants that full-file
-   comparison alone does not explain clearly
-7. document the acceptance command wall and fixture regeneration workflow in the
-   plan and test comments so later contributors know what is intentional
+6. preserve targeted invariant assertions where a full-file diff alone is too opaque
+7. document fixture authoring and regeneration so the next contributor can refresh
+   the suite without guessing
 
 Anything smaller is fake done.
 
@@ -215,18 +212,17 @@ Examples:
 
 ### Complexity check
 
-This milestone should stay below the “new subsystem” threshold.
+This milestone should stay below the "new subsystem" threshold.
 
 Expected write scope:
 
-- one integration test surface
-- one benchmark fixture tree
-- optionally one small shared test helper area
-- zero or one tiny product-code stabilization edits only if a nondeterministic
+- one integration test surface, `spec-cli/tests/cli.rs`
+- one fixture tree, `spec-cli/tests/fixtures/benchmarks/`
+- zero or one tiny product-code stabilization edit only if a nondeterministic
   output detail blocks truthful fixture locking
 
 If implementation starts touching broad `spec-core` semantics, benchmark
-projection logic, or docs beyond narrow clarifications, the milestone has
+projection logic, or docs beyond a narrow clarification, the milestone has
 escaped its lane.
 
 ### Search check
@@ -250,10 +246,9 @@ In-repo first-principles conclusions:
 `TODOS.md` already carries `M69` and broader Rust follow-ons.
 
 I4 should not add new product TODOs unless implementation discovers one of
-these two truths:
+these truths:
 
-- the fixture harness requires a reusable test-support extraction that is too
-  large for I4
+- the fixture harness wants a reusable extraction that is too large for I4
 - the command wall still contains an ambiguity that cannot be frozen without a
   follow-on product decision
 
@@ -271,11 +266,25 @@ Completeness here means:
 
 That is the whole game.
 
+### Frozen command roster
+
+This is the authoritative I4 roster. Each row must end with one checked-in
+fixture and one dedicated assertion path.
+
+| Surface | Command | Contract role | Fixture path | Dedicated test obligation | Required explicit invariant |
+| --- | --- | --- | --- | --- | --- |
+| benchmark-root `status` | `cargo run -p spec-cli -- status examples/ecommerce/units --format json` | proof wall | `spec-cli/tests/fixtures/benchmarks/status-ecommerce-full.json` | compare full normalized JSON | benchmark-root remains full-scope positive surface |
+| benchmark-root `export` | `cargo run -p spec-cli -- export examples/ecommerce/units` | export wall | `spec-cli/tests/fixtures/benchmarks/export-ecommerce-full.json` | compare full normalized JSON | exported bundle shape remains benchmark-root scoped |
+| namespace `status` | `cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json` | partial diagnostic surface | `spec-cli/tests/fixtures/benchmarks/status-ecommerce-pricing-partial-full.json` | compare full normalized JSON | partial scope never counts as supported positive |
+| single-file `status` | `cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json` | partial diagnostic surface | `spec-cli/tests/fixtures/benchmarks/status-apply-discount-partial-full.json` | compare full normalized JSON | partial scope omits full-scope-only benchmark projection surfaces |
+| repo-root `status` | `cargo run -p spec-cli -- status . --format json` | inventory-only supported surface | `spec-cli/tests/fixtures/benchmarks/status-repo-root-full.json` | compare full normalized JSON | `scope_authority == "inventory_only"` |
+| repo-root `export` | `cargo run -p spec-cli -- export .` | unsupported surface | `spec-cli/tests/fixtures/benchmarks/export-repo-root-unsupported-scope.json` | compare full normalized JSON | `errors[0].code == "SPEC_UNSUPPORTED_SCOPE"` |
+
 ## Architecture Review
 
 ### System design
 
-I4 should be a thin test-hardening layer on top of the shipped command wall.
+I4 is a thin test-hardening layer on top of the shipped command wall.
 
 No new runtime architecture.
 No new benchmark subsystem.
@@ -287,13 +296,15 @@ The desired shape is:
 I3.5 final-main proof outputs
         |
         v
-fixture seed + normalization policy
+fixture authoring pass
+        |
+        +--> normalization policy (documented once)
         |
         v
 checked-in golden JSON fixtures
         |
         v
-dedicated CLI contract-wall tests
+dedicated command-wall tests in spec-cli/tests/cli.rs
         |
         v
 cargo test -p spec-cli blocks accidental command drift
@@ -308,9 +319,11 @@ spec-cli/src/commands.rs
         |                                                       |
         +---- export JSON surface ---------------------------+   |
                                                             |   |
-spec-cli/tests/cli.rs or split contract test module         |   |
+spec-cli/tests/cli.rs                                       |   |
         |                                                   |   |
-        +---- normalization helpers ------------------------+---+
+        +---- normalize_status_contract_json() -------------+---+
+        +---- normalize_export_contract_json() -------------+---+
+        +---- assert_contract_matches_fixture() ------------+---+
         |
         +---- checked-in fixtures under spec-cli/tests/fixtures/benchmarks/
         |
@@ -319,59 +332,100 @@ spec-cli/tests/cli.rs or split contract test module         |   |
 
 ### Architecture recommendation
 
-Keep the runtime code boring.
+Keep helpers inside `spec-cli/tests/cli.rs` in one clearly labeled I4 contract
+section.
 
-If a helper is needed, it belongs in test code unless an unstable output field
-cannot be normalized externally. The implementation should assume the current
-command semantics are correct and should treat product-code edits as exceptions
-that need a written reason.
+That is the minimal-diff choice. Do not create a new test framework, a new
+integration binary, or a general-purpose snapshot abstraction for one milestone.
+
+Product code stays untouched unless all three conditions are true:
+
+1. the observed output differs from the frozen I3.5 proof wall
+2. the difference is nondeterministic transport noise, not semantic drift
+3. the noise cannot be normalized truthfully in test code
+
+If any product-code edit is needed, the commit message and test comment must say
+which frozen contract it preserves.
 
 ### Production failure scenarios
 
-| Surface | Realistic failure | Does I4 need to catch it? | Planned guard |
+| Surface | Realistic failure | Planned guard | Critical if missing? |
 | --- | --- | --- | --- |
-| repo-root `status` | `scope_authority` disappears or changes wording | yes | full normalized repo-root status fixture + explicit assertion |
-| repo-root `export` | command starts dumping aggregate bundle again | yes | full normalized unsupported-scope fixture + explicit no-`benchmarks`/`units` assertion |
-| namespace `status` | partial scope starts minting positive credit | yes | full normalized namespace fixture + explicit `counts_as_supported_positive == false` assertions |
-| single-file `status` | command shape drifts without fixture coverage | yes | new full normalized single-file status fixture |
-| benchmark-root `status` | roots/units payload shape drifts while `benchmarks[]` still passes | yes | full normalized benchmark-root status fixture |
-| benchmark-root `export` | top-level export shape drifts while `benchmarks[]` still passes | yes | full normalized benchmark-root export fixture |
+| repo-root `status` | `scope_authority` disappears or changes wording | full normalized fixture plus explicit equality assertion | yes |
+| repo-root `export` | command starts returning an aggregate bundle instead of an unsupported error | full normalized fixture plus explicit error-code assertion and no-success-shape check | yes |
+| namespace `status` | partial scope starts minting positive credit | full normalized fixture plus explicit non-credit assertions | yes |
+| single-file `status` | command shape drifts silently because only benchmark-root paths are covered | new full normalized fixture and dedicated test | yes |
+| benchmark-root `status` | `roots[]` or `units[]` drift while `benchmarks[]` still passes | full normalized benchmark-root fixture | yes |
+| benchmark-root `export` | top-level export shape drifts while benchmark arrays still pass | full normalized export fixture | yes |
 
 ## Code Quality Review
 
-### DRY and module structure
+### DRY targets
 
-The current benchmark contract tests are good, but they are spread across
-one-off assertions inside a very large integration file.
-
-That is fine for I3 landing energy. It is not the best steady-state shape for a
-frozen command wall.
-
-I4 should aggressively remove repetition in three places:
+The existing benchmark contract tests are useful, but too much knowledge is
+duplicated across one-off assertions. I4 should remove repetition in exactly
+three places:
 
 1. normalization of unstable fields
-2. fixture loading for full command outputs
-3. benchmark-fixture repo setup for the command-wall tests
+2. fixture loading and JSON comparison
+3. benchmark fixture repo setup for the command-wall tests
 
-### Opinionated recommendation
+### Opinionated helper surface
 
-Do not invent a large new test framework.
+Use one small contract helper layer, no more:
 
-Add one small contract helper layer, just enough to make these tests obvious in
-30 seconds:
+- `read_contract_fixture(path: &str) -> serde_json::Value`
+- `normalize_status_contract_json(value: &mut serde_json::Value)`
+- `normalize_export_contract_json(value: &mut serde_json::Value)`
+- `assert_contract_matches_fixture(actual: &serde_json::Value, fixture_path: &str)`
 
-- `read_contract_fixture(...)`
-- `normalize_status_contract_json(...)`
-- `normalize_export_contract_json(...)`
-- `assert_contract_matches_fixture(...)`
+This is explicit, DRY enough, and still a minimal diff.
 
-That is explicit, DRY enough, and still a minimal diff.
+Do not add generic trait plumbing, macro-driven assertion wrappers, or a shared
+test-support crate for I4. That is spending an innovation token to compare JSON.
+Wild.
 
-### ASCII diagrams in code comments
+### Normalization contract
 
-If I4 extracts contract helpers or a dedicated contract-test block, add one
-short ASCII diagram comment near the helper entrypoint so future contributors
-know the fixture flow:
+These are the only fields I4 may rewrite before fixture comparison:
+
+- absolute filesystem paths
+- unit and molecule `evidence_at` timestamps
+- `exported_at`
+- `provenance.git_commit_sha`
+- digest literals whose value is expected to churn across truthful proof refreshes:
+  - `freshness.authored_truth_digest`
+  - benchmark `label_digest`
+  - benchmark `projection_digest`
+
+These fields must remain exact:
+
+- `schema_version`
+- `status`
+- `scope_authority`
+- `errors[].code`
+- benchmark ids and benchmark classifications
+- path-scope labels
+- positive-credit signals
+- relative proof-ref paths
+- benchmark presence versus absence
+
+### Fixture authoring workflow
+
+Fixture authoring is part of the plan. The implementer should not guess.
+
+1. capture the raw I3.5 proof outputs from
+   `.runs/i3_5_authority_alignment/validation/final-main/*.stdout`
+2. map each file to the frozen command roster above
+3. convert the raw JSON into its checked-in fixture path
+4. normalize only the allowed transport-noise fields
+5. keep the original raw proof output untouched under `.runs/`
+6. use the same normalization rules in the regression tests so authoring and
+   verification match exactly
+
+### ASCII diagram comment
+
+Add one short ASCII comment near the helper entrypoint in `spec-cli/tests/cli.rs`:
 
 ```text
 raw command JSON
@@ -407,24 +461,24 @@ COMMAND-WALL COVERAGE
 [+] namespace status
     |
     ├── [PARTIAL TODAY] partial benchmarks[] fixture locked
-    ├── [PARTIAL TODAY] loader error + no positive-credit assertions locked
+    ├── [PARTIAL TODAY] loader-error and no-positive-credit assertions exist
     └── [GAP] full normalized stdout contract not locked
 
 [+] single-file status
     |
-    ├── [GAP] no dedicated frozen fixture coverage in the benchmark contract suite
+    ├── [GAP] no dedicated frozen fixture coverage in the command-wall suite
     └── [GAP] partial benchmark semantics not promoted from I3.5 proof output
 
 [+] repo-root status
     |
-    ├── [PARTIAL TODAY] schema_version + scope_authority contract locked
+    ├── [PARTIAL TODAY] schema_version and scope_authority contract locked
     ├── [PARTIAL TODAY] benchmarks[] fixture locked
     └── [GAP] full normalized stdout contract not locked
 
 [+] repo-root export
     |
-    ├── [GOOD TODAY] machine-readable unsupported-scope response fixture exists
-    └── [GAP] treat as part of one unified command-wall suite, not a standalone special case
+    ├── [GOOD TODAY] unsupported-scope fixture exists
+    └── [GAP] not yet treated as part of one unified command-wall suite
 
 ─────────────────────────────────
 COVERAGE: 1/6 fully locked
@@ -435,9 +489,9 @@ GAPS: 5 command-wall promotions needed
 ─────────────────────────────────
 ```
 
-### Test artifact plan
+### Required fixture set
 
-I4 should add or promote these checked-in fixtures:
+I4 must end with exactly this maintained fixture set:
 
 - `spec-cli/tests/fixtures/benchmarks/status-repo-root-full.json`
 - `spec-cli/tests/fixtures/benchmarks/status-ecommerce-full.json`
@@ -445,33 +499,23 @@ I4 should add or promote these checked-in fixtures:
 - `spec-cli/tests/fixtures/benchmarks/status-apply-discount-partial-full.json`
 - `spec-cli/tests/fixtures/benchmarks/export-ecommerce-full.json`
 - `spec-cli/tests/fixtures/benchmarks/export-repo-root-unsupported-scope.json`
-  - existing fixture may be kept and renamed only if that reduces ambiguity
 
-Normalization rules for those fixtures:
+The existing repo-root unsupported export fixture may keep its current filename
+if that avoids churn, but the test names and plan language must make its role
+unmistakable.
 
-- replace absolute filesystem paths with stable sentinels
-- replace unit and molecule `evidence_at` timestamps with a stable placeholder
-- replace `exported_at` with a stable placeholder
-- replace `provenance.git_commit_sha` with a stable placeholder
-- replace these digest literals with stable placeholders while preserving field
-  presence and absence semantics:
-  - `freshness.authored_truth_digest`
-  - benchmark `label_digest`
-  - benchmark `projection_digest`
-- keep relative proof-ref paths, benchmark ids, classifications, statuses,
-  loader-error codes, and scope labels exact
-- do not strip `scope_authority`, `status`, `errors[].code`, benchmark ids,
-  path-scope labels, gate statuses, or positive-credit flags
+### Required test set
 
-### Test types
+Add or tighten one dedicated regression test per frozen surface:
 
-| Surface | Test type | Why |
-| --- | --- | --- |
-| benchmark-root status/export | integration fixture | command contract, not unit logic |
-| namespace status | integration fixture | partial-scope contract must stay honest |
-| single-file status | integration fixture | frozen diagnostic contract needs explicit regression wall |
-| repo-root status/export | integration fixture | public machine surface with strict semantics |
-| snapshot command | existing regression coverage only | not part of the I4 frozen wall |
+| Surface | Required test behavior |
+| --- | --- |
+| benchmark-root `status` | run command, normalize full JSON, compare to `status-ecommerce-full.json`, assert full benchmark-root semantics still present |
+| benchmark-root `export` | run command, normalize full JSON, compare to `export-ecommerce-full.json`, assert export wall remains benchmark-root scoped |
+| namespace `status` | run command, normalize full JSON, compare to `status-ecommerce-pricing-partial-full.json`, assert no positive credit |
+| single-file `status` | run command, normalize full JSON, compare to `status-apply-discount-partial-full.json`, assert omission of full-scope-only projection surfaces |
+| repo-root `status` | run command, normalize full JSON, compare to `status-repo-root-full.json`, assert `scope_authority == "inventory_only"` |
+| repo-root `export` | run command, normalize full JSON, compare to `export-repo-root-unsupported-scope.json`, assert `SPEC_UNSUPPORTED_SCOPE` |
 
 ### Failure-mode matrix
 
@@ -483,66 +527,82 @@ Normalization rules for those fixtures:
 | single-file partial status semantics | currently no | yes in product code | yes | yes |
 | benchmark-root full contract shape | currently partial | yes | yes | yes |
 
-Any surface above without a full golden test is an I4 blocker.
+Any row above without a full golden test is an I4 blocker.
 
 ## Performance Review
 
 I4 should not materially affect runtime performance.
 
-This is almost entirely test code and checked-in JSON.
+This is almost entirely test code and checked-in JSON. The only performance smell
+to avoid is doing extra benchmark fixture repo setup or reparsing in ways that
+slow `cargo test -p spec-cli` for no benefit.
 
-The only performance smell to avoid is rebuilding large copied fixtures more
-than necessary inside tests. Reuse the existing temporary benchmark-repo copy
-strategy unless it becomes a measurable test bottleneck. Do not prematurely
-optimize with a custom caching layer.
+Recommendations:
+
+- reuse the existing temporary benchmark-repo copy strategy
+- parse and normalize once per command assertion path
+- do not add a caching layer, a separate fixture compiler, or other "clever"
+  speedups for a suite this small
 
 ## Implementation Plan
 
-### Phase 1: Freeze the fixture roster
+### Phase 1: Freeze the roster and policy
 
-1. Enumerate the exact I3.5 command-wall commands that belong to I4.
-2. Map each command to one maintained checked-in fixture file.
-3. Decide the normalization policy field-by-field and write it down in test
-   comments next to the helpers.
-4. Keep `.runs/i3_5_authority_alignment/validation/final-main/*.stdout` as the
-   seed truth, not as the asserted runtime source.
+1. confirm the six-command roster in this plan against the I3.5 proof wall
+2. map each command to one fixture path and one test name
+3. document the allowed normalization fields in the helper comment block
+4. lock the rule that `.runs/.../final-main/*.stdout` is seed truth, not the
+   runtime assertion source
 
-### Phase 2: Build the normalization helpers
+Done when:
 
-1. Add small test-only helpers to normalize:
-   - absolute paths
-   - exported timestamps
-   - commit SHAs
-   - any non-contract digests that would churn with proof refreshes
-2. Keep separate normalization entrypoints for status JSON and export JSON if
-   that avoids clever conditionals.
-3. Avoid mutating away contract fields that later reviewers will need to see in
-   fixture diffs.
+- the command roster table above needs no further interpretation
+- the fixture names are final
+- the normalization policy is written before fixtures are copied
 
-### Phase 3: Promote the command-wall fixtures
+### Phase 2: Build the contract helpers
 
-1. Check in full normalized benchmark-root status fixture.
-2. Check in full normalized namespace status fixture.
-3. Check in full normalized single-file status fixture.
-4. Check in full normalized repo-root status fixture.
-5. Check in full normalized benchmark-root export fixture.
-6. Keep or rename the repo-root unsupported export fixture so its purpose is
-   unmistakable.
+1. add the small test-local helper surface in `spec-cli/tests/cli.rs`
+2. keep separate entrypoints for status JSON and export JSON normalization
+3. add the short ASCII fixture-flow comment above the helper block
+4. reuse existing benchmark repo setup instead of inventing new scaffolding
 
-### Phase 4: Tighten the integration tests
+Done when:
 
-1. Add one dedicated test per frozen command-wall surface.
-2. Compare normalized full JSON output to the exact fixture.
-3. Preserve a few explicit invariant assertions where a full-file diff would be
-   opaque:
+- one test can load a fixture and compare a normalized full command output
+- no helper strips real contract fields
+
+### Phase 3: Promote the fixtures
+
+1. create or refresh the five missing full-command fixtures
+2. keep the repo-root unsupported export fixture deliberate and named clearly
+3. verify each fixture is derived from final-main proof output, not hand-authored
+   from memory
+
+Done when:
+
+- all six fixture paths exist
+- each fixture reflects the normalization contract exactly once
+
+### Phase 4: Tighten the regression tests
+
+1. add one dedicated command-wall test per frozen surface
+2. compare normalized full JSON to the exact fixture
+3. preserve explicit invariant assertions where a full-file diff would be hard to
+   read:
    - repo-root `scope_authority == "inventory_only"`
    - repo-root export `errors[0].code == "SPEC_UNSUPPORTED_SCOPE"`
    - namespace and single-file partial cases never count as supported positive
    - partial status omits full-scope-only projection surfaces
-4. Keep snapshot tests and invalid-registry tests intact as adjacent coverage,
-   but do not let them substitute for the I4 wall.
+4. keep snapshot and invalid-registry tests intact as adjacent coverage, but do
+   not let them substitute for the I4 wall
 
-### Phase 5: Prove the regression wall
+Done when:
+
+- every row in the frozen command roster has a named test
+- no surface relies on fragment-only assertions anymore
+
+### Phase 5: Prove the wall
 
 Run exactly:
 
@@ -569,13 +629,15 @@ Acceptance requires:
 Expected write set:
 
 - `spec-cli/tests/cli.rs`
-  - or a narrowly extracted adjacent contract test module if that is cleaner
 - `spec-cli/tests/fixtures/benchmarks/*.json`
 
-Conditional write set, only if required:
+Conditional write set, only if forced by the blocker rule:
 
 - `spec-cli/src/commands.rs`
-  - only for stability fixes that preserve the frozen contract
+  - allowed only for stability fixes that preserve the frozen contract
+- `spec-core/src/export.rs`
+  - allowed only if the same frozen contract cannot be expressed without a tiny
+    stabilization fix here instead of in CLI glue
 
 Read-only authority inputs:
 
@@ -609,26 +671,27 @@ I4 reuses all of that. It should not rebuild any of it in parallel.
 
 ## Parallelization Strategy
 
-This milestone has two real workstreams with one merge point.
+This milestone has two real workstreams and one conditional escape hatch.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
 | A. fixture promotion | `spec-cli/tests/fixtures/benchmarks/` | — |
-| B. test helper + assertions | `spec-cli/tests/` | A for final fixture names and normalization policy |
-| C. optional stability fix | `spec-cli/src/`, `spec-core/src/` | B only if tests expose real nondeterminism |
+| B1. helper scaffolding | `spec-cli/tests/` | — |
+| B2. final test wiring | `spec-cli/tests/` | A and B1 |
+| C. optional stability fix | `spec-cli/src/`, `spec-core/src/` | B2 only if tests expose real nondeterminism |
 
 ### Parallel lanes
 
 Lane A: fixture promotion
-- seed normalized full-command fixtures from `.runs/i3_5_authority_alignment/validation/final-main/`
-- finalize file names and placeholder policy
+- copy and normalize the final-main proof outputs into the six maintained fixture paths
+- finalize placeholder values and fixture naming
 
 Lane B: test harness tightening
-- build normalization helpers
-- add one test per command-wall surface
-- wire tests to the finalized fixtures
+- B1 can start immediately with helper scaffolding, test naming, and the shared
+  assertion flow
+- B2 starts after Lane A finalizes fixture names and placeholder policy
 
 Lane C: optional runtime stabilization
 - only launch if Lane B proves a truthful contract cannot be asserted without a
@@ -636,19 +699,34 @@ Lane C: optional runtime stabilization
 
 ### Execution order
 
-1. Launch Lane A and the first half of Lane B in parallel.
-2. Merge on fixture names and normalization policy.
-3. Finish Lane B against the finalized fixture corpus.
-4. Launch Lane C only if B finds a real nondeterministic output blocker.
-5. Run the full proof wall after A+B, and after C if C exists.
+1. Launch Lane A and Lane B1 in parallel worktrees.
+2. Merge on final fixture names and normalization policy.
+3. Finish Lane B2 against the finalized fixture corpus.
+4. Launch Lane C only if B2 finds a real nondeterministic output blocker.
+5. Run the full proof wall after A+B, and again after C if C exists.
 
 ### Conflict flags
 
-- Lanes A and B both touch `spec-cli/tests/`, so they must coordinate on helper
-  names and final fixture paths.
+- Lane A touches `spec-cli/tests/fixtures/benchmarks/`; Lane B touches
+  `spec-cli/tests/cli.rs`. That is a safe parallel split until the merge point.
+- B1 and B2 stay in the same lane because both touch `spec-cli/tests/`.
 - Lane C touches product code and should stay isolated unless tests force it.
-- If Lane B stays inside `cli.rs`, keep Lane A focused on fixture files to avoid
-  edit collisions.
+- If Lane C is activated, do not keep editing fixture names in parallel. Freeze
+  the test side first.
+
+## Verification Commands
+
+Authoritative verification commands for implementation closeout:
+
+```bash
+cargo test -p spec-cli
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
+cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json
+cargo run -p spec-cli -- status . --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- export .
+```
 
 ## Acceptance Checklist
 
@@ -659,7 +737,7 @@ Lane C: optional runtime stabilization
 - [ ] full normalized fixture exists for benchmark-root `export`
 - [ ] repo-root unsupported export fixture remains deliberate and explicit
 - [ ] one dedicated regression test exists per frozen command-wall surface
-- [ ] normalization helpers are documented and narrow
+- [ ] normalization helpers are documented, narrow, and test-local
 - [ ] partial scopes never count as supported positive credit
 - [ ] repo-root status still emits `scope_authority: "inventory_only"`
 - [ ] repo-root export still fails with `SPEC_UNSUPPORTED_SCOPE`
