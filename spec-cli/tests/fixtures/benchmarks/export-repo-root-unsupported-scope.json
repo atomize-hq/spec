@@ -4,7 +4,7 @@
   "errors": [
     {
       "code": "SPEC_UNSUPPORTED_SCOPE",
-      "path": "/tmp/benchmark-fixture",
+      "path": "<normalized>",
       "message": "repo-root export is unsupported for this workspace shape; export a single library root such as examples/ecommerce/units"
     }
   ]
