@@ -459,12 +459,12 @@
       },
       "deps": [],
       "local_tests": [],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/money/round.unit.spec",
       "evidence": {
         "build_status": "pass",
         "test_results": [],
-        "observed_at": "2026-04-26T18:41:14Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -482,7 +482,7 @@
           "evidence": {
             "build_status": "pass",
             "test_results": [],
-            "observed_at": "2026-04-26T18:41:14Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -560,7 +560,7 @@
           "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
         }
       ],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/pricing/apply_discount.unit.spec",
       "evidence": {
         "build_status": "pass",
@@ -570,7 +570,7 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-04-27T11:49:45Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -593,7 +593,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-04-27T11:49:45Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -674,7 +674,7 @@
           "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
         }
       ],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/pricing/apply_tax.unit.spec",
       "evidence": {
         "build_status": "pass",
@@ -684,7 +684,7 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-10T23:07:06Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -707,7 +707,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-05-10T23:07:06Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -730,7 +730,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-05-12T23:51:29Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -820,7 +820,7 @@
           "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
         }
       ],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/pricing/calculate_total.unit.spec",
       "evidence": {
         "build_status": "pass",
@@ -830,7 +830,7 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-04-27T11:49:51Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -853,7 +853,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-04-27T11:49:51Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -876,7 +876,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-05-15T13:04:19Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -966,7 +966,7 @@
           "expect": "calculate_total_guarded_tax(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
         }
       ],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec",
       "evidence": {
         "build_status": "pass",
@@ -976,7 +976,7 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-16T03:06:41Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -999,7 +999,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-05-16T03:06:41Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -1196,7 +1196,7 @@
           "expect": "DiscountStrategy::None.fixed_amount_capped_behavior_holds()"
         }
       ],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/pricing/discount_strategy.unit.spec",
       "evidence": {
         "build_status": "pass",
@@ -1218,7 +1218,7 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-11T19:48:13Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -1255,7 +1255,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-05-11T19:48:13Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }
@@ -1482,7 +1482,7 @@
           "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
         }
       ],
-      "generated_at": "2026-05-18T21:57:54Z",
+      "generated_at": "<normalized>",
       "source_file": "examples/ecommerce/units/pricing/pricing_quote.unit.spec",
       "evidence": {
         "build_status": "pass",
@@ -1496,7 +1496,7 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-11T19:48:16Z",
+        "observed_at": "<normalized>",
         "provenance": {
           "git_commit_sha": "<normalized>"
         }
@@ -1525,7 +1525,7 @@
                 "status": "pass"
               }
             ],
-            "observed_at": "2026-05-11T19:48:16Z",
+            "observed_at": "<normalized>",
             "provenance": {
               "git_commit_sha": "<normalized>"
             }

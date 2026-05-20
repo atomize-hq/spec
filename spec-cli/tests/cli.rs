@@ -503,35 +503,21 @@ fn normalize_contract_json_value(value: &mut Value, path: &mut Vec<String>, expo
             }
         }
         Value::String(text) => {
-            let normalized = if Path::new(text).is_absolute() {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else if path.last().map(String::as_str) == Some("evidence_at") {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else if export_mode && path.last().map(String::as_str) == Some("exported_at") {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else if path.last().map(String::as_str) == Some("git_commit_sha")
-                && path.iter().any(|segment| segment == "provenance")
-            {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else if path.last().map(String::as_str) == Some("authored_truth_digest")
-                && path
-                    .iter()
-                    .rev()
-                    .nth(1)
-                    .map(String::as_str)
-                    == Some("freshness")
-            {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else if path.last().map(String::as_str) == Some("label_digest") {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else if path.last().map(String::as_str) == Some("projection_digest") {
-                Some(NORMALIZED_CONTRACT_VALUE)
-            } else {
-                None
-            };
+            let leaf = path.last().map(String::as_str);
+            let should_normalize = Path::new(text).is_absolute()
+                || leaf == Some("evidence_at")
+                || leaf == Some("generated_at")
+                || leaf == Some("observed_at")
+                || (export_mode && leaf == Some("exported_at"))
+                || (leaf == Some("git_commit_sha")
+                    && path.iter().any(|segment| segment == "provenance"))
+                || (leaf == Some("authored_truth_digest")
+                    && path.iter().rev().nth(1).map(String::as_str) == Some("freshness"))
+                || leaf == Some("label_digest")
+                || leaf == Some("projection_digest");
 
-            if let Some(replacement) = normalized {
-                *text = replacement.to_string();
+            if should_normalize {
+                *text = NORMALIZED_CONTRACT_VALUE.to_string();
             }
         }
         _ => {}
@@ -4385,9 +4371,7 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     )
     .expect("failed to copy monotone-up benchmark semantic fixtures");
     copy_dir_recursive(
-        &root.join(
-            "semantic-families/function.helper.identity_passthrough.v1/fixtures",
-        ),
+        &root.join("semantic-families/function.helper.identity_passthrough.v1/fixtures"),
         &semantic_families_dir.join("function.helper.identity_passthrough.v1/fixtures"),
     )
     .expect("failed to copy helper benchmark semantic fixtures");
@@ -4400,7 +4384,8 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
         &root.join(
             "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures",
         ),
-        &semantic_families_dir.join("function.wrapper.pipeline.normalized_required_arg.v1/fixtures"),
+        &semantic_families_dir
+            .join("function.wrapper.pipeline.normalized_required_arg.v1/fixtures"),
     )
     .expect("failed to copy normalized-required-arg benchmark semantic fixtures");
     copy_dir_recursive(
