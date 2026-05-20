@@ -1,0 +1,11 @@
+{
+  "schema_version": 4,
+  "status": "unsupported_scope",
+  "errors": [
+    {
+      "code": "SPEC_UNSUPPORTED_SCOPE",
+      "path": "/tmp/benchmark-fixture",
+      "message": "repo-root export is unsupported for this workspace shape; export a single library root such as examples/ecommerce/units"
+    }
+  ]
+}

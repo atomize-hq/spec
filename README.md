@@ -26,6 +26,7 @@
 - [`TODOS.md`](TODOS.md): backlog and follow-up inventory
 - [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
 - [`CLAUDE.md`](CLAUDE.md): lightweight routing rules for Claude/Codex sessions in this repo
+- [`docs/rust_v1_contract_stack.md`](docs/rust_v1_contract_stack.md): Rust V1 contract-stack index and the frozen I3.5 command wall
 - [`examples/ecommerce/README.md`](examples/ecommerce/README.md): local example walkthrough
 - [`examples/crosslib-app/README.md`](examples/crosslib-app/README.md): cross-library example walkthrough
 - [`docs/north_star_v0.2.md`](docs/north_star_v0.2.md), [`docs/high_level_technical_architecture_v0.2.md`](docs/high_level_technical_architecture_v0.2.md), and [`docs/roadmap_and_release_shape_v0.1.md`](docs/roadmap_and_release_shape_v0.1.md): historical design context from the pre-ship planning phase
@@ -46,6 +47,43 @@ cargo install spec-cli
 spec validate examples/ecommerce/units
 spec generate examples/ecommerce/units
 ```
+
+## Benchmarks (M68)
+
+Rust V1 benchmark mechanics are repo-root read surfaces, not authored spec truth. The authored benchmark registry lives in `benchmarks/labels.json`; readability review anchors live in `benchmarks/reviews/*.readability.review.json`; and `spec benchmark snapshot <benchmark-id>` writes derived snapshots under `benchmarks/snapshots/`.
+
+The trusted proof wall after I3.5 is:
+
+```bash
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+```
+
+Repo-root surfaces remain available, but they have a narrower contract:
+
+- `cargo run -p spec-cli -- status . --format json` is a supported broad-scope inventory surface only. Treat its scope authority as `inventory_only`, not as the fresh-clone proof default.
+- `cargo run -p spec-cli -- export .` is unsupported for this workspace shape and must fail with `SPEC_UNSUPPORTED_SCOPE` instead of emitting a fake aggregate bundle.
+
+The seeded roster is:
+
+- `BENCH-ECOM`: active positive benchmark rooted at `examples/ecommerce/units`
+- `BENCH-CROSSLIB`: active companion-negative benchmark rooted at `examples/crosslib-app/units`
+- `BENCH-SERVICE`: reserved positive benchmark that stays machine-visible without an `examples/service/units` tree
+
+Path scope is intentional:
+
+- Exact benchmark-root scopes are the proof-authoritative default and emit full projections with digests, benchmark status, gate status, and readability review state.
+- Broad repo-root scope still emits a full projection, but only as `inventory_only` reporting.
+- Namespace and single-file scopes emit partial projections only. Partial scope never emits positive supported credit, even when the covered carrier is individually `valid`.
+- Companion-negative cases stay visible but never count as positive supported credit.
+
+Writer versus reader wall:
+
+- `spec status` and `spec export` only project benchmark truth; they do not write passports, molecule evidence, or benchmark proof.
+- `spec benchmark snapshot <id>` writes only snapshot artifacts under `benchmarks/snapshots/`.
+- `.spec.passport.json` and `*.test.evidence.json` remain the read-only proof inputs for benchmark accounting during M68.
+
+`spec export` now emits `schema_version: 4` and additively includes top-level `benchmarks[]` under the same contract as `spec status` for the same scope.
 
 ## Bounded TypeScript lane (M61)
 
@@ -292,7 +330,8 @@ cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_stra
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
-cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
 ```
 
 `validate` checks schema and semantic rules. `--no-strict` downgrades missing internal deps to warnings for validation only. `generate` always remains strict, is directory-scoped only, and emits `.rs` files under the output directory while managing `mod.rs` files plus the `.spec-generated` safety marker.
@@ -321,7 +360,7 @@ For both `.unit.spec` and directory-scoped `.test.spec` validation, the path seg
 
 ## AI-Native Usage
 
-`spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport plus molecule-evidence trail that records what was actually observed to pass. In this repo, the canonical ecommerce example ships both unit passports and molecule evidence so `spec status .` is a trustworthy starting point on a fresh clone.
+`spec` is especially useful when an AI agent is the one making the edit loop. The toolchain gives the agent a structured contract to follow, a machine-readable validation result to fix against, and a passport plus molecule-evidence trail that records what was actually observed to pass. In this repo, the canonical ecommerce example ships both unit passports and molecule evidence so `cargo run -p spec-cli -- status examples/ecommerce/units --format json` is the trustworthy fresh-clone starting point. Repo-root `status . --format json` remains useful when you want broad inventory, but it is intentionally `inventory_only`.
 
 The loop is simple: inspect status, validate the exact unit, edit the `.unit.spec`, build to catch Rust-level issues, then test to write fresh evidence. Single-file `validate` and `test` stay on that unit and do not pull sibling molecule tests into the run.
 

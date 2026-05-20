@@ -2618,7 +2618,7 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 3);
+    assert_eq!(bundle["schema_version"], 4);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
     assert!(bundle.get("molecule_tests").is_some());
@@ -4263,6 +4263,40 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
     let (temp_dir, dst_ecommerce) = copy_ecommerce_example_preserving_artifacts();
     remove_derived_artifacts(&dst_ecommerce);
     (temp_dir, dst_ecommerce)
+}
+
+fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let repo_dir = temp_dir.path().join("benchmark-repo");
+    let examples_dir = repo_dir.join("examples");
+
+    fs::create_dir_all(&examples_dir).unwrap();
+    fs::write(repo_dir.join(".git"), "gitdir: .git/modules/spec-tests\n").unwrap();
+    copy_dir_recursive(
+        &root.join("examples/ecommerce"),
+        &examples_dir.join("ecommerce"),
+    )
+    .expect("failed to copy ecommerce benchmark fixture");
+    copy_dir_recursive(
+        &root.join("examples/crosslib-app"),
+        &examples_dir.join("crosslib-app"),
+    )
+    .expect("failed to copy cross-library benchmark fixture");
+    copy_dir_recursive(
+        &root.join("examples/shared-crate"),
+        &examples_dir.join("shared-crate"),
+    )
+    .expect("failed to copy shared crate benchmark fixture");
+    copy_dir_recursive(
+        &root.join("examples/shared-spec"),
+        &examples_dir.join("shared-spec"),
+    )
+    .expect("failed to copy shared spec benchmark fixture");
+    copy_dir_recursive(&root.join("benchmarks"), &repo_dir.join("benchmarks"))
+        .expect("failed to copy benchmark registry fixture");
+
+    (temp_dir, repo_dir)
 }
 
 fn copy_crosslib_typescript_example() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
@@ -6180,7 +6214,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
         "status stays non-green because sibling helper units remain untested"
     );
     let status_json = parse_stdout_json(&status_output);
-    assert_eq!(status_json["schema_version"], 3);
+    assert_eq!(status_json["schema_version"], 4);
     let unit = status_units(&status_json)
         .iter()
         .find(|unit| unit["id"] == "pricing/pricing_quote")
@@ -6191,7 +6225,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
     let export_output = run_in(&project_dir, &["export", "units"]);
     assert_output_success("supported data export should succeed", &export_output);
     let export_json = parse_stdout_json(&export_output);
-    assert_eq!(export_json["schema_version"], 3);
+    assert_eq!(export_json["schema_version"], 4);
     let passport = export_json["passports"]
         .as_array()
         .unwrap()
@@ -8058,7 +8092,7 @@ body:
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     let units = status_units(&json);
     assert_eq!(units.len(), 1);
     assert_eq!(units[0]["id"], "pricing/bad");
@@ -8094,7 +8128,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert!(
         !loader_errors.is_empty(),
@@ -8393,7 +8427,7 @@ fn spec_status_zero_roots_is_non_green() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     assert_eq!(json["roots"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors[0]["code"], "SPEC_NO_LIBRARY_ROOTS");
@@ -12946,7 +12980,7 @@ fn export_emits_schema_v3_bundle_for_valid_cross_library_dep() {
     assert!(output.status.success(), "export should succeed");
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 3);
+    assert_eq!(bundle["schema_version"], 4);
     let edges = bundle["graph"]["edges"].as_array().unwrap();
     assert!(
         edges.iter().any(|edge| {
@@ -13694,7 +13728,7 @@ fn status_json_surfaces_missing_library_path_as_loader_error() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 3);
+    assert_eq!(json["schema_version"], 4);
     assert_eq!(json["units"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors.len(), 1);
@@ -14611,7 +14645,7 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
     let spec_export = run_in(&ecommerce_dir, &["export", "units"]);
     assert_output_success("spec export should remain unchanged", &spec_export);
     let spec_export_json = parse_stdout_json(&spec_export);
-    assert_eq!(spec_export_json["schema_version"], 3);
+    assert_eq!(spec_export_json["schema_version"], 4);
     assert!(spec_export_json.get("plan").is_none(), "{spec_export_json}");
     assert!(
         spec_export_json.get("units").is_some(),
@@ -14648,6 +14682,228 @@ fn plan_export_ignores_hidden_scratch_units_copy() {
     let actual = normalize_exported_at(parse_stdout_json(&output));
     let expected = fixture_json("plan-export-valid-mixed.json");
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn status_repo_root_emits_schema_v4_benchmarks_fixture() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "repo-root status should stay non-green when broad inventory includes untested work"
+    );
+    let json = parse_stdout_json(&output);
+    let actual_contract = serde_json::json!({
+        "schema_version": json["schema_version"],
+        "scope_authority": json["scope_authority"],
+    });
+
+    assert_eq!(
+        actual_contract,
+        fixture_json("benchmarks/status-repo-root-contract.json")
+    );
+    assert_eq!(
+        json["benchmarks"],
+        fixture_json("benchmarks/status-repo-root-benchmarks.json")
+    );
+    assert!(
+        json["benchmarks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|benchmark| benchmark["benchmark_id"] == "BENCH-SERVICE"),
+        "repo-root inventory should preserve reserved benchmark visibility"
+    );
+}
+
+#[test]
+fn status_benchmark_root_emits_full_benchmark_fixture() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce/units", "--format", "json"],
+    );
+    assert_output_success("benchmark-root status should succeed", &output);
+    let json = parse_stdout_json(&output);
+
+    assert_eq!(json["schema_version"], 4);
+    assert_eq!(
+        json["benchmarks"],
+        fixture_json("benchmarks/status-ecommerce-full-benchmarks.json")
+    );
+}
+
+#[test]
+fn status_partial_scope_benchmark_fixture_never_counts_positive_credit() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(
+        &repo_dir,
+        &[
+            "status",
+            "examples/ecommerce/units/pricing",
+            "--format",
+            "json",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "namespace status should stay non-green when no library root is discovered"
+    );
+    let json = parse_stdout_json(&output);
+    let benchmarks = json["benchmarks"].clone();
+
+    assert_eq!(
+        benchmarks,
+        fixture_json("benchmarks/status-ecommerce-pricing-partial-benchmarks.json")
+    );
+    assert_eq!(json["loader_errors"][0]["code"], "SPEC_NO_LIBRARY_ROOTS");
+    assert!(
+        benchmarks[0]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(false))
+    );
+    assert!(benchmarks[0].get("projection_digest").is_none());
+    assert!(benchmarks[0].get("readability_review_status").is_none());
+}
+
+#[test]
+fn export_emits_full_and_partial_benchmark_fixtures() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let full_output = run_in(&repo_dir, &["export", "examples/ecommerce/units"]);
+    assert_output_success("full benchmark export should succeed", &full_output);
+    let full_json = parse_stdout_json(&full_output);
+    assert_eq!(full_json["schema_version"], 4);
+    assert_eq!(
+        full_json["benchmarks"],
+        fixture_json("benchmarks/export-ecommerce-full-benchmarks.json")
+    );
+
+    let partial_output = run_in(
+        &repo_dir,
+        &[
+            "export",
+            "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+        ],
+    );
+    assert_output_success(
+        "single-file benchmark export should succeed",
+        &partial_output,
+    );
+    let partial_json = parse_stdout_json(&partial_output);
+    assert_eq!(partial_json["schema_version"], 4);
+    assert_eq!(
+        partial_json["benchmarks"],
+        fixture_json("benchmarks/export-apply-discount-partial-benchmarks.json")
+    );
+}
+
+#[test]
+fn export_repo_root_emits_machine_readable_unsupported_scope_fixture() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(&repo_dir, &["export", "."]);
+    assert!(
+        !output.status.success(),
+        "repo-root export should fail with a stable unsupported-scope contract"
+    );
+    let mut json = parse_stdout_json(&output);
+    json["errors"][0]["path"] = Value::String("/tmp/benchmark-fixture".to_string());
+
+    assert_eq!(
+        json,
+        fixture_json("benchmarks/export-repo-root-unsupported-scope.json")
+    );
+    assert!(json.get("benchmarks").is_none());
+    assert!(json.get("units").is_none());
+    assert!(json.get("passports").is_none());
+}
+
+#[test]
+fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let ecom_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-ECOM"]);
+    assert_output_success("BENCH-ECOM snapshot should succeed", &ecom_output);
+    let crosslib_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-CROSSLIB"]);
+    assert_output_success("BENCH-CROSSLIB snapshot should succeed", &crosslib_output);
+    let service_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-SERVICE"]);
+    assert_output_success("BENCH-SERVICE snapshot should succeed", &service_output);
+
+    let ecom_snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-ECOM.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(ecom_snapshot["projection"]["benchmark_status"], "passing");
+    assert_eq!(
+        ecom_snapshot["projection"]["readability_review_status"],
+        "current"
+    );
+
+    let crosslib_snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        crosslib_snapshot["projection"]["kind"],
+        "companion_negative_proof"
+    );
+    assert!(
+        crosslib_snapshot["projection"]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(false))
+    );
+
+    let service_snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-SERVICE.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        service_snapshot["projection"]["benchmark_status"],
+        "reserved"
+    );
+    assert_eq!(service_snapshot["projection"]["gate_status"], "reserved");
+}
+
+#[test]
+fn status_json_surfaces_invalid_benchmark_registry_root_machine_readably() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+    replace_in_file(
+        &repo_dir.join("benchmarks/labels.json"),
+        "\"root\": \"examples/ecommerce/units\"",
+        "\"root\": \"../outside\"",
+    );
+
+    let output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce", "--format", "json"],
+    );
+    assert!(
+        !output.status.success(),
+        "invalid benchmark registry should make status non-green"
+    );
+    let json = parse_stdout_json(&output);
+    let loader_errors = json["loader_errors"].as_array().unwrap();
+    let mut normalized_loader_errors = json["loader_errors"].clone();
+    normalized_loader_errors[0]["path"] =
+        Value::String("/tmp/benchmark-fixture/benchmarks/labels.json".to_string());
+
+    assert_eq!(json["schema_version"], 4);
+    assert_eq!(loader_errors.len(), 1);
+    assert_eq!(
+        normalized_loader_errors,
+        fixture_json("benchmarks/status-invalid-benchmark-registry-loader-errors.json")
+    );
 }
 
 #[test]

@@ -1,0 +1,9 @@
+[
+  {
+    "code": "SPEC_BENCHMARK_ROOT_INVALID",
+    "path": "/tmp/benchmark-fixture/benchmarks/labels.json",
+    "value": "../outside",
+    "message": "benchmark paths must not escape the repo root",
+    "id": "BENCH-ECOM"
+  }
+]

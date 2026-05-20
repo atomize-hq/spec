@@ -1,0 +1,90 @@
+{
+  "generated_at": "2026-05-19T01:21:48Z",
+  "projection": {
+    "benchmark_id": "BENCH-CROSSLIB",
+    "kind": "companion_negative_proof",
+    "lifecycle": "active",
+    "required_for_v1": false,
+    "path_scope": "full",
+    "accounting_status": "valid",
+    "benchmark_status": "incomplete",
+    "gate_status": "not_applicable",
+    "readability_review_status": "not_applicable",
+    "label_digest": "sha256:727e4ac50a7dce6246e92e6f1d39c51d881aae0a3c9af0fadeea3db175b54f33",
+    "projection_digest": "sha256:7bc86cd3d5e735010d380fa176421dc472bc9c178e01398b7f516fa5cd629983",
+    "summary": {
+      "total_cases": 4,
+      "supported_cases": 0,
+      "supported_valid_cases": 0,
+      "positive_credit_cases": 0,
+      "case_status_counts": {
+        "invalid": 0,
+        "failing": 0,
+        "stale": 0,
+        "incomplete": 0,
+        "untested": 2,
+        "valid": 2
+      },
+      "required_molecule_total": 0,
+      "required_molecule_status_counts": {
+        "invalid": 0,
+        "failing": 0,
+        "stale": 0,
+        "incomplete": 0,
+        "untested": 0,
+        "valid": 0
+      }
+    },
+    "cases": [
+      {
+        "case_id": "pricing/apply_discount",
+        "carrier_kind": "unit",
+        "carrier_id": "pricing/apply_discount",
+        "classification": "companion_negative_proof",
+        "status": "valid",
+        "semantic_support_status": "supported",
+        "proof_refs": {
+          "passport": "examples/crosslib-app/units/pricing/apply_discount.spec.passport.json"
+        },
+        "counts_as_supported_positive": false
+      },
+      {
+        "case_id": "pricing/apply_tax",
+        "carrier_kind": "unit",
+        "carrier_id": "pricing/apply_tax",
+        "classification": "companion_negative_proof",
+        "status": "valid",
+        "semantic_support_status": "supported",
+        "proof_refs": {
+          "passport": "examples/crosslib-app/units/pricing/apply_tax.spec.passport.json"
+        },
+        "counts_as_supported_positive": false
+      },
+      {
+        "case_id": "pricing/calculate_total",
+        "carrier_kind": "unit",
+        "carrier_id": "pricing/calculate_total",
+        "classification": "companion_negative_proof",
+        "status": "untested",
+        "reason": "no evidence",
+        "proof_refs": {
+          "passport": "examples/crosslib-app/units/pricing/calculate_total.spec.passport.json"
+        },
+        "counts_as_supported_positive": false
+      },
+      {
+        "case_id": "pricing/checkout_nested_chain3",
+        "carrier_kind": "unit",
+        "carrier_id": "pricing/checkout_nested_chain3",
+        "classification": "companion_negative_proof",
+        "status": "untested",
+        "reason": "no evidence",
+        "proof_refs": {
+          "passport": "examples/crosslib-app/units/pricing/checkout_nested_chain3.spec.passport.json"
+        },
+        "counts_as_supported_positive": false
+      }
+    ],
+    "readability_generated_files": []
+  }
+}
