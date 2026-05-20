@@ -159,7 +159,8 @@ fn required_molecule_proof<'a>(benchmark_json: &'a Value, molecule_id: &str) -> 
 }
 
 #[test]
-fn bench_ecom_passes_when_discount_strategy_checkout_flow_is_required_and_fresh() {
+fn rust_v1_closure_lane_a_bench_ecom_passes_when_discount_strategy_checkout_flow_is_required_and_fresh(
+) {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
 
@@ -188,7 +189,8 @@ fn bench_ecom_passes_when_discount_strategy_checkout_flow_is_required_and_fresh(
 }
 
 #[test]
-fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_missing() {
+fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_missing(
+) {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
     fs::remove_file(
@@ -228,7 +230,8 @@ fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof
 }
 
 #[test]
-fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_stale() {
+fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_stale(
+) {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
 
@@ -274,7 +277,8 @@ fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof
 }
 
 #[test]
-fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_failing() {
+fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_failing(
+) {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
 
