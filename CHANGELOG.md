@@ -1,20 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.15.1 - 2026-05-20
 
 ### Added
 
-- **Rust V1 benchmark mechanics now ship as a real repo-root contract surface** — the repo now includes a seeded `benchmarks/labels.json` roster, anchored readability review input for `BENCH-ECOM`, committed benchmark snapshots for `BENCH-ECOM`, `BENCH-CROSSLIB`, and reserved `BENCH-SERVICE`, plus CLI fixtures that lock the shipped benchmark truth.
+- **The I4 command wall now ships as frozen full-output fixtures** — the repo now carries the benchmark-root, namespace, single-file, repo-root, and unsupported-export JSON contracts as maintained benchmark fixtures instead of relying on fragment-only assertions.
 
 ### Changed
 
-- **`spec status` and `spec export` now emit `schema_version: 4` when projecting benchmark-aware read surfaces** — both commands additively expose top-level `benchmarks[]`, share one projection core, distinguish full versus partial scope, keep companion-negative cases visible without positive credit, and preserve reserved `BENCH-SERVICE` visibility without inventing a workload tree.
-- **Benchmark writes are now explicitly separated from proof truth** — benchmark projection stays read-only over passports and molecule evidence, while `spec benchmark snapshot <id>` writes only under `benchmarks/snapshots/` and readability review anchoring remains a repo-root artifact instead of authored spec truth.
-- **The public command wall is now frozen around benchmark-root authority** — fresh-clone docs and runbooks now point at `cargo run -p spec-cli -- status examples/ecommerce/units --format json` and `cargo run -p spec-cli -- export examples/ecommerce/units`, describe repo-root `status . --format json` as `inventory_only`, and treat repo-root `export .` as unsupported with `SPEC_UNSUPPORTED_SCOPE`.
+- **CLI regression coverage is now centered on exact full-command contracts** — `spec-cli/tests/cli.rs` adds narrow status/export normalization helpers, one dedicated regression per frozen surface, and explicit invariants for `inventory_only`, `SPEC_UNSUPPORTED_SCOPE`, and non-crediting partial scopes.
+- **The I4 planning and orchestration docs now reflect the final bounded write set** — `PLAN.md` and `ORCH_PLAN.md` both freeze the six-command roster, the allowed normalization fields, and the lane split between fixture promotion and contract-test hardening.
 
 ### Fixed
 
-- **Repo-facing benchmark regression coverage now matches the landed mechanics contract** — CLI tests and docs now lock the full, partial, reserved, companion-negative, and invalid-registry benchmark surfaces against the current branch behavior instead of the older pre-benchmark schema.
+- **Fixture-backed benchmark contract checks now agree with live CLI output** — the refreshed JSON fixtures match the current benchmark-aware `status` and `export` surfaces after normalizing only unstable fields such as timestamps, absolute paths, digests, and Git provenance.
 
 ## 0.15.0 - 2026-05-15
 
