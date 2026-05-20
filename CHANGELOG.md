@@ -10,6 +10,7 @@
 
 - **`spec status` and `spec export` now emit `schema_version: 4` when projecting benchmark-aware read surfaces** — both commands additively expose top-level `benchmarks[]`, share one projection core, distinguish full versus partial scope, keep companion-negative cases visible without positive credit, and preserve reserved `BENCH-SERVICE` visibility without inventing a workload tree.
 - **Benchmark writes are now explicitly separated from proof truth** — benchmark projection stays read-only over passports and molecule evidence, while `spec benchmark snapshot <id>` writes only under `benchmarks/snapshots/` and readability review anchoring remains a repo-root artifact instead of authored spec truth.
+- **The public command wall is now frozen around benchmark-root authority** — fresh-clone docs and runbooks now point at `cargo run -p spec-cli -- status examples/ecommerce/units --format json` and `cargo run -p spec-cli -- export examples/ecommerce/units`, describe repo-root `status . --format json` as `inventory_only`, and treat repo-root `export .` as unsupported with `SPEC_UNSUPPORTED_SCOPE`.
 
 ### Fixed
 
@@ -171,7 +172,7 @@
 
 - **Repo-root status discovery now stays library-bounded** — `spec status` can discover multiple library roots under a parent/repo path without collapsing duplicate local ids across roots.
 - **Molecule status no longer contaminates unit health** — failing, stale, or missing molecule evidence affects only the molecule-test plane, not the covered units' passport status.
-- **Canonical ecommerce example now ships molecule evidence** — the checked-in `pricing/*.test.evidence.json` artifacts keep `spec status .` truthful on a fresh clone instead of leaving the shipped M11 example non-green by default.
+- **Canonical ecommerce example now ships molecule evidence** — the checked-in `pricing/*.test.evidence.json` artifacts keep the benchmark-root ecommerce status surface truthful on a fresh clone instead of leaving the shipped M11 example non-green by default.
 
 ## 0.8.0 - 2026-04-17
 
