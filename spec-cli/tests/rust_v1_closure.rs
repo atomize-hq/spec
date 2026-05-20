@@ -96,4 +96,284 @@ fn copied_closure_fixture(lane: &str, fixture: &str) -> (TempDir, PathBuf) {
 
 // --- LANE C SECTION START ---
 // Lane C owns only this section.
+fn lane_c_copy_fixture_file(fixture_root: &Path, src_relative: &str, dst_relative: &str) {
+    let src = repo_root().join(src_relative);
+    let dst = fixture_root.join(dst_relative);
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::copy(src, dst).unwrap();
+}
+
+fn lane_c_write_benchmark_labels(
+    fixture_root: &Path,
+    benchmark_id: &str,
+    cases: Vec<serde_json::Value>,
+) {
+    let benchmarks_dir = fixture_root.join("benchmarks");
+    fs::create_dir_all(&benchmarks_dir).unwrap();
+    fs::write(
+        benchmarks_dir.join("labels.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema_version": 1,
+            "benchmarks": [
+                {
+                    "id": benchmark_id,
+                    "kind": "positive",
+                    "lifecycle": "active",
+                    "required_for_v1": true,
+                    "root": "units",
+                    "generated_root": "src/generated",
+                    "readability_scope": "supported_closure",
+                    "required_molecule_ids": [],
+                    "cases": cases
+                }
+            ]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+fn lane_c_case_label(carrier_id: &str, classification: &str) -> serde_json::Value {
+    serde_json::json!({
+        "case_id": carrier_id,
+        "carrier_kind": "unit",
+        "carrier_id": carrier_id,
+        "classification": classification
+    })
+}
+
+fn lane_c_monotone_down_boundary_fixture() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_root = temp_dir.path().join("lane_c_monotone_down_boundary");
+    fs::create_dir_all(&fixture_root).unwrap();
+
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/unsupported_near_miss/Cargo.toml",
+        "Cargo.toml",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/unsupported_near_miss/src/main.rs",
+        "src/main.rs",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/unsupported_near_miss/units/money/round_unsupported_near_miss.unit.spec",
+        "units/money/round_unsupported_near_miss.unit.spec",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/unsupported_near_miss/units/pricing/apply_discount_control_flow_unsupported_near_miss.unit.spec",
+        "units/pricing/apply_discount_control_flow_unsupported_near_miss.unit.spec",
+    );
+    lane_c_write_benchmark_labels(
+        &fixture_root,
+        "BENCH-LANE-C-MONOTONE-DOWN",
+        vec![
+            lane_c_case_label(
+                "pricing/apply_discount_control_flow_unsupported_near_miss",
+                "supported",
+            ),
+            lane_c_case_label("money/round", "deferred"),
+        ],
+    );
+
+    (temp_dir, fixture_root)
+}
+
+fn lane_c_monotone_up_boundary_fixture() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_root = temp_dir.path().join("lane_c_monotone_up_boundary");
+    fs::create_dir_all(&fixture_root).unwrap();
+
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/Cargo.toml",
+        "Cargo.toml",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/src/main.rs",
+        "src/main.rs",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss/units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec",
+        "units/pricing/apply_tax_control_flow_unsupported_near_miss.unit.spec",
+    );
+    lane_c_write_benchmark_labels(
+        &fixture_root,
+        "BENCH-LANE-C-MONOTONE-UP",
+        vec![lane_c_case_label(
+            "pricing/apply_tax_control_flow_unsupported_near_miss",
+            "supported",
+        )],
+    );
+
+    (temp_dir, fixture_root)
+}
+
+fn lane_c_wrapper_pipeline_boundary_fixture() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_root = temp_dir.path().join("lane_c_wrapper_pipeline_boundary");
+    fs::create_dir_all(&fixture_root).unwrap();
+
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.wrapper.pipeline.v1/fixtures/unsupported_near_miss/Cargo.toml",
+        "Cargo.toml",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.wrapper.pipeline.v1/fixtures/unsupported_near_miss/src/main.rs",
+        "src/main.rs",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.wrapper.pipeline.v1/fixtures/unsupported_near_miss/units/pricing/pricing_discount_leaf_unsupported_near_miss.unit.spec",
+        "units/pricing/pricing_discount_leaf_unsupported_near_miss.unit.spec",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.wrapper.pipeline.v1/fixtures/unsupported_near_miss/units/pricing/pricing_tax_leaf_unsupported_near_miss.unit.spec",
+        "units/pricing/pricing_tax_leaf_unsupported_near_miss.unit.spec",
+    );
+    lane_c_copy_fixture_file(
+        &fixture_root,
+        "semantic-families/function.wrapper.pipeline.v1/fixtures/unsupported_near_miss/units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
+        "units/pricing/pricing_total_wrapper_unsupported_near_miss.unit.spec",
+    );
+    lane_c_write_benchmark_labels(
+        &fixture_root,
+        "BENCH-LANE-C-WRAPPER",
+        vec![
+            lane_c_case_label("pricing/pricing_discount_leaf_unsupported_near_miss", "deferred"),
+            lane_c_case_label("pricing/pricing_tax_leaf_unsupported_near_miss", "deferred"),
+            lane_c_case_label("pricing/pricing_total_wrapper_unsupported_near_miss", "supported"),
+        ],
+    );
+
+    (temp_dir, fixture_root)
+}
+
+fn lane_c_assert_supported_boundary_rejection(
+    status_json: &Value,
+    benchmark_id: &str,
+    supported_case_id: &str,
+) {
+    let benchmark = status_json["benchmarks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|benchmark| benchmark["benchmark_id"] == benchmark_id)
+        .unwrap();
+    let cases = benchmark["cases"].as_array().unwrap();
+    let case = cases
+        .iter()
+        .find(|case| case["carrier_id"] == supported_case_id)
+        .unwrap();
+
+    assert_eq!(benchmark["path_scope"], "full");
+    assert_eq!(benchmark["accounting_status"], "valid");
+    assert_eq!(benchmark["benchmark_status"], "passing");
+    assert_eq!(benchmark["gate_status"], "open");
+    assert_eq!(benchmark["summary"]["supported_cases"], 1);
+    assert_eq!(benchmark["summary"]["supported_valid_cases"], 1);
+    assert_eq!(benchmark["summary"]["positive_credit_cases"], 0);
+    assert!(
+        benchmark["summary"]["unlabeled_loaded_carrier_ids"].is_null()
+            || benchmark["summary"]["unlabeled_loaded_carrier_ids"]
+                .as_array()
+                .is_some_and(|values| values.is_empty())
+    );
+
+    assert_eq!(case["classification"], "supported");
+    assert_eq!(case["status"], "valid");
+    assert_eq!(case["semantic_support_status"], "unsupported");
+    assert_eq!(case["counts_as_supported_positive"], Value::Bool(false));
+}
+
+#[test]
+fn rust_v1_closure_lane_c_monotone_down_supported_boundary_is_rejected_from_positive_credit() {
+    let (_temp_dir, fixture_root) = lane_c_monotone_down_boundary_fixture();
+
+    let test_output = run_spec(
+        &fixture_root,
+        &["test", "units", "--output", "src/generated", "--crate-root", "."],
+    );
+    assert_success(
+        &test_output,
+        "Lane C monotone-down unsupported near-miss fixture test",
+    );
+
+    let status_output = run_spec(&fixture_root, &["status", ".", "--format", "json"]);
+    assert_success(
+        &status_output,
+        "Lane C monotone-down unsupported near-miss fixture status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+
+    lane_c_assert_supported_boundary_rejection(
+        &status_json,
+        "BENCH-LANE-C-MONOTONE-DOWN",
+        "pricing/apply_discount_control_flow_unsupported_near_miss",
+    );
+}
+
+#[test]
+fn rust_v1_closure_lane_c_monotone_up_supported_boundary_is_rejected_from_positive_credit() {
+    let (_temp_dir, fixture_root) = lane_c_monotone_up_boundary_fixture();
+
+    let test_output = run_spec(
+        &fixture_root,
+        &["test", "units", "--output", "src/generated", "--crate-root", "."],
+    );
+    assert_success(
+        &test_output,
+        "Lane C monotone-up unsupported near-miss fixture test",
+    );
+
+    let status_output = run_spec(&fixture_root, &["status", ".", "--format", "json"]);
+    assert_success(
+        &status_output,
+        "Lane C monotone-up unsupported near-miss fixture status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+
+    lane_c_assert_supported_boundary_rejection(
+        &status_json,
+        "BENCH-LANE-C-MONOTONE-UP",
+        "pricing/apply_tax_control_flow_unsupported_near_miss",
+    );
+}
+
+#[test]
+fn rust_v1_closure_lane_c_wrapper_pipeline_supported_boundary_is_rejected_from_positive_credit() {
+    let (_temp_dir, fixture_root) = lane_c_wrapper_pipeline_boundary_fixture();
+
+    let test_output = run_spec(
+        &fixture_root,
+        &["test", "units", "--output", "src/generated", "--crate-root", "."],
+    );
+    assert_success(
+        &test_output,
+        "Lane C wrapper-pipeline unsupported near-miss fixture test",
+    );
+
+    let status_output = run_spec(&fixture_root, &["status", ".", "--format", "json"]);
+    assert_success(
+        &status_output,
+        "Lane C wrapper-pipeline unsupported near-miss fixture status",
+    );
+    let status_json: Value = serde_json::from_slice(&status_output.stdout).unwrap();
+
+    lane_c_assert_supported_boundary_rejection(
+        &status_json,
+        "BENCH-LANE-C-WRAPPER",
+        "pricing/pricing_total_wrapper_unsupported_near_miss",
+    );
+}
 // --- LANE C SECTION END ---
