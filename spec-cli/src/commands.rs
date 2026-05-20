@@ -133,6 +133,7 @@ impl ValidationSpecCollection {
 
 const VALIDATE_JSON_SCHEMA_VERSION: u8 = 3;
 const STATUS_JSON_SCHEMA_VERSION: u8 = 4;
+const EXPORT_ERROR_JSON_SCHEMA_VERSION: u8 = 4;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,11 +163,20 @@ struct JsonValidateResponse {
 #[derive(Serialize)]
 struct JsonStatusResponse {
     schema_version: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope_authority: Option<String>,
     roots: Vec<JsonStatusRoot>,
     units: Vec<JsonStatusUnit>,
     benchmarks: Vec<BenchmarkProjection>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     loader_errors: Vec<JsonErrorEntry>,
+}
+
+#[derive(Serialize)]
+struct JsonExportErrorResponse {
+    schema_version: u8,
+    status: &'static str,
+    errors: Vec<JsonErrorEntry>,
 }
 
 #[derive(Serialize)]
@@ -262,6 +272,13 @@ fn emit_json_status_response(response: &JsonStatusResponse) -> Result<()> {
     Ok(())
 }
 
+fn emit_json_export_error_response(response: &JsonExportErrorResponse) -> Result<()> {
+    let json = serde_json::to_string_pretty(response)?;
+    print!("{json}");
+    std::io::stdout().flush()?;
+    Ok(())
+}
+
 fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Result<()> {
     emit_json_validate_response(&JsonValidateResponse {
         schema_version: VALIDATE_JSON_SCHEMA_VERSION,
@@ -278,6 +295,7 @@ fn emit_json_validate_workspace_config_failure(err: &WorkspaceConfigError) -> Re
 fn emit_json_status_workspace_config_failure(err: &WorkspaceConfigError) -> Result<()> {
     emit_json_status_response(&JsonStatusResponse {
         schema_version: STATUS_JSON_SCHEMA_VERSION,
+        scope_authority: None,
         roots: vec![],
         units: vec![],
         benchmarks: vec![],
@@ -1145,6 +1163,44 @@ fn resolve_status_roots(path: &Path, context: &WorkspaceContext) -> Result<Resol
     })
 }
 
+fn resolved_repo_root(context: &WorkspaceContext, path: &Path) -> Option<PathBuf> {
+    context.repo_root.clone().or_else(|| repo_root_for(path))
+}
+
+fn path_is_repo_root_scope(path: &Path, context: &WorkspaceContext) -> Result<bool> {
+    if path.is_file() {
+        return Ok(false);
+    }
+
+    let Some(repo_root) = resolved_repo_root(context, path) else {
+        return Ok(false);
+    };
+    let command_root = canonicalize_existing_dir(&absolutize_from_current_dir(path)?)?;
+    let repo_root = canonicalize_existing_dir(&repo_root)?;
+    Ok(command_root == repo_root)
+}
+
+fn json_export_unsupported_scope_entry(path: &Path, context: &WorkspaceContext) -> JsonErrorEntry {
+    let repo_root = resolved_repo_root(context, path)
+        .unwrap_or_else(|| path.to_path_buf())
+        .display()
+        .to_string();
+    JsonErrorEntry {
+        unit: None,
+        code: "SPEC_UNSUPPORTED_SCOPE".to_string(),
+        path: Some(repo_root),
+        dep: None,
+        field: None,
+        value: None,
+        message: Some(
+            "repo-root export is unsupported for this workspace shape; export a single library root such as examples/ecommerce/units".to_string(),
+        ),
+        id: None,
+        path2: None,
+        cycle: None,
+    }
+}
+
 fn zero_roots_status_entry(path: &Path) -> JsonErrorEntry {
     JsonErrorEntry {
         unit: None,
@@ -1485,6 +1541,13 @@ fn status_command_for_target(
         }
         Err(err) => return Err(err),
     };
+    let scope_authority = if matches!(format, OutputFormat::Json)
+        && path_is_repo_root_scope(path, &root_context)?
+    {
+        Some("inventory_only".to_string())
+    } else {
+        None
+    };
     let resolved_scopes = resolve_status_roots(path, &root_context)?;
     let scopes = resolved_scopes.scopes;
 
@@ -1819,6 +1882,7 @@ fn status_command_for_target(
                 .collect();
             emit_json_status_response(&JsonStatusResponse {
                 schema_version: STATUS_JSON_SCHEMA_VERSION,
+                scope_authority,
                 roots,
                 units: flat_units,
                 benchmarks,
@@ -2268,6 +2332,14 @@ fn export_command(path: &Path, output: Option<&Path>, format: OutputFormat) -> R
     }
 
     let context = load_workspace_context(path)?;
+    if path_is_repo_root_scope(path, &context)? {
+        emit_json_export_error_response(&JsonExportErrorResponse {
+            schema_version: EXPORT_ERROR_JSON_SCHEMA_VERSION,
+            status: "unsupported_scope",
+            errors: vec![json_export_unsupported_scope_entry(path, &context)],
+        })?;
+        std::process::exit(1);
+    }
     let mut validation_specs = collect_validation_specs(path, &context)?;
     let loader_errors = std::mem::take(&mut validation_specs.loader_errors);
     let loader_warnings = std::mem::take(&mut validation_specs.loader_warnings);
