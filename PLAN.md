@@ -1,32 +1,31 @@
-<!-- /autoplan restore point: /home/azureuser/.gstack/projects/atomize-hq-spec/codex-i4-prep-autoplan-restore-20260520-014047.md -->
-# I4: Rust V1 Command-Wall Fixture and Contract-Test Hardening Plan
+<!-- /autoplan restore point: /home/azureuser/.gstack/projects/atomize-hq-spec/codex-i5-support-core-autoplan-restore-20260520-000000.md -->
+# I5: Rust V1 Supported-Core Closure Plan
 
-Status: **authoritative implementation plan**
-Iteration: **I4**
-Milestone family: **Rust V1 contract-wall regression hardening**
-Implementation readiness: **ready for implementation**
-Plan scope: **freeze the shipped I3.5 machine contract behind deliberate golden fixtures and regression tests, without reopening benchmark mechanics, repo-root semantics, or Rust V1 support scope**
-Base branch: **main**
-Working branch: **codex/i4-prep**
-Validated at commit: **`ede7fa7`**
+Status: **authoritative implementation plan**  
+Iteration: **I5**  
+Milestone family: **Rust V1 supported-core closure**  
+Implementation readiness: **ready for implementation**  
+Plan scope: **close the currently shipped M66 Rust V1 supported core against the frozen M67/M68 benchmark wall, without implementing `BENCH-SERVICE`, widening support rows, or reopening the I3.5/I4 command-scope contract**  
+Base branch: **main**  
+Working branch: **main**  
+Validated at commit: **`1dbff70`**  
 Last rewritten: **2026-05-20**
 
 Supersedes:
 
-- the prior `I3: Rust V1 Contract Stack Mechanics Landing Plan` previously maintained at this path
-- the prior `I3.5: Post-I3 Authority Alignment and Repo-Root Contract Freeze Plan` snapshot as the active work plan
+- the prior `I4: Rust V1 Command-Wall Fixture and Contract-Test Hardening Plan`
 
 Locked authority inputs:
 
 - contract-stack index: `docs/rust_v1_contract_stack.md`
-- I3.5 authority snapshot: `.runs/i3_5_authority_alignment/authority-plan.snapshot.md`
-- I3.5 freeze record: `.runs/i3_5_authority_alignment/phase2-freeze.json`
-- I3.5 final merged proof wall: `.runs/i3_5_authority_alignment/validation/final-main/**`
-- alignment design: `/home/azureuser/.gstack/projects/atomize-hq-spec/azureuser-main-design-20260519-145148.md`
 - `M65`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-200036.md`
 - `M66`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-213928.md`
 - `M67`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-220646.md`
 - `M68`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-225503.md`
+- live repo truth run on `main` at `1dbff70`:
+  - `cargo run -p spec-cli -- status . --format json`
+  - `git branch --show-current`
+  - `git rev-parse --short HEAD`
 
 Historical context, not authority:
 
@@ -34,726 +33,706 @@ Historical context, not authority:
 - `CHANGELOG.md`
 - `TODOS.md`
 - `ORCH_PLAN.md`
-- `.runs/i3_rust_v1_contract_stack_mechanics/**`
+- `benchmarks/snapshots/*.snapshot.json`
+- `benchmarks/reviews/*.readability.review.json`
 
 Primary repo surfaces:
 
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/fixtures/benchmarks/*.json`
+- `benchmarks/labels.json`
+- `benchmarks/reviews/BENCH-ECOM.readability.review.json`
+- `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
+- `benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json`
+- `examples/ecommerce/units/pricing/pricing_quote.unit.spec`
+- `examples/ecommerce/units/pricing/discount_strategy.unit.spec`
+- `examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec`
+- `examples/crosslib-app/units/**`
+- `spec-core/src/benchmark.rs`
+- `spec-core/src/validator.rs`
 - `spec-cli/src/commands.rs`
-- `spec-core/src/export.rs`
-- `docs/rust_v1_contract_stack.md`
-- `.runs/i3_5_authority_alignment/validation/final-main/*.stdout`
+- `spec-cli/tests/cli.rs`
 
 ## Executive Summary
 
 I3 landed benchmark mechanics.
 
-I3.5 froze what the public command wall means:
+I3.5 froze which command surfaces are authoritative.
 
-- benchmark-root `status` is the proof wall
-- benchmark-root `export` is the export wall
-- namespace and single-file `status` are partial diagnostic surfaces
-- repo-root `status . --format json` is supported, but only as `inventory_only`
-- repo-root `export .` is unsupported and must fail with `SPEC_UNSUPPORTED_SCOPE`
+I4 locked that command wall behind fixtures.
 
-I4 does not add a new behavior surface.
+I5 is the next step: convert the already shipped Rust V1 supported-core claim
+from an implied story into one explicit closure contract that a maintainer can
+run, inspect, and trust.
 
-I4 turns that frozen wall into a deliberate regression boundary. Today the repo
-already has meaningful CLI coverage, but it still locks too much by fragments
-and implication:
+The live repo already proves most of the story. The problem is that the proof is
+still split across separate surfaces:
 
-1. selected JSON fragments are locked, but the full command outputs are not
-2. the final I3.5 proof wall is archived under `.runs/`, not promoted into one
-   maintained in-repo contract suite
-3. single-file `status` is part of the frozen wall, but not yet represented as
-   a first-class checked-in fixture
+- `BENCH-ECOM` passes, but its required molecule gate still omits the seam
+  business flow that already has evidence
+- `BENCH-CROSSLIB` is visible, but two active companion-negative cases are still
+  untested
+- `BENCH-ECOM` readability review exists on disk, but it is no longer current
+  against the live projection digest
+- explicit supported-boundary rejections exist in pieces, but I5 has not yet
+  frozen one deliberate regression wall for them
 
-That is the whole I4 problem. If implementation grows beyond that, it is scope
-creep.
+I5 closes exactly those gaps and nothing broader.
 
-## Frozen Decisions
+## Current Validated Truth
 
-These decisions are inherited from `M65` through `M68`, the I3 landing, and the
-I3.5 freeze. I4 implements them. It does not reopen them.
+Observed on `main` at `1dbff70`:
 
-1. **I4 does not widen Rust V1 support.**
-   - `M66` still owns support rows and interactions.
-   - `BENCH-SERVICE` stays reserved and unimplemented.
+- `cargo run -p spec-cli -- status . --format json` reports
+  `schema_version: 4` and `scope_authority: "inventory_only"`
+- `BENCH-ECOM` currently reports:
+  - `benchmark_status: "passing"`
+  - `gate_status: "satisfied"`
+  - `required_for_v1: true`
+  - `supported_cases: 7`
+  - `supported_valid_cases: 7`
+  - `positive_credit_cases: 7`
+  - `readability_review_status: "missing"`
+- `BENCH-ECOM.required_molecule_ids` currently includes only:
+  - `pricing/checkout_flow`
+  - `pricing/discount_plus_tax`
+- `examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec`
+  already exists, and the resulting evidence is already referenced by supported
+  case proof refs, but it is not yet part of the required benchmark gate
+- `BENCH-CROSSLIB` currently reports:
+  - `kind: "companion_negative_proof"`
+  - `benchmark_status: "incomplete"`
+  - `case_status_counts.untested: 2`
+  - the untested active cases are:
+    - `pricing/calculate_total`
+    - `pricing/checkout_nested_chain3`
+- `BENCH-SERVICE` currently reports:
+  - `lifecycle: "reserved"`
+  - `benchmark_status: "reserved"`
+  - `gate_status: "reserved"`
+- `benchmarks/reviews/BENCH-ECOM.readability.review.json` exists, but its
+  stored projection digest no longer matches the live benchmark projection, so
+  the read-side surface truthfully treats the review as missing/currently
+  unusable
 
-2. **I4 does not redesign benchmark mechanics.**
-   - `M67` still owns benchmark roles.
-   - `M68` still owns benchmark artifact shapes, path-scope rules, and
-     anti-laundering behavior.
-
-3. **The frozen I3.5 command wall is the only contract I4 hardens.**
-   - `cargo run -p spec-cli -- status examples/ecommerce/units --format json`
-   - `cargo run -p spec-cli -- export examples/ecommerce/units`
-   - `cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json`
-   - `cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json`
-   - `cargo run -p spec-cli -- status . --format json`
-   - `cargo run -p spec-cli -- export .`
-
-4. **I4 is a test-and-fixture milestone first.**
-   - Product-code edits are allowed only when needed to stabilize an already
-     frozen machine contract.
-   - New semantics are out of scope.
-
-5. **Golden fixtures must encode command truth, not incidental noise.**
-   - Absolute paths, wall-clock timestamps, and commit SHAs may be normalized.
-   - Contract fields, enum values, scope-authority signals, benchmark
-     classifications, and error codes may not be normalized away.
-
-6. **The authoritative source for full-command baselines is the I3.5 final-main proof wall.**
-   - `.runs/i3_5_authority_alignment/validation/final-main/*.stdout` is the
-     seed truth for I4 fixture authoring.
-   - I4 promotes that truth into maintained checked-in fixtures.
-
-7. **Repo-root export stays unsupported.**
-   - I4 does not add aggregate export behavior.
-   - I4 only locks the existing unsupported-scope response harder.
-
-8. **Namespace and single-file status stay partial.**
-   - I4 must prove they never mint whole-benchmark positive credit.
-   - I4 must prove they omit full-scope-only surfaces like projection digests
-     and readability verdicts.
-
-9. **This is a CLI contract hardening milestone, not a docs milestone.**
-   - Docs already teach the frozen wall after I3.5.
-   - I4 touches docs only if a test-driven ambiguity proves the shipped wording
-     incomplete.
-
-10. **Minimal diff wins.**
-    - Prefer a tighter fixture harness over new abstractions.
-    - Prefer test-local helpers over product refactors.
-
-## Current Validated Basis
-
-Observed repo truth on `main` at `ede7fa7`:
-
-- I3 benchmark mechanics are merged
-- I3.5 repo-root contract freeze is merged
-- `spec-cli/src/commands.rs` emits `scope_authority: "inventory_only"` at repo
-  root status scope
-- `spec-cli/src/commands.rs` emits `status: "unsupported_scope"` and
-  `errors[0].code == "SPEC_UNSUPPORTED_SCOPE"` for repo-root export
-- `spec-cli/tests/cli.rs` already has benchmark-contract tests for:
-  - repo-root `status`
-  - benchmark-root `status`
-  - namespace partial `status`
-  - benchmark-root `export`
-  - single-file partial `export`
-  - repo-root unsupported `export`
-  - benchmark snapshot behavior
-- `.runs/i3_5_authority_alignment/validation/final-main/` already contains the
-  exact merged proof outputs for:
-  - benchmark-root `status`
-  - namespace `status`
-  - single-file `status`
-  - repo-root `status`
-  - benchmark-root `export`
-  - repo-root `export`
-
-The gap is not "we have no tests."
-
-The gap is "the frozen command wall is not yet promoted into one exact,
-maintained golden contract suite."
+That means the supported core is not missing. It is partially closed and not yet
+locked as one deliberate, maintainable contract.
 
 ## Step 0: Scope Challenge
 
 ### Premise correction
 
-The problem is not "do more Rust V1 work."
+The problem is not "add more Rust V1 support."
 
-The problem is narrower:
+The problem is:
 
 ```text
-the repo already ships the I3.5 command wall,
-but the regression suite still locks it by fragments and implication
-instead of by one deliberate golden contract boundary
+turn the already shipped Rust V1 supported core into one explicit
+benchmark + molecule + readability + rejection closure wall
 ```
 
-If I4 expands beyond that sentence, it is overbuilt.
+If implementation expands beyond that sentence, it has escaped the milestone.
 
-### What already exists
+### Scope verdict
 
-| Sub-problem | Existing owner | I4 action |
-| --- | --- | --- |
-| benchmark mechanics and path-scope semantics | `spec-cli/src/commands.rs`, `spec-core/src/export.rs`, `spec-core/src/benchmark.rs` | reuse; do not redesign |
-| authoritative final command outputs | `.runs/i3_5_authority_alignment/validation/final-main/*.stdout` | reuse as fixture seed truth |
-| benchmark fixture corpus | `spec-cli/tests/fixtures/benchmarks/*.json` | extend in place; do not replace with a second fixture system |
-| integration test harness | `spec-cli/tests/cli.rs` | tighten and isolate contract-wall assertions |
-| repo-root unsupported export contract | `spec-cli/src/commands.rs` | preserve; add stronger golden coverage |
-| repo-root `inventory_only` status signal | `spec-cli/src/commands.rs` | preserve; add stronger golden coverage |
-| snapshot coverage | `spec-cli/tests/cli.rs` | leave intact; not part of the new I4 acceptance wall |
+The complete version is still cheap here.
 
-### Minimum complete slice
+I5 does not require a new subsystem, new artifact family, new benchmark roster,
+or service workload authoring. It requires tightening the existing benchmark
+registry, proof artifacts, regression fixtures, and closeout docs until they
+tell one consistent story.
 
-The minimum honest I4 slice is:
-
-1. define the exact I4 command roster from the frozen I3.5 wall
-2. map each frozen command to one checked-in fixture and one named regression test
-3. add stable normalization helpers for nondeterministic fields
-4. compare normalized full command outputs, not just selected fragments
-5. explicitly add the missing single-file `status` golden wall
-6. preserve targeted invariant assertions where a full-file diff alone is too opaque
-7. document fixture authoring and regeneration so the next contributor can refresh
-   the suite without guessing
-
-Anything smaller is fake done.
-
-Examples:
-
-- adding a single-file status test without full-fixture promotion is fake done
-- comparing only `benchmarks[]` while leaving `roots[]`, `units[]`, and
-  loader-error surfaces free to drift is fake done
-- copying proof outputs into fixtures without normalization rules is fake done
-- adding new product semantics to make tests easier is fake done
+Scope is accepted as-is.
 
 ### Complexity check
 
-This milestone should stay below the "new subsystem" threshold.
-
 Expected write scope:
 
-- one integration test surface, `spec-cli/tests/cli.rs`
-- one fixture tree, `spec-cli/tests/fixtures/benchmarks/`
-- zero or one tiny product-code stabilization edit only if a nondeterministic
-  output detail blocks truthful fixture locking
-
-If implementation starts touching broad `spec-core` semantics, benchmark
-projection logic, or docs beyond a narrow clarification, the milestone has
-escaped its lane.
-
-### Search check
-
-Search unavailable for external advice, so this plan stays anchored in live repo
-truth and existing Rust CLI test architecture.
-
-In-repo first-principles conclusions:
-
-- **[Layer 1]** reuse the I3.5 final-main stdout artifacts as the starting
-  golden source
-- **[Layer 1]** reuse the existing CLI integration harness instead of creating a
-  new test binary or external snapshot framework
-- **[Layer 3]** normalize only unstable transport noise, not actual contract
-  fields
-- **[EUREKA]** the real risk is not missing assertions, it is asserting only the
-  easy fragments and leaving the true command wall implicit
-
-### TODOS cross-reference
-
-`TODOS.md` already carries `M69` and broader Rust follow-ons.
-
-I4 should not add new product TODOs unless implementation discovers one of
-these truths:
-
-- the fixture harness wants a reusable extraction that is too large for I4
-- the command wall still contains an ambiguity that cannot be frozen without a
-  follow-on product decision
-
-If neither happens, I4 should close without new TODO debt.
-
-### Completeness and distribution check
-
-This milestone introduces no new user-visible artifact type.
-
-Completeness here means:
-
-- every frozen I3.5 status/export command has a deliberate regression surface
-- the regression surface is maintained in-repo, not only archived in `.runs/`
-- the suite fails on contract drift, not just on obvious benchmark-array breaks
-
-That is the whole game.
-
-### Frozen command roster
-
-This is the authoritative I4 roster. Each row must end with one checked-in
-fixture and one dedicated assertion path.
-
-| Surface | Command | Contract role | Fixture path | Dedicated test obligation | Required explicit invariant |
-| --- | --- | --- | --- | --- | --- |
-| benchmark-root `status` | `cargo run -p spec-cli -- status examples/ecommerce/units --format json` | proof wall | `spec-cli/tests/fixtures/benchmarks/status-ecommerce-full.json` | compare full normalized JSON | benchmark-root remains full-scope positive surface |
-| benchmark-root `export` | `cargo run -p spec-cli -- export examples/ecommerce/units` | export wall | `spec-cli/tests/fixtures/benchmarks/export-ecommerce-full.json` | compare full normalized JSON | exported bundle shape remains benchmark-root scoped |
-| namespace `status` | `cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json` | partial diagnostic surface | `spec-cli/tests/fixtures/benchmarks/status-ecommerce-pricing-partial-full.json` | compare full normalized JSON | partial scope never counts as supported positive |
-| single-file `status` | `cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json` | partial diagnostic surface | `spec-cli/tests/fixtures/benchmarks/status-apply-discount-partial-full.json` | compare full normalized JSON | partial scope omits full-scope-only benchmark projection surfaces |
-| repo-root `status` | `cargo run -p spec-cli -- status . --format json` | inventory-only supported surface | `spec-cli/tests/fixtures/benchmarks/status-repo-root-full.json` | compare full normalized JSON | `scope_authority == "inventory_only"` |
-| repo-root `export` | `cargo run -p spec-cli -- export .` | unsupported surface | `spec-cli/tests/fixtures/benchmarks/export-repo-root-unsupported-scope.json` | compare full normalized JSON | `errors[0].code == "SPEC_UNSUPPORTED_SCOPE"` |
-
-## Architecture Review
-
-### System design
-
-I4 is a thin test-hardening layer on top of the shipped command wall.
-
-No new runtime architecture.
-No new benchmark subsystem.
-No second source of truth.
-
-The desired shape is:
-
-```text
-I3.5 final-main proof outputs
-        |
-        v
-fixture authoring pass
-        |
-        +--> normalization policy (documented once)
-        |
-        v
-checked-in golden JSON fixtures
-        |
-        v
-dedicated command-wall tests in spec-cli/tests/cli.rs
-        |
-        v
-cargo test -p spec-cli blocks accidental command drift
-```
-
-### Dependency graph
-
-```text
-spec-cli/src/commands.rs
-        |
-        +---- status JSON surface -------------------------------+
-        |                                                       |
-        +---- export JSON surface ---------------------------+   |
-                                                            |   |
-spec-cli/tests/cli.rs                                       |   |
-        |                                                   |   |
-        +---- normalize_status_contract_json() -------------+---+
-        +---- normalize_export_contract_json() -------------+---+
-        +---- assert_contract_matches_fixture() ------------+---+
-        |
-        +---- checked-in fixtures under spec-cli/tests/fixtures/benchmarks/
-        |
-        +---- seeded from .runs/i3_5_authority_alignment/validation/final-main/
-```
-
-### Architecture recommendation
-
-Keep helpers inside `spec-cli/tests/cli.rs` in one clearly labeled I4 contract
-section.
-
-That is the minimal-diff choice. Do not create a new test framework, a new
-integration binary, or a general-purpose snapshot abstraction for one milestone.
-
-Product code stays untouched unless all three conditions are true:
-
-1. the observed output differs from the frozen I3.5 proof wall
-2. the difference is nondeterministic transport noise, not semantic drift
-3. the noise cannot be normalized truthfully in test code
-
-If any product-code edit is needed, the commit message and test comment must say
-which frozen contract it preserves.
-
-### Production failure scenarios
-
-| Surface | Realistic failure | Planned guard | Critical if missing? |
-| --- | --- | --- | --- |
-| repo-root `status` | `scope_authority` disappears or changes wording | full normalized fixture plus explicit equality assertion | yes |
-| repo-root `export` | command starts returning an aggregate bundle instead of an unsupported error | full normalized fixture plus explicit error-code assertion and no-success-shape check | yes |
-| namespace `status` | partial scope starts minting positive credit | full normalized fixture plus explicit non-credit assertions | yes |
-| single-file `status` | command shape drifts silently because only benchmark-root paths are covered | new full normalized fixture and dedicated test | yes |
-| benchmark-root `status` | `roots[]` or `units[]` drift while `benchmarks[]` still passes | full normalized benchmark-root fixture | yes |
-| benchmark-root `export` | top-level export shape drifts while benchmark arrays still pass | full normalized export fixture | yes |
-
-## Code Quality Review
-
-### DRY targets
-
-The existing benchmark contract tests are useful, but too much knowledge is
-duplicated across one-off assertions. I4 should remove repetition in exactly
-three places:
-
-1. normalization of unstable fields
-2. fixture loading and JSON comparison
-3. benchmark fixture repo setup for the command-wall tests
-
-### Opinionated helper surface
-
-Use one small contract helper layer, no more:
-
-- `read_contract_fixture(path: &str) -> serde_json::Value`
-- `normalize_status_contract_json(value: &mut serde_json::Value)`
-- `normalize_export_contract_json(value: &mut serde_json::Value)`
-- `assert_contract_matches_fixture(actual: &serde_json::Value, fixture_path: &str)`
-
-This is explicit, DRY enough, and still a minimal diff.
-
-Do not add generic trait plumbing, macro-driven assertion wrappers, or a shared
-test-support crate for I4. That is spending an innovation token to compare JSON.
-Wild.
-
-### Normalization contract
-
-These are the only fields I4 may rewrite before fixture comparison:
-
-- absolute filesystem paths
-- unit and molecule `evidence_at` timestamps
-- `exported_at`
-- `provenance.git_commit_sha`
-- digest literals whose value is expected to churn across truthful proof refreshes:
-  - `freshness.authored_truth_digest`
-  - benchmark `label_digest`
-  - benchmark `projection_digest`
-
-These fields must remain exact:
-
-- `schema_version`
-- `status`
-- `scope_authority`
-- `errors[].code`
-- benchmark ids and benchmark classifications
-- path-scope labels
-- positive-credit signals
-- relative proof-ref paths
-- benchmark presence versus absence
-
-### Fixture authoring workflow
-
-Fixture authoring is part of the plan. The implementer should not guess.
-
-1. capture the raw I3.5 proof outputs from
-   `.runs/i3_5_authority_alignment/validation/final-main/*.stdout`
-2. map each file to the frozen command roster above
-3. convert the raw JSON into its checked-in fixture path
-4. normalize only the allowed transport-noise fields
-5. keep the original raw proof output untouched under `.runs/`
-6. use the same normalization rules in the regression tests so authoring and
-   verification match exactly
-
-### ASCII diagram comment
-
-Add one short ASCII comment near the helper entrypoint in `spec-cli/tests/cli.rs`:
-
-```text
-raw command JSON
-   -> normalize unstable fields
-   -> compare against golden fixture
-   -> assert critical invariants not obvious from diff
-```
-
-That comment belongs in test code, not product code.
-
-## Test Review
-
-100% coverage is the point of this milestone.
-
-The changed behavior is not user interaction. It is command-contract stability.
-So every frozen status/export surface needs a deliberate test.
-
-### Command-wall coverage diagram
-
-```text
-COMMAND-WALL COVERAGE
-===============================
-[+] benchmark-root status
-    |
-    ├── [PARTIAL TODAY] benchmarks[] fixture locked
-    └── [GAP] full normalized stdout contract not locked
-
-[+] benchmark-root export
-    |
-    ├── [PARTIAL TODAY] benchmarks[] fixture locked
-    └── [GAP] full normalized stdout contract not locked
-
-[+] namespace status
-    |
-    ├── [PARTIAL TODAY] partial benchmarks[] fixture locked
-    ├── [PARTIAL TODAY] loader-error and no-positive-credit assertions exist
-    └── [GAP] full normalized stdout contract not locked
-
-[+] single-file status
-    |
-    ├── [GAP] no dedicated frozen fixture coverage in the command-wall suite
-    └── [GAP] partial benchmark semantics not promoted from I3.5 proof output
-
-[+] repo-root status
-    |
-    ├── [PARTIAL TODAY] schema_version and scope_authority contract locked
-    ├── [PARTIAL TODAY] benchmarks[] fixture locked
-    └── [GAP] full normalized stdout contract not locked
-
-[+] repo-root export
-    |
-    ├── [GOOD TODAY] unsupported-scope fixture exists
-    └── [GAP] not yet treated as part of one unified command-wall suite
-
-─────────────────────────────────
-COVERAGE: 1/6 fully locked
-  fully locked surfaces: repo-root export
-  partially locked surfaces: 4
-  missing surfaces: 1
-GAPS: 5 command-wall promotions needed
-─────────────────────────────────
-```
-
-### Required fixture set
-
-I4 must end with exactly this maintained fixture set:
-
-- `spec-cli/tests/fixtures/benchmarks/status-repo-root-full.json`
-- `spec-cli/tests/fixtures/benchmarks/status-ecommerce-full.json`
-- `spec-cli/tests/fixtures/benchmarks/status-ecommerce-pricing-partial-full.json`
-- `spec-cli/tests/fixtures/benchmarks/status-apply-discount-partial-full.json`
-- `spec-cli/tests/fixtures/benchmarks/export-ecommerce-full.json`
-- `spec-cli/tests/fixtures/benchmarks/export-repo-root-unsupported-scope.json`
-
-The existing repo-root unsupported export fixture may keep its current filename
-if that avoids churn, but the test names and plan language must make its role
-unmistakable.
-
-### Required test set
-
-Add or tighten one dedicated regression test per frozen surface:
-
-| Surface | Required test behavior |
-| --- | --- |
-| benchmark-root `status` | run command, normalize full JSON, compare to `status-ecommerce-full.json`, assert full benchmark-root semantics still present |
-| benchmark-root `export` | run command, normalize full JSON, compare to `export-ecommerce-full.json`, assert export wall remains benchmark-root scoped |
-| namespace `status` | run command, normalize full JSON, compare to `status-ecommerce-pricing-partial-full.json`, assert no positive credit |
-| single-file `status` | run command, normalize full JSON, compare to `status-apply-discount-partial-full.json`, assert omission of full-scope-only projection surfaces |
-| repo-root `status` | run command, normalize full JSON, compare to `status-repo-root-full.json`, assert `scope_authority == "inventory_only"` |
-| repo-root `export` | run command, normalize full JSON, compare to `export-repo-root-unsupported-scope.json`, assert `SPEC_UNSUPPORTED_SCOPE` |
-
-### Failure-mode matrix
-
-| Command surface | Test covers failure? | Error handling exists? | User gets clear signal? | Critical gap if missing? |
-| --- | --- | --- | --- | --- |
-| repo-root export unsupported scope | yes, must | yes | yes | yes |
-| repo-root inventory-only status | yes, must | yes | yes | yes |
-| namespace partial no-credit behavior | yes, must | yes | yes | yes |
-| single-file partial status semantics | currently no | yes in product code | yes | yes |
-| benchmark-root full contract shape | currently partial | yes | yes | yes |
-
-Any row above without a full golden test is an I4 blocker.
-
-## Performance Review
-
-I4 should not materially affect runtime performance.
-
-This is almost entirely test code and checked-in JSON. The only performance smell
-to avoid is doing extra benchmark fixture repo setup or reparsing in ways that
-slow `cargo test -p spec-cli` for no benefit.
-
-Recommendations:
-
-- reuse the existing temporary benchmark-repo copy strategy
-- parse and normalize once per command assertion path
-- do not add a caching layer, a separate fixture compiler, or other "clever"
-  speedups for a suite this small
-
-## Implementation Plan
-
-### Phase 1: Freeze the roster and policy
-
-1. confirm the six-command roster in this plan against the I3.5 proof wall
-2. map each command to one fixture path and one test name
-3. document the allowed normalization fields in the helper comment block
-4. lock the rule that `.runs/.../final-main/*.stdout` is seed truth, not the
-   runtime assertion source
-
-Done when:
-
-- the command roster table above needs no further interpretation
-- the fixture names are final
-- the normalization policy is written before fixtures are copied
-
-### Phase 2: Build the contract helpers
-
-1. add the small test-local helper surface in `spec-cli/tests/cli.rs`
-2. keep separate entrypoints for status JSON and export JSON normalization
-3. add the short ASCII fixture-flow comment above the helper block
-4. reuse existing benchmark repo setup instead of inventing new scaffolding
-
-Done when:
-
-- one test can load a fixture and compare a normalized full command output
-- no helper strips real contract fields
-
-### Phase 3: Promote the fixtures
-
-1. create or refresh the five missing full-command fixtures
-2. keep the repo-root unsupported export fixture deliberate and named clearly
-3. verify each fixture is derived from final-main proof output, not hand-authored
-   from memory
-
-Done when:
-
-- all six fixture paths exist
-- each fixture reflects the normalization contract exactly once
-
-### Phase 4: Tighten the regression tests
-
-1. add one dedicated command-wall test per frozen surface
-2. compare normalized full JSON to the exact fixture
-3. preserve explicit invariant assertions where a full-file diff would be hard to
-   read:
-   - repo-root `scope_authority == "inventory_only"`
-   - repo-root export `errors[0].code == "SPEC_UNSUPPORTED_SCOPE"`
-   - namespace and single-file partial cases never count as supported positive
-   - partial status omits full-scope-only projection surfaces
-4. keep snapshot and invalid-registry tests intact as adjacent coverage, but do
-   not let them substitute for the I4 wall
-
-Done when:
-
-- every row in the frozen command roster has a named test
-- no surface relies on fragment-only assertions anymore
-
-### Phase 5: Prove the wall
-
-Run exactly:
-
-```bash
-cargo test -p spec-cli
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
-cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json
-cargo run -p spec-cli -- status . --format json
-cargo run -p spec-cli -- export examples/ecommerce/units
-cargo run -p spec-cli -- export .
-```
-
-Acceptance requires:
-
-- the test suite passes
-- all full-command fixtures match after normalization
-- repo-root export still fails with `SPEC_UNSUPPORTED_SCOPE`
-- repo-root status still emits `scope_authority: "inventory_only"`
-- namespace and single-file status still remain partial and non-crediting
-
-## Concrete File Plan
-
-Expected write set:
-
-- `spec-cli/tests/cli.rs`
-- `spec-cli/tests/fixtures/benchmarks/*.json`
-
-Conditional write set, only if forced by the blocker rule:
-
-- `spec-cli/src/commands.rs`
-  - allowed only for stability fixes that preserve the frozen contract
-- `spec-core/src/export.rs`
-  - allowed only if the same frozen contract cannot be expressed without a tiny
-    stabilization fix here instead of in CLI glue
-
-Read-only authority inputs:
-
-- `.runs/i3_5_authority_alignment/validation/final-main/*.stdout`
-- `docs/rust_v1_contract_stack.md`
-- `.runs/i3_5_authority_alignment/phase2-freeze.json`
-
-## NOT in Scope
-
-- new Rust V1 support rows or interaction claims
-- `BENCH-SERVICE` implementation or service workload authoring
-- benchmark roster changes
-- benchmark snapshot command redesign
-- repo-root aggregate export support
-- schema-version bump
-- doc rewrite beyond narrow clarification forced by test evidence
-- new benchmark scoring, history, or review workflows
-- large test-framework extraction across unrelated CLI surfaces
+- benchmark registry and snapshot/review artifacts under `benchmarks/`
+- proof freshness work in `examples/ecommerce/units/**` and
+  `examples/crosslib-app/units/**`
+- one dedicated Rust V1 closure regression surface under `spec-cli/tests/`
+- targeted `spec-core` or `spec-cli` edits only if a promised closure rule is
+  not yet enforced by the current implementation
+- `TODOS.md` closeout wording
+
+If implementation starts redesigning projection schemas, repo-root semantics,
+service workloads, or general Rust support admission, stop. That is different
+scope.
 
 ## What Already Exists
 
-- full I3.5 proof outputs already exist under
-  `.runs/i3_5_authority_alignment/validation/final-main/`
-- repo-root unsupported export fixture already exists in
-  `spec-cli/tests/fixtures/benchmarks/export-repo-root-unsupported-scope.json`
-- benchmark-root and namespace benchmark-array fixtures already exist
-- benchmark-repo copy harness already exists in `copy_benchmark_repo_fixture()`
-- product code for `inventory_only` and `SPEC_UNSUPPORTED_SCOPE` is already live
-
-I4 reuses all of that. It should not rebuild any of it in parallel.
-
-## Parallelization Strategy
-
-This milestone has two real workstreams and one conditional escape hatch.
-
-### Dependency table
-
-| Step | Modules touched | Depends on |
+| Sub-problem | Existing owner | I5 action |
 | --- | --- | --- |
-| A. fixture promotion | `spec-cli/tests/fixtures/benchmarks/` | — |
-| B1. helper scaffolding | `spec-cli/tests/` | — |
-| B2. final test wiring | `spec-cli/tests/` | A and B1 |
-| C. optional stability fix | `spec-cli/src/`, `spec-core/src/` | B2 only if tests expose real nondeterminism |
+| positive benchmark accounting | `benchmarks/labels.json`, `spec-core/src/benchmark.rs` | reuse and tighten |
+| benchmark-root status/export truth | `spec-cli/src/commands.rs`, `spec-core/src/export.rs` | preserve, add closure assertions only |
+| supported function and seam cases | `BENCH-ECOM`, `examples/ecommerce/units/**` | reuse as the supported-core baseline |
+| seam molecule evidence | `pricing/discount_strategy_checkout_flow.test.spec` and its evidence artifact | promote into required benchmark gate |
+| companion-negative visibility | `BENCH-CROSSLIB` | complete and regression-protect |
+| readability review surface | `benchmarks/reviews/BENCH-ECOM.readability.review.json` | refresh and lock currentness |
+| reserved benchmark visibility | `BENCH-SERVICE` projection and snapshots | preserve exactly as reserved |
+| I3.5/I4 command wall | `spec-cli/tests/cli.rs` and benchmark fixtures | preserve unchanged |
+
+## Frozen Decisions
+
+These are locked. I5 implements them and does not reopen them.
+
+1. **I5 is the first implementation slice of `M69 supported-core closure`.**
+   - `M65` owns that milestone identity.
+   - `TODOS.md` currently uses stale shorthand and must be updated during
+     closeout.
+
+2. **I5 does not implement `BENCH-SERVICE`.**
+   - `BENCH-SERVICE` stays `kind: positive`, `lifecycle: reserved`,
+     `required_for_v1: true`.
+   - I5 may preserve or refresh reserved visibility only.
+   - I5 may not author `examples/service/**`.
+
+3. **I5 does not widen Rust V1 support rows or interaction claims.**
+   - `ROW-GENERIC-BOUNDED` stays deferred.
+   - `ROW-ASYNC-IO` stays deferred.
+   - no new semantic-family promotions are part of I5.
+
+4. **I5 closes only the already shipped supported narrow core.**
+   - `ROW-FN-CORE`
+   - `ROW-PIPE-CORE`
+   - `ROW-DATA-PLAIN`
+   - `ROW-SUM-PLAIN`
+   - `INT-FN-PIPE`
+   - `INT-LOCAL-CLOSURE`
+   - `INT-SEAM-BUSINESS`
+   - `INT-PROOF-COVERAGE`
+
+5. **I5 must make every in-scope claim map to one deliberate proof owner.**
+   - if a row or interaction is in scope, it gets one named benchmark or
+     artifact owner
+   - if a rejection boundary is in scope, it gets one named fixture owner
+   - if something cannot be mapped honestly, it stays out of I5
+
+6. **I5 reuses the M68 writer/reader boundary.**
+   - `benchmarks/labels.json` remains the authored benchmark-accounting source
+   - passports and molecule evidence remain the proof writers
+   - `spec status`, `spec export`, and `spec benchmark snapshot` remain derived
+     or read-side surfaces only
+
+7. **I5 treats readability as a closure gate, not garnish.**
+   - readability remains benchmark-scoped and human-authored
+   - readability never mutates support classification
+   - for `BENCH-ECOM`, currentness must be deliberate and regression-protected
+
+8. **I5 must finish the active companion-negative wall.**
+   - active `BENCH-CROSSLIB` cases may not remain untested
+   - companion-negative cases remain visible but never count as positive credit
+
+9. **I5 inherits the I3.5/I4 command wall unchanged.**
+   - benchmark-root proof commands remain authoritative
+   - repo-root `status . --format json` remains `inventory_only`
+   - repo-root `export .` remains unsupported for this workspace shape
+
+10. **Minimal diff still wins.**
+    - prefer benchmark-label, proof-refresh, and regression-harness tightening
+      over product refactors
+    - code changes outside those surfaces are allowed only when necessary to
+      make the current M66 wall truthful and stable
+
+## Closure Matrix
+
+This is the authoritative I5 claim map. If a claim is not mapped here, it is
+not part of the milestone.
+
+| M66 contract item | I5 proof owner | Required proof surface |
+| --- | --- | --- |
+| `ROW-FN-CORE` | `BENCH-ECOM` function cases: `money/round`, `pricing/apply_discount`, `pricing/apply_tax` | benchmark-root `status` + `export` + fresh passports |
+| `ROW-PIPE-CORE` | `pricing/calculate_total`, `pricing/calculate_total_guarded_tax` inside `BENCH-ECOM` | benchmark-root `status` + `export` + fixture assertions |
+| `ROW-DATA-PLAIN` | `pricing/pricing_quote` | fresh passport + required seam molecule proof |
+| `ROW-SUM-PLAIN` | `pricing/discount_strategy` | fresh passport + required seam molecule proof |
+| `INT-FN-PIPE` | `pricing/checkout_flow` and `pricing/discount_plus_tax` | required benchmark molecule proofs |
+| `INT-LOCAL-CLOSURE` | `BENCH-ECOM` same-tree positive closure and `BENCH-CROSSLIB` same-tree companion-negative closure | benchmark-root projections + no-positive-credit assertions |
+| `INT-SEAM-BUSINESS` | `pricing/discount_strategy_checkout_flow` | required benchmark molecule proof in `BENCH-ECOM.required_molecule_ids` |
+| `INT-PROOF-COVERAGE` | passports, molecule evidence, benchmark status/export, benchmark snapshots | fresh proof artifacts + stable read-side projections |
+| readable supported-core closure | `benchmarks/reviews/BENCH-ECOM.readability.review.json` | current projection digest + current generated-file set |
+| reserved future workload visibility | `BENCH-SERVICE` snapshot/projection | reserved-only read-side visibility |
+
+Deferred and intentionally outside I5:
+
+- `ROW-GENERIC-BOUNDED`
+- `ROW-ASYNC-IO`
+- `BENCH-SERVICE` authored workload
+- any new positive benchmark case outside the current `BENCH-ECOM` roster
+
+## Architecture
+
+```text
+                    M66 SUPPORTED-CORE CLAIM
+                               |
+         +---------------------+----------------------+
+         |                                            |
+         v                                            v
+   positive benchmark wall                    explicit rejection wall
+         |                                            |
+         v                                            v
+      BENCH-ECOM                             closure regression fixtures
+         |
+         +--------------------+--------------------+
+         |                    |                    |
+         v                    v                    v
+   supported cases      required molecules   readability review
+         |                    |                    |
+         v                    v                    v
+     passports          molecule evidence   current digest + file set
+         |                    |                    |
+         +--------------------+----------+---------+
+                                         |
+                                         v
+                            benchmark projection core
+                                         |
+                     +-------------------+-------------------+
+                     |                                       |
+                     v                                       v
+            benchmark-root status/export          benchmark snapshot artifacts
+                     |
+                     v
+                         I5 closure is truthful
+
+    BENCH-CROSSLIB runs beside this wall as active companion-negative proof,
+    never as positive credit.
+
+    BENCH-SERVICE stays reserved and visible, but outside implementation scope.
+```
+
+## Target Outcome
+
+I5 is done only when all of these are true at the same time:
+
+1. `BENCH-ECOM` still passes as the active positive benchmark.
+2. `BENCH-ECOM.required_molecule_ids` explicitly includes
+   `pricing/discount_strategy_checkout_flow`.
+3. `BENCH-ECOM` reports a current readability review again.
+4. `BENCH-CROSSLIB` no longer has active untested cases.
+5. companion-negative cases still contribute zero positive credit.
+6. every in-scope supported row and interaction in the closure matrix has one
+   explicit proof owner.
+7. the supported-boundary rejection wall is frozen behind one deliberate
+   regression suite instead of being implied by scattered tests.
+8. repo-root inventory semantics remain unchanged.
+9. `BENCH-SERVICE` remains reserved and clearly unimplemented.
+
+## Implementation Contract
+
+Implementation is four phases. Phases 1-3 do the real closure work. Phase 4 is
+the final refresh and closeout pass after the earlier phases are frozen.
+
+### Phase 1: Positive benchmark closure
+
+Objective:
+
+- make the positive supported-core benchmark explicitly require the seam
+  business-flow proof it already depends on in practice
+
+Primary write scope:
+
+- `benchmarks/labels.json`
+- `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
+- `spec-cli/tests/fixtures/benchmarks/**`
+- `spec-cli/tests/rust_v1_closure.rs` or equivalent dedicated closure suite
+
+Required changes:
+
+- add `pricing/discount_strategy_checkout_flow` to
+  `BENCH-ECOM.required_molecule_ids`
+- keep the current `BENCH-ECOM` supported case roster unless implementation
+  proves one case is mislabeled
+- add regression coverage that `BENCH-ECOM` becomes non-passing if that seam
+  molecule proof is missing, stale, or failing
+- refresh the benchmark snapshot and any benchmark fixture JSON that legitimately
+  changes once the gate is frozen
+
+Done when:
+
+- the seam molecule is part of the required gate on purpose, not only via case
+  proof refs
+- `BENCH-ECOM` still passes with the expanded required-molecule set
+
+### Phase 2: Companion-negative closure
+
+Objective:
+
+- finish the active negative-proof wall so it becomes truthful, current, and
+  regression-protected
+
+Primary write scope:
+
+- `examples/crosslib-app/units/**`
+- `benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json`
+- `spec-cli/tests/fixtures/benchmarks/**`
+- `spec-cli/tests/rust_v1_closure.rs` or equivalent dedicated closure suite
+
+Required changes:
+
+- refresh proof for the two currently untested active `BENCH-CROSSLIB` cases:
+  - `pricing/calculate_total`
+  - `pricing/checkout_nested_chain3`
+- if either case should not be active companion proof, remove it deliberately
+  and explain why in the benchmark-label diff; do not leave it half-active
+- add regression coverage that an active companion-negative case without current
+  proof makes the benchmark `incomplete`
+- add regression coverage that companion-negative cases never increment
+  `positive_credit_cases`, even when the carrier unit is `valid`
+
+Done when:
+
+- `BENCH-CROSSLIB` is complete as an active companion-negative benchmark
+- its summary still shows `positive_credit_cases: 0`
+
+### Phase 3: Supported-boundary rejection wall
+
+Objective:
+
+- freeze the current detectable supported-boundary rejections for the shipped
+  Rust V1 core behind one deliberate closure suite
+
+Primary write scope:
+
+- `spec-cli/tests/rust_v1_closure.rs` or equivalent dedicated closure suite
+- `spec-cli/tests/fixtures/**`
+- `spec-core/src/validator.rs`
+- `spec-core/src/benchmark.rs`
+- `spec-cli/src/commands.rs`
+
+Required changes:
+
+- inventory the exact already-detectable closure boundaries that I5 is claiming
+  for the shipped supported core
+- prefer reusing existing fixture families and unsupported-near-miss packs where
+  that already matches the supported-core boundary being frozen
+- add one stable regression assertion per in-scope rejection boundary so the
+  failure is machine-visible and cannot silently drift into apparent success
+- only change implementation code if the current surface does not already emit a
+  stable and truthful early rejection
+
+Hard rule:
+
+- I5 does not invent a brand-new rejection taxonomy here
+- I5 freezes the already detectable boundary wall for the shipped supported core
+- if a category cannot be mapped to one concrete existing or newly-added
+  fixture and one stable observable failure contract, it stays out of I5
+
+Done when:
+
+- the closure suite makes the supported-boundary wall observable and
+  intentionally maintained
+
+### Phase 4: Readability currentness and closeout
+
+Objective:
+
+- make the read-side closure story current, final, and maintainable after
+  Phases 1-3 are settled
+
+Primary write scope:
+
+- `benchmarks/reviews/BENCH-ECOM.readability.review.json`
+- `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
+- `benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json`
+- `spec-cli/tests/fixtures/benchmarks/**`
+- `TODOS.md`
+
+Required changes:
+
+- refresh `BENCH-ECOM` readability review against the final live projection
+  digest and final `readability_generated_files` set
+- add regression coverage for current versus missing/stale readability review
+  state
+- refresh only the impacted benchmark snapshots after label, molecule, proof,
+  and rejection work are final
+- update the `TODOS.md` `M69` wording so it matches this closure milestone
+  rather than the stale mechanics-expansion shorthand
+
+Hard rule:
+
+- snapshot and review refresh is the final lane
+- do not refresh snapshots while benchmark labels or required-molecule
+  definitions are still changing
+
+Done when:
+
+- read-side surfaces and closeout docs tell the same story as the benchmark
+  registry and proof artifacts
+
+## Implementation Tasks
+
+### Phase 1 tasks
+
+- [ ] Add `pricing/discount_strategy_checkout_flow` to
+      `BENCH-ECOM.required_molecule_ids` in `benchmarks/labels.json`.
+- [ ] Refresh `BENCH-ECOM` benchmark assertions/fixtures to reflect the expanded
+      required molecule set.
+- [ ] Add a regression that removing or staling that molecule proof demotes the
+      benchmark.
+
+### Phase 2 tasks
+
+- [ ] Refresh proof for `examples/crosslib-app/units/pricing/calculate_total.unit.spec`.
+- [ ] Refresh proof for
+      `examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec`.
+- [ ] Add regression coverage that an active companion-negative case without
+      proof yields `benchmark_status: "incomplete"`.
+- [ ] Add regression coverage that companion-negative cases keep
+      `positive_credit_cases: 0`.
+
+### Phase 3 tasks
+
+- [ ] Create or extend one dedicated Rust V1 closure suite under `spec-cli/tests/`.
+- [ ] Freeze the exact in-scope supported-boundary rejection fixtures for the
+      shipped supported core.
+- [ ] Assert that each in-scope closure boundary fails via a stable,
+      machine-visible contract.
+- [ ] Touch `spec-core` or `spec-cli` implementation only where current
+      enforcement is not yet truthful or stable.
+
+### Phase 4 tasks
+
+- [ ] Refresh `benchmarks/reviews/BENCH-ECOM.readability.review.json` against
+      the final projection digest.
+- [ ] Refresh impacted benchmark snapshots only after Phases 1-3 are merged.
+- [ ] Update benchmark fixture JSON to match the final closure state.
+- [ ] Rewrite the `TODOS.md` `M69` item so it names supported-core closure
+      directly.
+
+## Acceptance Commands
+
+The I5 proof wall is:
+
+```bash
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
+cargo run -p spec-cli -- status examples/crosslib-app/units --format json
+cargo run -p spec-cli -- export examples/crosslib-app/units
+cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB
+```
+
+Targeted proof refresh commands:
+
+```bash
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/pricing_quote.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_discount.unit.spec
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec
+cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
+```
+
+Regression wall:
+
+```bash
+cargo test -p spec-cli rust_v1_closure
+cargo run -p spec-cli -- status . --format json
+```
+
+The last command is part of acceptance because I5 must preserve repo-root
+inventory semantics while tightening benchmark-root proof surfaces.
+
+## Test Strategy
+
+### Coverage diagram
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] Positive benchmark closure
+    |
+    +- benchmarks/labels.json
+    |   +- [CHANGE] add seam molecule to required_molecule_ids
+    |   \- [TEST] benchmark gate demotes when required molecule proof is absent
+    |
+    +- spec-core/src/benchmark.rs projection
+    |   +- [TEST] supported cases remain positive only when full gate is current
+    |   \- [TEST] companion-negative cases remain visible but zero-credit
+    |
+    \- benchmark snapshot + export/status
+        +- [TEST] BENCH-ECOM stays passing
+        \- [TEST] BENCH-CROSSLIB stays complete and zero-credit
+
+[+] Readability currentness
+    |
+    +- benchmarks/reviews/BENCH-ECOM.readability.review.json
+    |   +- [CHANGE] refresh to final projection digest
+    |   \- [TEST] current vs stale/missing review status
+    |
+    \- read-side benchmark surfaces
+        \- [TEST] review status is current only when digest + file set match
+
+[+] Supported-boundary rejection wall
+    |
+    +- dedicated closure fixture/test suite
+    |   +- [CHANGE] freeze exact in-scope rejection fixtures
+    |   \- [TEST] stable machine-visible rejection per frozen boundary
+    |
+    \- supported-core guardrail
+        \- [TEST] rejected fixtures never appear as supported-core success
+
+USER FLOW COVERAGE
+===========================
+[+] Maintainer closure flow
+    |
+    +- refresh ecommerce seam proof
+    +- refresh crosslib companion proof
+    +- run benchmark-root status/export/snapshot
+    \- verify BENCH-ECOM current + BENCH-CROSSLIB complete + BENCH-SERVICE reserved
+
+[+] Failure states
+    |
+    +- missing seam molecule obligation demotes BENCH-ECOM
+    +- stale readability review surfaces as non-current
+    +- active companion case without proof yields incomplete benchmark
+    \- closure-boundary fixture fails early with stable contract
+```
+
+### Mandatory regression tests
+
+1. `BENCH-ECOM` becomes non-passing if
+   `pricing/discount_strategy_checkout_flow` is required but missing, stale, or
+   failing.
+2. `BENCH-ECOM` readability review reports current only when both
+   `projection_digest` and `readability_generated_files` match the live
+   projection.
+3. `BENCH-CROSSLIB` becomes incomplete when an active companion-negative case
+   lacks current proof.
+4. `BENCH-CROSSLIB` companion-negative cases never increment
+   `positive_credit_cases`, even when the carrier unit is `valid`.
+5. repo-root `status . --format json` remains `scope_authority: "inventory_only"`
+   after I5.
+6. each in-scope supported-boundary rejection frozen by Phase 3 fails with a
+   stable machine-visible contract.
+
+### Test files
+
+Preferred write shape:
+
+- keep the broad I3.5/I4 command-wall fixtures in `spec-cli/tests/cli.rs`
+- add one dedicated integration suite for I5 closure assertions, for example
+  `spec-cli/tests/rust_v1_closure.rs`
+- keep benchmark fixture JSON under `spec-cli/tests/fixtures/benchmarks/`
+- keep any new adversarial closure fixtures under a dedicated Rust V1 closure
+  subtree instead of mixing them into unrelated milestone packs
+
+## Failure Modes Registry
+
+| Failure mode | Why it matters | Coverage requirement | Critical gap? |
+| --- | --- | --- | --- |
+| seam support remains indirectly proven but not required by the benchmark gate | fake green supported-core closure | required-molecule regression around `discount_strategy_checkout_flow` | yes |
+| readability review file exists but is not current against the live projection | maintainers think readability is reviewed when the read-side wall disagrees | current vs stale/missing review regression | yes |
+| active companion-negative case stays untested | the negative-proof wall stops proving anything while still looking active | active-companion incomplete regression | yes |
+| companion-negative cases accidentally count as positive credit | false Rust support claim | zero-credit benchmark-summary regression | yes |
+| supported-boundary rejection remains scattered and unowned | closure relies on folklore instead of a maintained regression wall | dedicated closure fixture suite | yes |
+| repo-root inventory semantics drift while closing benchmark gaps | I3.5/I4 contract regresses | repo-root scope-authority regression | yes |
+
+## Performance / Complexity Guardrails
+
+I5 should not introduce a meaningful runtime cost increase.
+
+Guardrails:
+
+- benchmark projection remains label-driven and linear in loaded benchmark cases
+- no repo-wide discovery beyond already shipped root loading rules
+- any new rejection check must operate on already parsed authored-entry surfaces,
+  not whole-program Rust analysis
+- snapshot and review refresh remain explicit artifact updates, not hidden side
+  effects of `status` or `export`
+
+If implementation wants new caches, new registries, or a second projection
+subsystem, it is solving the wrong problem.
+
+## Worktree Parallelization Strategy
+
+This section is authoritative for parallel execution. It is intentionally stricter
+than the earlier draft so we do not create benchmark-artifact merge churn while
+trying to go faster.
+
+### Lane ownership
+
+| Lane | Owned write set | Allowed goal |
+| --- | --- | --- |
+| Lane A | `benchmarks/labels.json`, `examples/ecommerce/units/**`, `spec-cli/tests/fixtures/benchmarks/**` for `BENCH-ECOM`, `spec-cli/tests/rust_v1_closure.rs` benchmark-gate assertions | Phase 1 positive benchmark closure |
+| Lane B | `examples/crosslib-app/units/**`, `spec-cli/tests/fixtures/benchmarks/**` for `BENCH-CROSSLIB`, `spec-cli/tests/rust_v1_closure.rs` companion-negative assertions | Phase 2 companion-negative closure |
+| Lane C | `spec-core/src/validator.rs`, `spec-core/src/benchmark.rs`, `spec-cli/src/commands.rs`, dedicated closure fixtures/tests | Phase 3 supported-boundary rejection wall |
+| Lane D | `benchmarks/reviews/BENCH-ECOM.readability.review.json`, impacted snapshot files, final benchmark fixtures, `TODOS.md` | Phase 4 final refresh and closeout |
+
+### Non-negotiable ownership rules
+
+- `benchmarks/labels.json` belongs to **Lane A only** during parallel work.
+- Lane B may not edit `benchmarks/labels.json` in parallel. If companion-negative
+  work discovers a needed label change, queue it for the post-merge integration
+  pass instead of creating a parallel conflict.
+- benchmark snapshots belong to **Lane D only**.
+- readability review artifacts belong to **Lane D only**.
+- if Lanes A and B both need the same test file, split assertions so Lane A owns
+  benchmark-gate coverage and Lane B owns companion-negative coverage, then
+  reconcile in the integration pass.
 
 ### Parallel lanes
 
-Lane A: fixture promotion
-- copy and normalize the final-main proof outputs into the six maintained fixture paths
-- finalize placeholder values and fixture naming
-
-Lane B: test harness tightening
-- B1 can start immediately with helper scaffolding, test naming, and the shared
-  assertion flow
-- B2 starts after Lane A finalizes fixture names and placeholder policy
-
-Lane C: optional runtime stabilization
-- only launch if Lane B proves a truthful contract cannot be asserted without a
-  tiny product-code stabilization change
+- `Lane A`: Phase 1 positive benchmark closure
+- `Lane B`: Phase 2 companion-negative closure
+- `Lane C`: Phase 3 supported-boundary rejection wall
+- `Lane D`: Phase 4 final refresh and closeout
 
 ### Execution order
 
-1. Launch Lane A and Lane B1 in parallel worktrees.
-2. Merge on final fixture names and normalization policy.
-3. Finish Lane B2 against the finalized fixture corpus.
-4. Launch Lane C only if B2 finds a real nondeterministic output blocker.
-5. Run the full proof wall after A+B, and again after C if C exists.
+1. Launch Lane A and Lane C in parallel.
+2. Launch Lane B in parallel with A and C only if it respects the ownership rule
+   that `benchmarks/labels.json` stays A-owned.
+3. Merge A, B, and C.
+4. Run Lane D after that merge, not before.
+5. Refresh readability review and impacted snapshots only once the benchmark
+   labels, proof artifacts, and rejection wall are frozen.
 
 ### Conflict flags
 
-- Lane A touches `spec-cli/tests/fixtures/benchmarks/`; Lane B touches
-  `spec-cli/tests/cli.rs`. That is a safe parallel split until the merge point.
-- B1 and B2 stay in the same lane because both touch `spec-cli/tests/`.
-- Lane C touches product code and should stay isolated unless tests force it.
-- If Lane C is activated, do not keep editing fixture names in parallel. Freeze
-  the test side first.
+- `spec-cli/tests/rust_v1_closure.rs` is the highest-probability text conflict.
+  Keep the suite sectioned by phase so integration is mechanical.
+- benchmark fixture JSON can still conflict between Lanes A and B if both rewrite
+  broad fixture files. Prefer narrower fixture files or an explicit integration
+  pass instead of editing the same full-output fixture in parallel.
+- any lane that starts refreshing snapshots early is wrong. Snapshot churn is a
+  symptom that Lane D started too soon.
 
-## Verification Commands
+## What Success Looks Like
 
-Authoritative verification commands for implementation closeout:
+After I5:
 
-```bash
-cargo test -p spec-cli
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- status examples/ecommerce/units/pricing --format json
-cargo run -p spec-cli -- status examples/ecommerce/units/pricing/apply_discount.unit.spec --format json
-cargo run -p spec-cli -- status . --format json
-cargo run -p spec-cli -- export examples/ecommerce/units
-cargo run -p spec-cli -- export .
-```
+- one maintainer can run the benchmark-root proof wall and see:
+  - `BENCH-ECOM` passing with a current readability review
+  - `BENCH-CROSSLIB` complete as active companion-negative proof
+  - `BENCH-SERVICE` still reserved, visible, and clearly outside this milestone
+- seam-shaped support is part of the benchmark gate on purpose, not by folklore
+- the supported-boundary wall is backed by one deliberate closure suite
+- the next milestone can debate bounded generics, async/IO, or service workload
+  from a truthful supported-core baseline instead of archaeology
 
-## Acceptance Checklist
+## NOT in scope
 
-- [ ] full normalized fixture exists for benchmark-root `status`
-- [ ] full normalized fixture exists for namespace `status`
-- [ ] full normalized fixture exists for single-file `status`
-- [ ] full normalized fixture exists for repo-root `status`
-- [ ] full normalized fixture exists for benchmark-root `export`
-- [ ] repo-root unsupported export fixture remains deliberate and explicit
-- [ ] one dedicated regression test exists per frozen command-wall surface
-- [ ] normalization helpers are documented, narrow, and test-local
-- [ ] partial scopes never count as supported positive credit
-- [ ] repo-root status still emits `scope_authority: "inventory_only"`
-- [ ] repo-root export still fails with `SPEC_UNSUPPORTED_SCOPE`
-- [ ] `cargo test -p spec-cli` passes
+- `BENCH-SERVICE` authored workload or `examples/service/**`
+- final V1 proof ratification
+- bounded generics admission into V1
+- async or IO admission into V1
+- repo-root aggregate workspace redesign
+- benchmark schema redesign or new artifact families
+- broad TypeScript-lane work unrelated to Rust V1 supported-core closure
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — scope accepted as the full I3.5 command-wall
-  hardening slice, not a new mechanics milestone
-- Architecture Review: 1 core architecture direction, keep runtime code boring
-- Code Quality Review: 3 DRY targets, 0 justification for a new subsystem
-- Test Review: command-wall diagram produced, 5 contract-promotion gaps
+- Step 0: Scope Challenge, accepted as full supported-core closure without
+  service-workload widening
+- Architecture Review: one explicit closure wall now defined across benchmark,
+  molecule, readability, and rejection surfaces
+- Code Quality Review: exact file ownership and phase boundaries now frozen
+- Test Review: coverage diagram written and six mandatory regression groups
   identified
-- Performance Review: no runtime-risk work expected
-- NOT in scope: written
-- What already exists: written
-- Failure modes: 5 critical contract gaps flagged
-- Parallelization: 3 lanes, 2 parallel / 1 conditional sequential
-- Lake Score: 8/8 recommendations chose the complete option
+- Performance Review: no new subsystem justified; keep projection label-driven
+  and linear
+- Failure modes: six closure-breaking regressions identified and assigned
+- Parallelization: four lanes, three parallel-capable, one final sequential
+  refresh lane
+- Lake Score: 5/5, because the honest complete version is still cheaper than a
+  partial story plus future archaeology
