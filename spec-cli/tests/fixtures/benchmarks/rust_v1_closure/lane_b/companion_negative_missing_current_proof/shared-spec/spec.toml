@@ -1,0 +1,2 @@
+[pipeline]
+crate_root = "../shared-crate"
