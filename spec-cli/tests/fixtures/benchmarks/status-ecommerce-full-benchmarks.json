@@ -9,8 +9,8 @@
     "benchmark_status": "passing",
     "gate_status": "satisfied",
     "readability_review_status": "missing",
-    "label_digest": "sha256:9b6a18cf5b3ac7b75449d25870863f0817595c289b89b5ee5cd3ad7cf4ed2dcb",
-    "projection_digest": "sha256:56a8770a5e256bc2776c8da5eb12e85405a120f0c9d9b546316dc840b3a6cf66",
+    "label_digest": "sha256:b3cb83c0fc1d42b0c2d469db332870227e1f4819e7274636cbef9a9d2dc9cee8",
+    "projection_digest": "sha256:395e26e4feea904365721c7f744de9b367750e6784bdc4e99fceec7b4265befa",
     "summary": {
       "total_cases": 7,
       "supported_cases": 7,
@@ -24,14 +24,14 @@
         "untested": 0,
         "valid": 7
       },
-      "required_molecule_total": 2,
+      "required_molecule_total": 3,
       "required_molecule_status_counts": {
         "invalid": 0,
         "failing": 0,
         "stale": 0,
         "incomplete": 0,
         "untested": 0,
-        "valid": 2
+        "valid": 3
       }
     },
     "required_molecule_proofs": [
@@ -44,6 +44,11 @@
         "molecule_id": "pricing/discount_plus_tax",
         "status": "valid",
         "proof_ref": "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+      },
+      {
+        "molecule_id": "pricing/discount_strategy_checkout_flow",
+        "status": "valid",
+        "proof_ref": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
       }
     ],
     "cases": [

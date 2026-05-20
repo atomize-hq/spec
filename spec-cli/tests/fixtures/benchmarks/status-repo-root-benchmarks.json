@@ -6,11 +6,11 @@
     "required_for_v1": false,
     "path_scope": "full",
     "accounting_status": "valid",
-    "benchmark_status": "incomplete",
+    "benchmark_status": "passing",
     "gate_status": "not_applicable",
     "readability_review_status": "not_applicable",
     "label_digest": "sha256:727e4ac50a7dce6246e92e6f1d39c51d881aae0a3c9af0fadeea3db175b54f33",
-    "projection_digest": "sha256:7bc86cd3d5e735010d380fa176421dc472bc9c178e01398b7f516fa5cd629983",
+    "projection_digest": "sha256:58ec0fcce8f693d6736aa75a788447b9939dc3ec93f903a2da0aacda3720a3b9",
     "summary": {
       "total_cases": 4,
       "supported_cases": 0,
@@ -21,8 +21,8 @@
         "failing": 0,
         "stale": 0,
         "incomplete": 0,
-        "untested": 2,
-        "valid": 2
+        "untested": 0,
+        "valid": 4
       },
       "required_molecule_total": 0,
       "required_molecule_status_counts": {
@@ -64,8 +64,7 @@
         "carrier_kind": "unit",
         "carrier_id": "pricing/calculate_total",
         "classification": "companion_negative_proof",
-        "status": "untested",
-        "reason": "no evidence",
+        "status": "valid",
         "proof_refs": {
           "passport": "examples/crosslib-app/units/pricing/calculate_total.spec.passport.json"
         },
@@ -76,8 +75,8 @@
         "carrier_kind": "unit",
         "carrier_id": "pricing/checkout_nested_chain3",
         "classification": "companion_negative_proof",
-        "status": "untested",
-        "reason": "no evidence",
+        "status": "valid",
+        "semantic_support_status": "unsupported",
         "proof_refs": {
           "passport": "examples/crosslib-app/units/pricing/checkout_nested_chain3.spec.passport.json"
         },
@@ -96,8 +95,8 @@
     "benchmark_status": "passing",
     "gate_status": "satisfied",
     "readability_review_status": "missing",
-    "label_digest": "sha256:9b6a18cf5b3ac7b75449d25870863f0817595c289b89b5ee5cd3ad7cf4ed2dcb",
-    "projection_digest": "sha256:56a8770a5e256bc2776c8da5eb12e85405a120f0c9d9b546316dc840b3a6cf66",
+    "label_digest": "sha256:b3cb83c0fc1d42b0c2d469db332870227e1f4819e7274636cbef9a9d2dc9cee8",
+    "projection_digest": "sha256:395e26e4feea904365721c7f744de9b367750e6784bdc4e99fceec7b4265befa",
     "summary": {
       "total_cases": 7,
       "supported_cases": 7,
@@ -111,14 +110,14 @@
         "untested": 0,
         "valid": 7
       },
-      "required_molecule_total": 2,
+      "required_molecule_total": 3,
       "required_molecule_status_counts": {
         "invalid": 0,
         "failing": 0,
         "stale": 0,
         "incomplete": 0,
         "untested": 0,
-        "valid": 2
+        "valid": 3
       }
     },
     "required_molecule_proofs": [
@@ -131,6 +130,11 @@
         "molecule_id": "pricing/discount_plus_tax",
         "status": "valid",
         "proof_ref": "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+      },
+      {
+        "molecule_id": "pricing/discount_strategy_checkout_flow",
+        "status": "valid",
+        "proof_ref": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
       }
     ],
     "cases": [

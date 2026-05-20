@@ -95,24 +95,68 @@
         },
         {
           "id": "pricing/calculate_total",
-          "status": "untested",
-          "reason": "no evidence",
+          "status": "valid",
           "errors": [],
+          "evidence_at": "<normalized>",
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
         {
           "id": "pricing/checkout_nested_chain3",
-          "status": "untested",
-          "reason": "no evidence",
+          "status": "valid",
           "errors": [],
+          "evidence_at": "<normalized>",
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "under_specified",
+            "compatibility_key": "unsupported.function.v1",
+            "support_status": "unsupported",
+            "unsupported_reason_codes": [
+              "unsupported_dep_topology"
+            ],
+            "rewrite_hints": [
+              "Use zero or one helper dep for arithmetic leaves, exactly two supported dep callables for wrapper pipelines, or exactly three supported function dep callables for chain3 pipelines."
+            ],
+            "reason_codes": [
+              "unsupported_surface"
+            ],
+            "summary": "declared function deps fall outside the supported reviewer topology",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "5 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "deps",
+                "summary": "3 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function checkout_nested_chain3 with 5 input(s)"
+              }
+            ],
+            "evaluator_scope": "unsupported_surface"
           }
         }
       ],
@@ -1980,24 +2024,68 @@
     },
     {
       "id": "pricing/calculate_total",
-      "status": "untested",
-      "reason": "no evidence",
+      "status": "valid",
       "errors": [],
+      "evidence_at": "<normalized>",
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
     {
       "id": "pricing/checkout_nested_chain3",
-      "status": "untested",
-      "reason": "no evidence",
+      "status": "valid",
       "errors": [],
+      "evidence_at": "<normalized>",
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "under_specified",
+        "compatibility_key": "unsupported.function.v1",
+        "support_status": "unsupported",
+        "unsupported_reason_codes": [
+          "unsupported_dep_topology"
+        ],
+        "rewrite_hints": [
+          "Use zero or one helper dep for arithmetic leaves, exactly two supported dep callables for wrapper pipelines, or exactly three supported function dep callables for chain3 pipelines."
+        ],
+        "reason_codes": [
+          "unsupported_surface"
+        ],
+        "summary": "declared function deps fall outside the supported reviewer topology",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "5 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "deps",
+            "summary": "3 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_nested_chain3 with 5 input(s)"
+          }
+        ],
+        "evaluator_scope": "unsupported_surface"
       }
     },
     {
@@ -3586,7 +3674,7 @@
       "required_for_v1": false,
       "path_scope": "full",
       "accounting_status": "valid",
-      "benchmark_status": "incomplete",
+      "benchmark_status": "passing",
       "gate_status": "not_applicable",
       "readability_review_status": "not_applicable",
       "label_digest": "<normalized>",
@@ -3601,8 +3689,8 @@
           "failing": 0,
           "stale": 0,
           "incomplete": 0,
-          "untested": 2,
-          "valid": 2
+          "untested": 0,
+          "valid": 4
         },
         "required_molecule_total": 0,
         "required_molecule_status_counts": {
@@ -3644,8 +3732,7 @@
           "carrier_kind": "unit",
           "carrier_id": "pricing/calculate_total",
           "classification": "companion_negative_proof",
-          "status": "untested",
-          "reason": "no evidence",
+          "status": "valid",
           "proof_refs": {
             "passport": "examples/crosslib-app/units/pricing/calculate_total.spec.passport.json"
           },
@@ -3656,8 +3743,8 @@
           "carrier_kind": "unit",
           "carrier_id": "pricing/checkout_nested_chain3",
           "classification": "companion_negative_proof",
-          "status": "untested",
-          "reason": "no evidence",
+          "status": "valid",
+          "semantic_support_status": "unsupported",
           "proof_refs": {
             "passport": "examples/crosslib-app/units/pricing/checkout_nested_chain3.spec.passport.json"
           },
@@ -3691,14 +3778,14 @@
           "untested": 0,
           "valid": 7
         },
-        "required_molecule_total": 2,
+        "required_molecule_total": 3,
         "required_molecule_status_counts": {
           "invalid": 0,
           "failing": 0,
           "stale": 0,
           "incomplete": 0,
           "untested": 0,
-          "valid": 2
+          "valid": 3
         }
       },
       "required_molecule_proofs": [
@@ -3711,6 +3798,11 @@
           "molecule_id": "pricing/discount_plus_tax",
           "status": "valid",
           "proof_ref": "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+        },
+        {
+          "molecule_id": "pricing/discount_strategy_checkout_flow",
+          "status": "valid",
+          "proof_ref": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
         }
       ],
       "cases": [
