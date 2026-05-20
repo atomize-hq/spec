@@ -4345,9 +4345,10 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let repo_dir = temp_dir.path().join("benchmark-repo");
     let examples_dir = repo_dir.join("examples");
+    let semantic_families_dir = repo_dir.join("semantic-families");
+    let spec_cli_fixtures_dir = repo_dir.join("spec-cli/tests/fixtures");
 
     fs::create_dir_all(&examples_dir).unwrap();
-    fs::write(repo_dir.join(".git"), "gitdir: .git/modules/spec-tests\n").unwrap();
     copy_dir_recursive(
         &root.join("examples/ecommerce"),
         &examples_dir.join("ecommerce"),
@@ -4370,6 +4371,59 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     .expect("failed to copy shared spec benchmark fixture");
     copy_dir_recursive(&root.join("benchmarks"), &repo_dir.join("benchmarks"))
         .expect("failed to copy benchmark registry fixture");
+    copy_dir_recursive(
+        &root.join(
+            "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures",
+        ),
+        &semantic_families_dir
+            .join("function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures"),
+    )
+    .expect("failed to copy monotone-down benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures"),
+        &semantic_families_dir.join("function.arithmetic_leaf.monotone_up.v1/fixtures"),
+    )
+    .expect("failed to copy monotone-up benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join(
+            "semantic-families/function.helper.identity_passthrough.v1/fixtures",
+        ),
+        &semantic_families_dir.join("function.helper.identity_passthrough.v1/fixtures"),
+    )
+    .expect("failed to copy helper benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.wrapper.pipeline.chain3.v1/fixtures"),
+        &semantic_families_dir.join("function.wrapper.pipeline.chain3.v1/fixtures"),
+    )
+    .expect("failed to copy chain3 benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join(
+            "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures",
+        ),
+        &semantic_families_dir.join("function.wrapper.pipeline.normalized_required_arg.v1/fixtures"),
+    )
+    .expect("failed to copy normalized-required-arg benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.wrapper.pipeline.v1/fixtures"),
+        &semantic_families_dir.join("function.wrapper.pipeline.v1/fixtures"),
+    )
+    .expect("failed to copy wrapper benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &spec_cli_fixtures_dir.join("m19/semantic_falsification_pack"),
+    )
+    .expect("failed to copy M19 benchmark semantic fixture pack");
+    copy_dir_recursive(
+        &root.join("spec-cli/tests/fixtures/m20/unsupported_truth_pack"),
+        &spec_cli_fixtures_dir.join("m20/unsupported_truth_pack"),
+    )
+    .expect("failed to copy M20 benchmark semantic fixture pack");
+    copy_dir_recursive(
+        &root.join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &spec_cli_fixtures_dir.join("typescript_local_supported_graph"),
+    )
+    .expect("failed to copy TypeScript supported-graph benchmark fixture pack");
+    init_git_repo(&repo_dir);
 
     (temp_dir, repo_dir)
 }
