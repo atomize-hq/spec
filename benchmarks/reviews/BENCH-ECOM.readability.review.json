@@ -1,6 +1,6 @@
 {
   "benchmark_id": "BENCH-ECOM",
-  "projection_digest": "sha256:07abdc7583aeb203ad6063fafc77bac72845674e5736acdda8fd6a8424f4e00e",
+  "projection_digest": "sha256:395e26e4feea904365721c7f744de9b367750e6784bdc4e99fceec7b4265befa",
   "readability_generated_files": [
     "examples/ecommerce/src/generated/mod.rs",
     "examples/ecommerce/src/generated/money/mod.rs",

@@ -143,8 +143,8 @@
       "expect": "DiscountStrategy::None.fixed_amount_capped_behavior_holds()"
     }
   ],
-  "generated_at": "2026-05-20T21:35:15Z",
-  "source_file": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-a/examples/ecommerce/units/pricing/discount_strategy.unit.spec",
+  "generated_at": "2026-05-20T22:07:01Z",
+  "source_file": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/int/examples/ecommerce/units/pricing/discount_strategy.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -165,9 +165,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-05-20T21:35:18Z",
+    "observed_at": "2026-05-20T22:07:01Z",
     "provenance": {
-      "git_commit_sha": "120b2dfbe3cb64bee44a88c57fa392ce7e37b91a"
+      "git_commit_sha": "423c8e2efb3f7f678875ae62c9ae46713c1d6c81"
     }
   },
   "freshness_anchor": {
@@ -202,9 +202,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-20T21:35:18Z",
+        "observed_at": "2026-05-20T22:07:01Z",
         "provenance": {
-          "git_commit_sha": "120b2dfbe3cb64bee44a88c57fa392ce7e37b91a"
+          "git_commit_sha": "423c8e2efb3f7f678875ae62c9ae46713c1d6c81"
         }
       },
       "freshness_anchor": {
