@@ -1,7 +1,11 @@
 # ecommerce example
 
 This example shows a small pricing domain authored as `.unit.spec` files, plus molecule tests, a checked-in plan artifact, and the canonical migration wedge for `pricing/discount_strategy`.
-The canonical in-repo copy also ships tracked molecule evidence for the pricing molecule tests so `spec status .` stays truthful on a fresh clone.
+The canonical in-repo copy also ships tracked molecule evidence for the pricing molecule tests so the benchmark-root proof wall stays truthful on a fresh clone:
+
+```bash
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+```
 
 ## M13 migration wedge
 
@@ -50,6 +54,8 @@ If you have `spec` installed, the quickest end-to-end loop from `examples/ecomme
 spec build units
 spec test units/pricing/discount_strategy.unit.spec
 spec test units/pricing/discount_strategy_checkout_flow.test.spec
+spec status units --format json
+spec export units
 spec plan validate plans/refactors/checkout-tax-refactor.plan.spec --format json
 ```
 
@@ -60,8 +66,17 @@ cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_stra
 cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
 cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
-cargo run -p spec-cli -- status examples/ecommerce --format json
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
 ```
+
+Repo-root status remains available for broad inventory:
+
+```bash
+cargo run -p spec-cli -- status . --format json
+```
+
+Treat that repo-root view as `inventory_only`, not as the proof-authoritative default. Repo-root export is intentionally unsupported for this workspace shape and should fail with `SPEC_UNSUPPORTED_SCOPE`.
 
 If you want the shorter generate/check/test loop instead:
 

@@ -1,93 +1,83 @@
 # Rust V1 Contract Stack
 
-This document is the repo-facing index for the Rust V1 planning artifacts and the
-current implementation ladder.
+This document is the repo-facing index for the Rust V1 contract stack and the
+frozen I3.5 command wall.
 
-It exists for one reason:
+It exists to answer two questions quickly:
 
-- make the current contract stack and milestone ownership easy to find
+- which artifact owns which Rust V1 claim
+- which command surface is proof-authoritative versus diagnostic only
 
-It is not a replacement for the underlying artifacts.
+## Current Authority
 
-## Current Stack
+I3.5 freezes the public contract against these in-repo authority artifacts:
+
+- `.runs/i3_5_authority_alignment/authority-plan.snapshot.md`
+- `.runs/i3_5_authority_alignment/phase2-freeze.json`
+
+Those files are the maintained repo authority for the current alignment work.
+This index deliberately avoids stale local-user planning paths.
+
+## Historical Stack Ownership
+
+The historical M65-M68 design inputs are carried forward through the I3.5
+authority snapshot above. Use this ownership map when deciding where a claim
+belongs.
 
 ### M65: Planning Anchor
 
-Artifact:
-- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-200036.md`
+Owns:
+
+- the milestone ladder into Rust V1
+- scope framing after the failed giant contract draft
+- forced decisions such as `BENCH-SERVICE`, bounded generics, async/IO
+  deferral, and the `BENCH-CROSSLIB` role
+
+### M66: Narrow-Core Rust Support Contract
 
 Owns:
-- paper trail from the failed giant contract draft
-- artifact split
-- rough milestone ladder from `M65` to V1
-- forced decisions:
-  - `D1` `BENCH-SERVICE`
-  - `D2` bounded generics
-  - `D3` async / IO
-  - `D4` `BENCH-CROSSLIB` role
 
-### M66: Narrow-Core Provisional Rust Support Contract
-
-Artifact:
-- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-213928.md`
-
-Owns:
-- narrow-core V1 user claim
-- supported / deferred / explicitly-out rows
-- supported / deferred / explicitly-out interactions
-- fallback policy
-- early-failure boundary
-- provisional done-state gate for the narrow core
+- what Rust V1 claims to support
+- supported, deferred, and explicitly out interactions
+- fallback policy and early-failure boundaries
 
 Does not own:
+
 - benchmark schemas
 - truth-surface mechanics
 - rollout sequencing
 
-### M67: Benchmark / Truth-Surface Companion Spec
-
-Artifact:
-- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-220646.md`
+### M67: Benchmark and Truth-Surface Companion
 
 Owns:
-- benchmark roster
-- benchmark roles
-- truth-writer vs read/project boundary
-- fallback visibility rules
-- readability as an observation surface
-- `BENCH-SERVICE` as a required later gate
 
-Resolved here:
-- `D4`: `BENCH-CROSSLIB` is a companion negative-proof fixture, not positive
-  workload coverage
+- benchmark roster and benchmark roles
+- writer-versus-reader boundaries
+- readability as an observation surface
+- `BENCH-SERVICE` as a required visible reserved benchmark
 
 ### M68: Mechanics-Landing Implementation Contract
 
-Artifact:
-- `~/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-225503.md`
-
 Owns:
-- concrete benchmark artifact set
-- exact writer vs reader boundary
-- benchmark-level enums
-- canonical `projection_digest`
-- exact path-scoped benchmark behavior for `spec status` and `spec export`
-- exact readability scope for shared generated files
-- anti-laundering rules for benchmark credit
 
-This is the last doc-first milestone before implementation.
+- concrete benchmark artifact shapes
+- exact path-scoped behavior for `spec status` and `spec export`
+- benchmark-level enums, digests, and anti-laundering rules
+- readability-selection rules for generated files
 
 ## Contract Boundary Summary
 
-Use this routing rule before editing or extending any of the artifacts above:
+Use this routing rule before editing or extending any artifact in the stack:
 
 - if the statement is about what Rust V1 claims, it belongs in `M66`
-- if the statement is about how that claim is observed, labeled, reviewed, or
-  projected, it belongs in `M67`
-- if the statement is about concrete benchmark/read-surface mechanics, it
+- if the statement is about how that claim is observed or labeled, it belongs
+  in `M67`
+- if the statement is about concrete benchmark and read-surface mechanics, it
   belongs in `M68`
-- if the statement is about roadmap ordering or milestone ownership, it belongs
-  in `M65`
+- if the statement is about milestone ordering or ownership, it belongs in
+  `M65`
+- if the statement is about which command wall is authoritative in this repo
+  today, it belongs in I3.5
 
 ## Implementation Ladder
 
@@ -98,57 +88,62 @@ The current ladder is:
 ### I3: Benchmark Mechanics Baseline
 
 Goal:
-- land the benchmark truth-surface mechanics baseline in the repo
 
-Scope:
-- benchmark projection rules
-- anti-laundering and gate semantics
-- benchmark-root status/export proof wall behavior
-- supporting snapshots and readability surfaces
+- land benchmark-aware truth-surface mechanics in the repo
 
 Primary outcome:
-- the benchmark-root command wall became the trustworthy proof surface
 
-### I3.5: Post-I3 Authority Alignment and Repo-Root Contract Freeze
+- benchmark-root status and export became the trustworthy proof surfaces
+
+### I3.5: Authority Alignment and Repo-Root Contract Freeze
 
 Goal:
-- align the repo to one authoritative command wall without widening scope
 
-Scope:
-- restore and normalize this repo-facing contract-stack index
-- freeze repo-root `status . --format json` as supported `inventory_only`
-- freeze repo-root `export .` as stable unsupported scope with
-  `SPEC_UNSUPPORTED_SCOPE`
-- preserve benchmark-root `status examples/ecommerce/units --format json` and
-  `export examples/ecommerce/units` as the proof wall
-- align code, fixtures, docs, help text, README surfaces, changelog, and the
-  orchestration runbook to the same contract
+- align code, docs, and runbooks to one authoritative command wall without
+  widening product scope
+
+Frozen outcomes:
+
+- repo-root `cargo run -p spec-cli -- status . --format json` is supported as
+  `inventory_only`
+- repo-root `cargo run -p spec-cli -- export .` is unsupported for this
+  workspace shape and must fail with `SPEC_UNSUPPORTED_SCOPE`
+- benchmark-root commands remain the proof wall:
+
+```bash
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+```
+
+- namespace and single-file `status` remain partial-scope diagnostics only
+- README, example README, changelog, CLI help, and orchestration docs all teach
+  the same command wall
 
 Primary outcome:
-- I3.5 becomes the repo-root contract freeze milestone between I3 mechanics and
-  I4 contract-test hardening
 
-### I4: Schema v4 Fixtures and Contract Tests
+- I3.5 becomes the milestone that freezes repo-root semantics between I3
+  mechanics and I4 regression hardening
+
+### I4: Fixture and Contract-Test Hardening
 
 Goal:
-- lock the frozen machine contract with fixtures and regression tests
+
+- lock the frozen I3.5 machine contract behind regression fixtures and tests
 
 Scope:
+
 - fixture coverage for benchmark-root proof commands
 - fixture coverage for namespace and single-file partial diagnostics
 - fixture coverage for repo-root `inventory_only` status
 - fixture coverage for repo-root unsupported export with
   `SPEC_UNSUPPORTED_SCOPE`
-- regression coverage that keeps docs/help and CLI behavior aligned
 
 Primary outcome:
-- the I3.5 command wall is test-backed and hard to regress
+
+- the I3.5 command wall becomes difficult to regress accidentally
 
 ## Repo Note
 
-The planning artifacts above live in the local project planning area under
-`~/.gstack/projects/atomize-hq-spec/`.
-
-This repo document is the stable index that points to them and explains what
-each one owns. When the ladder changes, update this index rather than teaching
-one-off milestone lore in scattered docs.
+If you need the current execution truth, start with the authority snapshot and
+freeze record under `.runs/i3_5_authority_alignment/`, then use this document
+as the index that explains what each milestone owns.
