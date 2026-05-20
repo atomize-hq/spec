@@ -14689,12 +14689,31 @@ fn status_repo_root_emits_schema_v4_benchmarks_fixture() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
 
     let output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "repo-root status should stay non-green when broad inventory includes untested work"
+    );
     let json = parse_stdout_json(&output);
+    let actual_contract = serde_json::json!({
+        "schema_version": json["schema_version"],
+        "scope_authority": json["scope_authority"],
+    });
 
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(
+        actual_contract,
+        fixture_json("benchmarks/status-repo-root-contract.json")
+    );
     assert_eq!(
         json["benchmarks"],
         fixture_json("benchmarks/status-repo-root-benchmarks.json")
+    );
+    assert!(
+        json["benchmarks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|benchmark| benchmark["benchmark_id"] == "BENCH-SERVICE"),
+        "repo-root inventory should preserve reserved benchmark visibility"
     );
 }
 
@@ -14782,6 +14801,27 @@ fn export_emits_full_and_partial_benchmark_fixtures() {
         partial_json["benchmarks"],
         fixture_json("benchmarks/export-apply-discount-partial-benchmarks.json")
     );
+}
+
+#[test]
+fn export_repo_root_emits_machine_readable_unsupported_scope_fixture() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(&repo_dir, &["export", "."]);
+    assert!(
+        !output.status.success(),
+        "repo-root export should fail with a stable unsupported-scope contract"
+    );
+    let mut json = parse_stdout_json(&output);
+    json["errors"][0]["path"] = Value::String("/tmp/benchmark-fixture".to_string());
+
+    assert_eq!(
+        json,
+        fixture_json("benchmarks/export-repo-root-unsupported-scope.json")
+    );
+    assert!(json.get("benchmarks").is_none());
+    assert!(json.get("units").is_none());
+    assert!(json.get("passports").is_none());
 }
 
 #[test]
