@@ -462,9 +462,70 @@ fn fixture_json(name: &str) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
+// fixture flow:
+// command JSON -> narrow normalization -> frozen fixture
+const NORMALIZED_CONTRACT_VALUE: &str = "<normalized>";
+
+fn read_contract_fixture(name: &str) -> Value {
+    fixture_json(&format!("benchmarks/{name}"))
+}
+
 fn assert_stdout_json_matches_fixture(output: &std::process::Output, fixture: &str) {
     let actual = parse_stdout_json(output);
     let expected = fixture_json(fixture);
+    assert_eq!(actual, expected);
+}
+
+fn normalize_status_contract_json(mut json: Value) -> Value {
+    normalize_contract_json_value(&mut json, &mut Vec::new(), false);
+    json
+}
+
+fn normalize_export_contract_json(mut json: Value) -> Value {
+    normalize_contract_json_value(&mut json, &mut Vec::new(), true);
+    json
+}
+
+fn normalize_contract_json_value(value: &mut Value, path: &mut Vec<String>, export_mode: bool) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                path.push(key.clone());
+                normalize_contract_json_value(child, path, export_mode);
+                path.pop();
+            }
+        }
+        Value::Array(items) => {
+            for (index, child) in items.iter_mut().enumerate() {
+                path.push(index.to_string());
+                normalize_contract_json_value(child, path, export_mode);
+                path.pop();
+            }
+        }
+        Value::String(text) => {
+            let leaf = path.last().map(String::as_str);
+            let should_normalize = Path::new(text).is_absolute()
+                || leaf == Some("evidence_at")
+                || leaf == Some("generated_at")
+                || leaf == Some("observed_at")
+                || (export_mode && leaf == Some("exported_at"))
+                || (leaf == Some("git_commit_sha")
+                    && path.iter().any(|segment| segment == "provenance"))
+                || (leaf == Some("authored_truth_digest")
+                    && path.iter().rev().nth(1).map(String::as_str) == Some("freshness"))
+                || leaf == Some("label_digest")
+                || leaf == Some("projection_digest");
+
+            if should_normalize {
+                *text = NORMALIZED_CONTRACT_VALUE.to_string();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn assert_contract_matches_fixture(actual: Value, fixture: &str) {
+    let expected = read_contract_fixture(fixture);
     assert_eq!(actual, expected);
 }
 
@@ -4270,9 +4331,10 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let repo_dir = temp_dir.path().join("benchmark-repo");
     let examples_dir = repo_dir.join("examples");
+    let semantic_families_dir = repo_dir.join("semantic-families");
+    let spec_cli_fixtures_dir = repo_dir.join("spec-cli/tests/fixtures");
 
     fs::create_dir_all(&examples_dir).unwrap();
-    fs::write(repo_dir.join(".git"), "gitdir: .git/modules/spec-tests\n").unwrap();
     copy_dir_recursive(
         &root.join("examples/ecommerce"),
         &examples_dir.join("ecommerce"),
@@ -4295,6 +4357,58 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     .expect("failed to copy shared spec benchmark fixture");
     copy_dir_recursive(&root.join("benchmarks"), &repo_dir.join("benchmarks"))
         .expect("failed to copy benchmark registry fixture");
+    copy_dir_recursive(
+        &root.join(
+            "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures",
+        ),
+        &semantic_families_dir
+            .join("function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures"),
+    )
+    .expect("failed to copy monotone-down benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures"),
+        &semantic_families_dir.join("function.arithmetic_leaf.monotone_up.v1/fixtures"),
+    )
+    .expect("failed to copy monotone-up benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.helper.identity_passthrough.v1/fixtures"),
+        &semantic_families_dir.join("function.helper.identity_passthrough.v1/fixtures"),
+    )
+    .expect("failed to copy helper benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.wrapper.pipeline.chain3.v1/fixtures"),
+        &semantic_families_dir.join("function.wrapper.pipeline.chain3.v1/fixtures"),
+    )
+    .expect("failed to copy chain3 benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join(
+            "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures",
+        ),
+        &semantic_families_dir
+            .join("function.wrapper.pipeline.normalized_required_arg.v1/fixtures"),
+    )
+    .expect("failed to copy normalized-required-arg benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("semantic-families/function.wrapper.pipeline.v1/fixtures"),
+        &semantic_families_dir.join("function.wrapper.pipeline.v1/fixtures"),
+    )
+    .expect("failed to copy wrapper benchmark semantic fixtures");
+    copy_dir_recursive(
+        &root.join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &spec_cli_fixtures_dir.join("m19/semantic_falsification_pack"),
+    )
+    .expect("failed to copy M19 benchmark semantic fixture pack");
+    copy_dir_recursive(
+        &root.join("spec-cli/tests/fixtures/m20/unsupported_truth_pack"),
+        &spec_cli_fixtures_dir.join("m20/unsupported_truth_pack"),
+    )
+    .expect("failed to copy M20 benchmark semantic fixture pack");
+    copy_dir_recursive(
+        &root.join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &spec_cli_fixtures_dir.join("typescript_local_supported_graph"),
+    )
+    .expect("failed to copy TypeScript supported-graph benchmark fixture pack");
+    init_git_repo(&repo_dir);
 
     (temp_dir, repo_dir)
 }
@@ -14685,40 +14799,7 @@ fn plan_export_ignores_hidden_scratch_units_copy() {
 }
 
 #[test]
-fn status_repo_root_emits_schema_v4_benchmarks_fixture() {
-    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
-
-    let output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
-    assert!(
-        !output.status.success(),
-        "repo-root status should stay non-green when broad inventory includes untested work"
-    );
-    let json = parse_stdout_json(&output);
-    let actual_contract = serde_json::json!({
-        "schema_version": json["schema_version"],
-        "scope_authority": json["scope_authority"],
-    });
-
-    assert_eq!(
-        actual_contract,
-        fixture_json("benchmarks/status-repo-root-contract.json")
-    );
-    assert_eq!(
-        json["benchmarks"],
-        fixture_json("benchmarks/status-repo-root-benchmarks.json")
-    );
-    assert!(
-        json["benchmarks"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|benchmark| benchmark["benchmark_id"] == "BENCH-SERVICE"),
-        "repo-root inventory should preserve reserved benchmark visibility"
-    );
-}
-
-#[test]
-fn status_benchmark_root_emits_full_benchmark_fixture() {
+fn status_benchmark_root_contract_matches_frozen_fixture() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
 
     let output = run_in(
@@ -14729,14 +14810,24 @@ fn status_benchmark_root_emits_full_benchmark_fixture() {
     let json = parse_stdout_json(&output);
 
     assert_eq!(json["schema_version"], 4);
-    assert_eq!(
-        json["benchmarks"],
-        fixture_json("benchmarks/status-ecommerce-full-benchmarks.json")
+    assert_eq!(json["benchmarks"][0]["path_scope"], "full");
+    assert_eq!(json["benchmarks"][0]["benchmark_status"], "passing");
+    assert!(
+        json["benchmarks"][0]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(true))
+    );
+
+    assert_contract_matches_fixture(
+        normalize_status_contract_json(json),
+        "status-ecommerce-full.json",
     );
 }
 
 #[test]
-fn status_partial_scope_benchmark_fixture_never_counts_positive_credit() {
+fn status_namespace_contract_matches_frozen_fixture() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
 
     let output = run_in(
@@ -14753,58 +14844,113 @@ fn status_partial_scope_benchmark_fixture_never_counts_positive_credit() {
         "namespace status should stay non-green when no library root is discovered"
     );
     let json = parse_stdout_json(&output);
-    let benchmarks = json["benchmarks"].clone();
+    let benchmark = &json["benchmarks"][0];
 
-    assert_eq!(
-        benchmarks,
-        fixture_json("benchmarks/status-ecommerce-pricing-partial-benchmarks.json")
-    );
     assert_eq!(json["loader_errors"][0]["code"], "SPEC_NO_LIBRARY_ROOTS");
+    assert_eq!(benchmark["path_scope"], "partial");
     assert!(
-        benchmarks[0]["cases"]
+        benchmark["cases"]
             .as_array()
             .unwrap()
             .iter()
             .all(|case| case["counts_as_supported_positive"] == Value::Bool(false))
     );
-    assert!(benchmarks[0].get("projection_digest").is_none());
-    assert!(benchmarks[0].get("readability_review_status").is_none());
+    assert!(benchmark.get("projection_digest").is_none());
+    assert!(benchmark.get("readability_review_status").is_none());
+
+    assert_contract_matches_fixture(
+        normalize_status_contract_json(json),
+        "status-ecommerce-pricing-partial-full.json",
+    );
 }
 
 #[test]
-fn export_emits_full_and_partial_benchmark_fixtures() {
+fn status_single_file_contract_matches_frozen_fixture() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
 
-    let full_output = run_in(&repo_dir, &["export", "examples/ecommerce/units"]);
-    assert_output_success("full benchmark export should succeed", &full_output);
-    let full_json = parse_stdout_json(&full_output);
-    assert_eq!(full_json["schema_version"], 4);
-    assert_eq!(
-        full_json["benchmarks"],
-        fixture_json("benchmarks/export-ecommerce-full-benchmarks.json")
-    );
-
-    let partial_output = run_in(
+    let output = run_in(
         &repo_dir,
         &[
-            "export",
+            "status",
             "examples/ecommerce/units/pricing/apply_discount.unit.spec",
+            "--format",
+            "json",
         ],
     );
-    assert_output_success(
-        "single-file benchmark export should succeed",
-        &partial_output,
-    );
-    let partial_json = parse_stdout_json(&partial_output);
-    assert_eq!(partial_json["schema_version"], 4);
+    assert_output_success("single-file status should succeed", &output);
+    let json = parse_stdout_json(&output);
+    let benchmark = &json["benchmarks"][0];
+
+    assert_eq!(benchmark["path_scope"], "partial");
+    assert_eq!(benchmark["cases"].as_array().unwrap().len(), 1);
     assert_eq!(
-        partial_json["benchmarks"],
-        fixture_json("benchmarks/export-apply-discount-partial-benchmarks.json")
+        benchmark["cases"][0]["counts_as_supported_positive"],
+        Value::Bool(false)
+    );
+    assert!(benchmark.get("benchmark_status").is_none());
+    assert!(benchmark.get("projection_digest").is_none());
+    assert!(benchmark.get("summary").is_none());
+
+    assert_contract_matches_fixture(
+        normalize_status_contract_json(json),
+        "status-apply-discount-partial-full.json",
     );
 }
 
 #[test]
-fn export_repo_root_emits_machine_readable_unsupported_scope_fixture() {
+fn status_repo_root_contract_matches_frozen_fixture() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "repo-root status should stay non-green when broad inventory includes untested work"
+    );
+    let json = parse_stdout_json(&output);
+
+    assert_eq!(json["scope_authority"], "inventory_only");
+    assert!(
+        json["benchmarks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|benchmark| benchmark["benchmark_id"] == "BENCH-SERVICE"),
+        "repo-root inventory should preserve reserved benchmark visibility"
+    );
+
+    assert_contract_matches_fixture(
+        normalize_status_contract_json(json),
+        "status-repo-root-full.json",
+    );
+}
+
+#[test]
+fn export_benchmark_root_contract_matches_frozen_fixture() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    let output = run_in(&repo_dir, &["export", "examples/ecommerce/units"]);
+    assert_output_success("benchmark-root export should succeed", &output);
+    let json = parse_stdout_json(&output);
+
+    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["benchmarks"][0]["path_scope"], "full");
+    assert_eq!(json["benchmarks"][0]["benchmark_status"], "passing");
+    assert!(
+        json["benchmarks"][0]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|case| case["counts_as_supported_positive"] == Value::Bool(true))
+    );
+
+    assert_contract_matches_fixture(
+        normalize_export_contract_json(json),
+        "export-ecommerce-full.json",
+    );
+}
+
+#[test]
+fn export_repo_root_contract_matches_frozen_fixture() {
     let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
 
     let output = run_in(&repo_dir, &["export", "."]);
@@ -14812,16 +14958,17 @@ fn export_repo_root_emits_machine_readable_unsupported_scope_fixture() {
         !output.status.success(),
         "repo-root export should fail with a stable unsupported-scope contract"
     );
-    let mut json = parse_stdout_json(&output);
-    json["errors"][0]["path"] = Value::String("/tmp/benchmark-fixture".to_string());
+    let json = parse_stdout_json(&output);
 
-    assert_eq!(
-        json,
-        fixture_json("benchmarks/export-repo-root-unsupported-scope.json")
-    );
+    assert_eq!(json["errors"][0]["code"], "SPEC_UNSUPPORTED_SCOPE");
     assert!(json.get("benchmarks").is_none());
     assert!(json.get("units").is_none());
     assert!(json.get("passports").is_none());
+
+    assert_contract_matches_fixture(
+        normalize_export_contract_json(json),
+        "export-repo-root-unsupported-scope.json",
+    );
 }
 
 #[test]

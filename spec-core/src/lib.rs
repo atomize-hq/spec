@@ -36,6 +36,19 @@ pub use semantic_review::{
 
 use thiserror::Error;
 
+#[derive(Error, Debug)]
+#[error("{code}: {message} at {path}")]
+pub struct BenchmarkRegistryInvalidDetails {
+    pub code: Box<str>,
+    pub path: Box<str>,
+    pub message: Box<str>,
+    pub benchmark_id: Option<Box<str>>,
+    pub case_id: Option<Box<str>>,
+    pub carrier_id: Option<Box<str>>,
+    pub molecule_id: Option<Box<str>>,
+    pub value: Option<Box<str>>,
+}
+
 /// Error types for spec-core operations
 #[derive(Error, Debug)]
 pub enum SpecError {
@@ -162,17 +175,8 @@ pub enum SpecError {
     #[error("Traversal error: {message} at {path}")]
     Traversal { message: String, path: String },
 
-    #[error("{code}: {message} at {path}")]
-    BenchmarkRegistryInvalid {
-        code: String,
-        path: String,
-        message: String,
-        benchmark_id: Option<String>,
-        case_id: Option<String>,
-        carrier_id: Option<String>,
-        molecule_id: Option<String>,
-        value: Option<String>,
-    },
+    #[error(transparent)]
+    BenchmarkRegistryInvalid(Box<BenchmarkRegistryInvalidDetails>),
 
     #[error("Generator error: {message}")]
     Generator { message: String },

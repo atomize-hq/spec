@@ -5,7 +5,7 @@
 //! shared benchmark surface for status, export, and snapshotting.
 
 use crate::semantic_review::SemanticSupportStatus;
-use crate::{Result, SpecError};
+use crate::{BenchmarkRegistryInvalidDetails, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -14,6 +14,33 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 pub const BENCHMARK_LABELS_SCHEMA_VERSION: u8 = 1;
+
+#[derive(Default)]
+struct BenchmarkRegistryMeta {
+    benchmark_id: Option<String>,
+    case_id: Option<String>,
+    carrier_id: Option<String>,
+    molecule_id: Option<String>,
+    value: Option<String>,
+}
+
+fn benchmark_registry_invalid(
+    code: impl Into<Box<str>>,
+    path: impl Into<Box<str>>,
+    message: impl Into<Box<str>>,
+    meta: BenchmarkRegistryMeta,
+) -> SpecError {
+    SpecError::BenchmarkRegistryInvalid(Box::new(BenchmarkRegistryInvalidDetails {
+        code: code.into(),
+        path: path.into(),
+        message: message.into(),
+        benchmark_id: meta.benchmark_id.map(Into::into),
+        case_id: meta.case_id.map(Into::into),
+        carrier_id: meta.carrier_id.map(Into::into),
+        molecule_id: meta.molecule_id.map(Into::into),
+        value: meta.value.map(Into::into),
+    }))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BenchmarkLabelRegistry {
@@ -275,46 +302,38 @@ pub fn load_labels(path: &Path) -> Result<BenchmarkLabelRegistry> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(SpecError::BenchmarkRegistryInvalid {
-                code: "SPEC_BENCHMARK_REGISTRY_MISSING".to_string(),
-                path: path_string,
-                message: "benchmark registry file is missing".to_string(),
-                benchmark_id: None,
-                case_id: None,
-                carrier_id: None,
-                molecule_id: None,
-                value: None,
-            });
+            return Err(benchmark_registry_invalid(
+                "SPEC_BENCHMARK_REGISTRY_MISSING",
+                path_string,
+                "benchmark registry file is missing",
+                BenchmarkRegistryMeta::default(),
+            ));
         }
         Err(err) => return Err(err.into()),
     };
 
-    let mut registry: BenchmarkLabelRegistry =
-        serde_json::from_str(&content).map_err(|err| SpecError::BenchmarkRegistryInvalid {
-            code: "SPEC_BENCHMARK_REGISTRY_MALFORMED".to_string(),
-            path: path_string.clone(),
-            message: err.to_string(),
-            benchmark_id: None,
-            case_id: None,
-            carrier_id: None,
-            molecule_id: None,
-            value: None,
-        })?;
+    let mut registry: BenchmarkLabelRegistry = serde_json::from_str(&content).map_err(|err| {
+        benchmark_registry_invalid(
+            "SPEC_BENCHMARK_REGISTRY_MALFORMED",
+            path_string.clone(),
+            err.to_string(),
+            BenchmarkRegistryMeta::default(),
+        )
+    })?;
 
     if registry.schema_version != BENCHMARK_LABELS_SCHEMA_VERSION {
-        return Err(SpecError::BenchmarkRegistryInvalid {
-            code: "SPEC_BENCHMARK_REGISTRY_SCHEMA_VERSION".to_string(),
-            path: path_string,
-            message: format!(
+        return Err(benchmark_registry_invalid(
+            "SPEC_BENCHMARK_REGISTRY_SCHEMA_VERSION",
+            path_string,
+            format!(
                 "unsupported benchmark registry schema_version {}; expected {}",
                 registry.schema_version, BENCHMARK_LABELS_SCHEMA_VERSION
             ),
-            benchmark_id: None,
-            case_id: None,
-            carrier_id: None,
-            molecule_id: None,
-            value: Some(registry.schema_version.to_string()),
-        });
+            BenchmarkRegistryMeta {
+                value: Some(registry.schema_version.to_string()),
+                ..Default::default()
+            },
+        ));
     }
 
     validate_registry(path, &registry)?;
@@ -490,16 +509,16 @@ pub fn benchmark_path_scope(
 
 pub fn benchmark_root_path(repo_root: &Path, benchmark: &BenchmarkLabel) -> Result<PathBuf> {
     let relative = normalized_relative_path(&benchmark.root).map_err(|message| {
-        SpecError::BenchmarkRegistryInvalid {
-            code: "SPEC_BENCHMARK_ROOT_INVALID".to_string(),
-            path: benchmark.root.clone(),
+        benchmark_registry_invalid(
+            "SPEC_BENCHMARK_ROOT_INVALID",
+            benchmark.root.clone(),
             message,
-            benchmark_id: Some(benchmark.id.clone()),
-            case_id: None,
-            carrier_id: None,
-            molecule_id: None,
-            value: Some(benchmark.root.clone()),
-        }
+            BenchmarkRegistryMeta {
+                benchmark_id: Some(benchmark.id.clone()),
+                value: Some(benchmark.root.clone()),
+                ..Default::default()
+            },
+        )
     })?;
     Ok(repo_root.join(relative))
 }
@@ -575,16 +594,16 @@ fn validate_registry(path: &Path, registry: &BenchmarkLabelRegistry) -> Result<(
 
     for benchmark in &registry.benchmarks {
         if !benchmark_ids.insert(benchmark.id.clone()) {
-            return Err(SpecError::BenchmarkRegistryInvalid {
-                code: "SPEC_BENCHMARK_DUPLICATE_ID".to_string(),
-                path: path_string.clone(),
-                message: format!("duplicate benchmark id '{}'", benchmark.id),
-                benchmark_id: Some(benchmark.id.clone()),
-                case_id: None,
-                carrier_id: None,
-                molecule_id: None,
-                value: Some(benchmark.id.clone()),
-            });
+            return Err(benchmark_registry_invalid(
+                "SPEC_BENCHMARK_DUPLICATE_ID",
+                path_string.clone(),
+                format!("duplicate benchmark id '{}'", benchmark.id),
+                BenchmarkRegistryMeta {
+                    benchmark_id: Some(benchmark.id.clone()),
+                    value: Some(benchmark.id.clone()),
+                    ..Default::default()
+                },
+            ));
         }
 
         match (&benchmark.id[..], benchmark.kind) {
@@ -592,33 +611,30 @@ fn validate_registry(path: &Path, registry: &BenchmarkLabelRegistry) -> Result<(
             | ("BENCH-SERVICE", BenchmarkKind::Positive)
             | ("BENCH-CROSSLIB", BenchmarkKind::CompanionNegativeProof) => {}
             ("BENCH-ECOM", other) | ("BENCH-SERVICE", other) => {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_KIND_MISMATCH".to_string(),
-                    path: path_string.clone(),
-                    message: format!(
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_KIND_MISMATCH",
+                    path_string.clone(),
+                    format!(
                         "benchmark '{}' must use kind 'positive', got '{}'",
                         benchmark.id,
                         serde_json::to_string(&other).unwrap_or_else(|_| "\"unknown\"".to_string())
                     ),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: None,
-                    carrier_id: None,
-                    molecule_id: None,
-                    value: None,
-                });
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
             ("BENCH-CROSSLIB", _) => {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_KIND_MISMATCH".to_string(),
-                    path: path_string.clone(),
-                    message: "benchmark 'BENCH-CROSSLIB' must use kind 'companion_negative_proof'"
-                        .to_string(),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: None,
-                    carrier_id: None,
-                    molecule_id: None,
-                    value: None,
-                });
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_KIND_MISMATCH",
+                    path_string.clone(),
+                    "benchmark 'BENCH-CROSSLIB' must use kind 'companion_negative_proof'",
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
             _ => {}
         }
@@ -626,32 +642,31 @@ fn validate_registry(path: &Path, registry: &BenchmarkLabelRegistry) -> Result<(
         if matches!(benchmark.lifecycle, BenchmarkLifecycle::Reserved)
             && !benchmark.cases.is_empty()
         {
-            return Err(SpecError::BenchmarkRegistryInvalid {
-                code: "SPEC_BENCHMARK_RESERVED_HAS_CASES".to_string(),
-                path: path_string.clone(),
-                message: format!(
+            return Err(benchmark_registry_invalid(
+                "SPEC_BENCHMARK_RESERVED_HAS_CASES",
+                path_string.clone(),
+                format!(
                     "reserved benchmark '{}' must not declare cases",
                     benchmark.id
                 ),
-                benchmark_id: Some(benchmark.id.clone()),
-                case_id: None,
-                carrier_id: None,
-                molecule_id: None,
-                value: None,
-            });
+                BenchmarkRegistryMeta {
+                    benchmark_id: Some(benchmark.id.clone()),
+                    ..Default::default()
+                },
+            ));
         }
 
         let normalized_root = normalized_relative_path(&benchmark.root).map_err(|message| {
-            SpecError::BenchmarkRegistryInvalid {
-                code: "SPEC_BENCHMARK_ROOT_INVALID".to_string(),
-                path: path_string.clone(),
+            benchmark_registry_invalid(
+                "SPEC_BENCHMARK_ROOT_INVALID",
+                path_string.clone(),
                 message,
-                benchmark_id: Some(benchmark.id.clone()),
-                case_id: None,
-                carrier_id: None,
-                molecule_id: None,
-                value: Some(benchmark.root.clone()),
-            }
+                BenchmarkRegistryMeta {
+                    benchmark_id: Some(benchmark.id.clone()),
+                    value: Some(benchmark.root.clone()),
+                    ..Default::default()
+                },
+            )
         })?;
         let root_string = normalized_root.to_string_lossy().replace('\\', "/");
 
@@ -659,79 +674,87 @@ fn validate_registry(path: &Path, registry: &BenchmarkLabelRegistry) -> Result<(
         let mut case_carriers = BTreeSet::new();
         for case in &benchmark.cases {
             if !case_ids.insert(case.case_id.clone()) {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_DUPLICATE_CASE_ID".to_string(),
-                    path: path_string.clone(),
-                    message: format!(
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_DUPLICATE_CASE_ID",
+                    path_string.clone(),
+                    format!(
                         "duplicate case id '{}' in benchmark '{}'",
                         case.case_id, benchmark.id
                     ),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: Some(case.case_id.clone()),
-                    carrier_id: Some(case.carrier_id.clone()),
-                    molecule_id: None,
-                    value: Some(case.case_id.clone()),
-                });
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        case_id: Some(case.case_id.clone()),
+                        carrier_id: Some(case.carrier_id.clone()),
+                        value: Some(case.case_id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
             if !case_carriers.insert(case.carrier_id.clone()) {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_DUPLICATE_CARRIER".to_string(),
-                    path: path_string.clone(),
-                    message: format!(
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_DUPLICATE_CARRIER",
+                    path_string.clone(),
+                    format!(
                         "carrier '{}' is duplicated within benchmark '{}'",
                         case.carrier_id, benchmark.id
                     ),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: Some(case.case_id.clone()),
-                    carrier_id: Some(case.carrier_id.clone()),
-                    molecule_id: None,
-                    value: Some(case.carrier_id.clone()),
-                });
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        case_id: Some(case.case_id.clone()),
+                        carrier_id: Some(case.carrier_id.clone()),
+                        value: Some(case.carrier_id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
             if !matches!(case.carrier_kind, BenchmarkCarrierKind::Unit) {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_CARRIER_KIND_UNSUPPORTED".to_string(),
-                    path: path_string.clone(),
-                    message: "I2 benchmark cases may contain only unit carriers".to_string(),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: Some(case.case_id.clone()),
-                    carrier_id: Some(case.carrier_id.clone()),
-                    molecule_id: None,
-                    value: None,
-                });
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_CARRIER_KIND_UNSUPPORTED",
+                    path_string.clone(),
+                    "I2 benchmark cases may contain only unit carriers",
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        case_id: Some(case.case_id.clone()),
+                        carrier_id: Some(case.carrier_id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
             if !carrier_is_under_root(&root_string, &case.carrier_id) {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_CASE_OUTSIDE_ROOT".to_string(),
-                    path: path_string.clone(),
-                    message: format!(
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_CASE_OUTSIDE_ROOT",
+                    path_string.clone(),
+                    format!(
                         "carrier '{}' is outside benchmark root '{}'",
                         case.carrier_id, benchmark.root
                     ),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: Some(case.case_id.clone()),
-                    carrier_id: Some(case.carrier_id.clone()),
-                    molecule_id: None,
-                    value: Some(case.carrier_id.clone()),
-                });
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        case_id: Some(case.case_id.clone()),
+                        carrier_id: Some(case.carrier_id.clone()),
+                        value: Some(case.carrier_id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
         }
 
         for molecule_id in &benchmark.required_molecule_ids {
             if !carrier_is_under_root(&root_string, molecule_id) {
-                return Err(SpecError::BenchmarkRegistryInvalid {
-                    code: "SPEC_BENCHMARK_REQUIRED_MOLECULE_OUTSIDE_ROOT".to_string(),
-                    path: path_string.clone(),
-                    message: format!(
+                return Err(benchmark_registry_invalid(
+                    "SPEC_BENCHMARK_REQUIRED_MOLECULE_OUTSIDE_ROOT",
+                    path_string.clone(),
+                    format!(
                         "required molecule '{}' is outside benchmark root '{}'",
                         molecule_id, benchmark.root
                     ),
-                    benchmark_id: Some(benchmark.id.clone()),
-                    case_id: None,
-                    carrier_id: None,
-                    molecule_id: Some(molecule_id.clone()),
-                    value: Some(molecule_id.clone()),
-                });
+                    BenchmarkRegistryMeta {
+                        benchmark_id: Some(benchmark.id.clone()),
+                        molecule_id: Some(molecule_id.clone()),
+                        value: Some(molecule_id.clone()),
+                        ..Default::default()
+                    },
+                ));
             }
         }
     }
@@ -864,7 +887,6 @@ fn build_case_proof_refs(
                 .iter()
                 .any(|cover_id| cover_id == &label.carrier_id)
         })
-        .map(|(molecule_id, proof)| (molecule_id, proof))
         .filter(|(_, proof)| !matches!(proof.status, BenchmarkTruthStatus::Untested))
         .map(|(molecule_id, _)| molecule_evidence_ref(benchmark, molecule_id))
         .collect::<Vec<_>>();
@@ -1266,8 +1288,8 @@ mod tests {
         let (_dir, path) = write_registry(&registry);
         let err = load_labels(&path).unwrap_err();
         match err {
-            SpecError::BenchmarkRegistryInvalid { code, .. } => {
-                assert_eq!(code, "SPEC_BENCHMARK_DUPLICATE_ID");
+            SpecError::BenchmarkRegistryInvalid(details) => {
+                assert_eq!(details.code.as_ref(), "SPEC_BENCHMARK_DUPLICATE_ID");
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -1285,8 +1307,8 @@ mod tests {
         let (_dir, path) = write_registry(&registry);
         let err = load_labels(&path).unwrap_err();
         match err {
-            SpecError::BenchmarkRegistryInvalid { code, .. } => {
-                assert_eq!(code, "SPEC_BENCHMARK_DUPLICATE_CASE_ID");
+            SpecError::BenchmarkRegistryInvalid(details) => {
+                assert_eq!(details.code.as_ref(), "SPEC_BENCHMARK_DUPLICATE_CASE_ID");
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -1304,8 +1326,8 @@ mod tests {
         let (_dir, path) = write_registry(&registry);
         let err = load_labels(&path).unwrap_err();
         match err {
-            SpecError::BenchmarkRegistryInvalid { code, .. } => {
-                assert_eq!(code, "SPEC_BENCHMARK_DUPLICATE_CARRIER");
+            SpecError::BenchmarkRegistryInvalid(details) => {
+                assert_eq!(details.code.as_ref(), "SPEC_BENCHMARK_DUPLICATE_CARRIER");
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -1323,8 +1345,8 @@ mod tests {
         let (_dir, path) = write_registry(&registry);
         let err = load_labels(&path).unwrap_err();
         match err {
-            SpecError::BenchmarkRegistryInvalid { code, .. } => {
-                assert_eq!(code, "SPEC_BENCHMARK_RESERVED_HAS_CASES");
+            SpecError::BenchmarkRegistryInvalid(details) => {
+                assert_eq!(details.code.as_ref(), "SPEC_BENCHMARK_RESERVED_HAS_CASES");
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -1337,8 +1359,8 @@ mod tests {
         let (_dir, path) = write_registry(&registry);
         let err = load_labels(&path).unwrap_err();
         match err {
-            SpecError::BenchmarkRegistryInvalid { code, .. } => {
-                assert_eq!(code, "SPEC_BENCHMARK_CASE_OUTSIDE_ROOT");
+            SpecError::BenchmarkRegistryInvalid(details) => {
+                assert_eq!(details.code.as_ref(), "SPEC_BENCHMARK_CASE_OUTSIDE_ROOT");
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -1353,8 +1375,11 @@ mod tests {
         let (_dir, path) = write_registry(&registry);
         let err = load_labels(&path).unwrap_err();
         match err {
-            SpecError::BenchmarkRegistryInvalid { code, .. } => {
-                assert_eq!(code, "SPEC_BENCHMARK_REQUIRED_MOLECULE_OUTSIDE_ROOT");
+            SpecError::BenchmarkRegistryInvalid(details) => {
+                assert_eq!(
+                    details.code.as_ref(),
+                    "SPEC_BENCHMARK_REQUIRED_MOLECULE_OUTSIDE_ROOT"
+                );
             }
             other => panic!("unexpected error: {other:?}"),
         }

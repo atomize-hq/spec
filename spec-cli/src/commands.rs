@@ -1421,10 +1421,7 @@ fn build_benchmark_projection_request(
     let mut root_case_truths = BTreeMap::new();
     for spec in &validation_specs.root_specs {
         let source_path = Path::new(&spec.source.file_path);
-        let passport = match read_passport(source_path) {
-            Ok(passport) => passport,
-            Err(_) => None,
-        };
+        let passport = read_passport(source_path).unwrap_or_default();
         let projected_truth = project_passport_truth_with_context(
             spec,
             passport.as_ref(),
@@ -1466,10 +1463,8 @@ fn build_benchmark_projection_request(
         let errors = molecule_errors_by_path
             .remove(&test.source.file_path)
             .unwrap_or_default();
-        let evidence = match read_molecule_evidence(Path::new(&test.source.file_path)) {
-            Ok(evidence) => evidence,
-            Err(_) => None,
-        };
+        let evidence =
+            read_molecule_evidence(Path::new(&test.source.file_path)).unwrap_or_default();
         let health = compute_molecule_health_status(&errors, evidence.as_ref(), test, &specs_by_id);
         required_molecule_truths.insert(
             test.test.id.clone(),
@@ -1541,13 +1536,12 @@ fn status_command_for_target(
         }
         Err(err) => return Err(err),
     };
-    let scope_authority = if matches!(format, OutputFormat::Json)
-        && path_is_repo_root_scope(path, &root_context)?
-    {
-        Some("inventory_only".to_string())
-    } else {
-        None
-    };
+    let scope_authority =
+        if matches!(format, OutputFormat::Json) && path_is_repo_root_scope(path, &root_context)? {
+            Some("inventory_only".to_string())
+        } else {
+            None
+        };
     let resolved_scopes = resolve_status_roots(path, &root_context)?;
     let scopes = resolved_scopes.scopes;
 
@@ -2245,10 +2239,7 @@ fn build_full_benchmark_projection_request(
     let mut root_case_truths = BTreeMap::new();
     for spec in &validation_specs.root_specs {
         let source_path = Path::new(&spec.source.file_path);
-        let passport = match read_passport(source_path) {
-            Ok(passport) => passport,
-            Err(_) => None,
-        };
+        let passport = read_passport(source_path).unwrap_or_default();
         let projected_truth = project_passport_truth_with_context(
             spec,
             passport.as_ref(),
@@ -2290,10 +2281,8 @@ fn build_full_benchmark_projection_request(
         let errors = molecule_errors_by_path
             .remove(&test.source.file_path)
             .unwrap_or_default();
-        let evidence = match read_molecule_evidence(Path::new(&test.source.file_path)) {
-            Ok(evidence) => evidence,
-            Err(_) => None,
-        };
+        let evidence =
+            read_molecule_evidence(Path::new(&test.source.file_path)).unwrap_or_default();
         let health = compute_molecule_health_status(&errors, evidence.as_ref(), test, &specs_by_id);
         required_molecule_truths.insert(
             test.test.id.clone(),
@@ -5814,7 +5803,7 @@ fn spec_error_code(err: &spec_core::SpecError) -> &'static str {
         spec_core::SpecError::MoleculeEvidenceMalformed { .. } => {
             "SPEC_MOLECULE_EVIDENCE_MALFORMED"
         }
-        spec_core::SpecError::BenchmarkRegistryInvalid { .. } => "SPEC_BENCHMARK_REGISTRY_INVALID",
+        spec_core::SpecError::BenchmarkRegistryInvalid(_) => "SPEC_BENCHMARK_REGISTRY_INVALID",
     }
 }
 
@@ -5823,7 +5812,7 @@ fn spec_error_to_json_entry(
     id_by_path: &HashMap<String, String>,
 ) -> JsonErrorEntry {
     let code = match err {
-        spec_core::SpecError::BenchmarkRegistryInvalid { code, .. } => code.clone(),
+        spec_core::SpecError::BenchmarkRegistryInvalid(details) => details.code.to_string(),
         _ => spec_error_code(err).to_string(),
     };
 
@@ -5989,23 +5978,20 @@ fn spec_error_to_json_entry(
             message: Some(message.clone()),
             ..Default::default()
         },
-        spec_core::SpecError::BenchmarkRegistryInvalid {
-            path,
-            message,
-            benchmark_id,
-            case_id,
-            carrier_id,
-            molecule_id,
-            value,
-            ..
-        } => ErrorFields {
-            path: Some(path.clone()),
-            id: benchmark_id.clone().or_else(|| case_id.clone()),
-            value: value
+        spec_core::SpecError::BenchmarkRegistryInvalid(details) => ErrorFields {
+            path: Some(details.path.to_string()),
+            id: details
+                .benchmark_id
                 .clone()
-                .or_else(|| carrier_id.clone())
-                .or_else(|| molecule_id.clone()),
-            message: Some(message.clone()),
+                .map(String::from)
+                .or_else(|| details.case_id.clone().map(String::from)),
+            value: details
+                .value
+                .clone()
+                .map(String::from)
+                .or_else(|| details.carrier_id.clone().map(String::from))
+                .or_else(|| details.molecule_id.clone().map(String::from)),
+            message: Some(details.message.to_string()),
             ..Default::default()
         },
         spec_core::SpecError::Generator { message } => ErrorFields {
@@ -6212,7 +6198,9 @@ fn error_paths(err: &spec_core::SpecError) -> Vec<String> {
             vec![file1.clone(), file2.clone()]
         }
         spec_core::SpecError::ReservedUnitName { path, .. } => vec![path.clone()],
-        spec_core::SpecError::BenchmarkRegistryInvalid { path, .. } => vec![path.clone()],
+        spec_core::SpecError::BenchmarkRegistryInvalid(details) => {
+            vec![details.path.to_string()]
+        }
     }
 }
 
@@ -6359,7 +6347,7 @@ fn error_key(err: &spec_core::SpecError) -> String {
             format!("{file1} | {file2}")
         }
         spec_core::SpecError::ReservedUnitName { path, .. } => path.clone(),
-        spec_core::SpecError::BenchmarkRegistryInvalid { path, .. } => path.clone(),
+        spec_core::SpecError::BenchmarkRegistryInvalid(details) => details.path.to_string(),
     }
 }
 
