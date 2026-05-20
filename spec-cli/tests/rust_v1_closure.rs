@@ -88,6 +88,246 @@ fn copied_closure_fixture(lane: &str, fixture: &str) -> (TempDir, PathBuf) {
 
 // --- LANE A SECTION START ---
 // Lane A owns only this section.
+fn copied_lane_a_benchmark_fixture() -> (TempDir, PathBuf) {
+    let temp_dir = TempDir::new().unwrap();
+    let fixture_dst = temp_dir.path().join("lane_a_bench_ecom");
+    fs::create_dir_all(fixture_dst.join("benchmarks")).unwrap();
+    fs::write(fixture_dst.join(".git"), "gitdir: .git/modules/lane_a_bench_ecom\n").unwrap();
+    fs::copy(
+        repo_root().join("benchmarks/labels.json"),
+        fixture_dst.join("benchmarks/labels.json"),
+    )
+    .unwrap();
+    copy_dir_all(
+        &repo_root().join("examples/ecommerce"),
+        &fixture_dst.join("examples/ecommerce"),
+    );
+    (temp_dir, fixture_dst)
+}
+
+fn refresh_lane_a_required_benchmark_proofs(fixture_dst: &Path) {
+    for (path, context) in [
+        (
+            "examples/ecommerce/units/pricing/pricing_quote.unit.spec",
+            "pricing_quote unit proof refresh",
+        ),
+        (
+            "examples/ecommerce/units/pricing/discount_strategy.unit.spec",
+            "discount_strategy unit proof refresh",
+        ),
+        (
+            "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec",
+            "discount_strategy_checkout_flow molecule proof refresh",
+        ),
+    ] {
+        let output = run_spec(fixture_dst, &["test", path]);
+        assert_success(&output, context);
+    }
+}
+
+fn benchmark_status_json(fixture_dst: &Path) -> (Output, Value) {
+    let output = run_spec(
+        fixture_dst,
+        &["status", "examples/ecommerce/units", "--format", "json"],
+    );
+    let json = serde_json::from_slice(&output.stdout).unwrap();
+    (output, json)
+}
+
+fn benchmark_export_json(fixture_dst: &Path) -> (Output, Value) {
+    let output = run_spec(fixture_dst, &["export", "examples/ecommerce/units"]);
+    let json = serde_json::from_slice(&output.stdout).unwrap();
+    (output, json)
+}
+
+fn lane_a_benchmark<'a>(status_json: &'a Value, id: &str) -> &'a Value {
+    status_json["benchmarks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|benchmark| benchmark["benchmark_id"] == id)
+        .unwrap()
+}
+
+fn required_molecule_proof<'a>(benchmark_json: &'a Value, molecule_id: &str) -> &'a Value {
+    benchmark_json["required_molecule_proofs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|proof| proof["molecule_id"] == molecule_id)
+        .unwrap()
+}
+
+#[test]
+fn bench_ecom_passes_when_discount_strategy_checkout_flow_is_required_and_fresh() {
+    let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
+    refresh_lane_a_required_benchmark_proofs(&fixture_dst);
+
+    let (status_output, status_json) = benchmark_status_json(&fixture_dst);
+    assert_success(&status_output, "status with required discount strategy checkout flow");
+    let status_benchmark = lane_a_benchmark(&status_json, "BENCH-ECOM");
+    assert_eq!(status_benchmark["benchmark_status"], "passing");
+    assert_eq!(status_benchmark["gate_status"], "satisfied");
+    assert_eq!(status_benchmark["summary"]["required_molecule_total"], 3);
+    assert_eq!(
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "valid"
+    );
+
+    let (export_output, export_json) = benchmark_export_json(&fixture_dst);
+    assert_success(&export_output, "export with required discount strategy checkout flow");
+    let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
+    assert_eq!(export_benchmark["benchmark_status"], "passing");
+    assert_eq!(export_benchmark["summary"]["required_molecule_total"], 3);
+    assert_eq!(
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "valid"
+    );
+}
+
+#[test]
+fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_missing() {
+    let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
+    refresh_lane_a_required_benchmark_proofs(&fixture_dst);
+    fs::remove_file(
+        fixture_dst.join(
+            "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json",
+        ),
+    )
+    .unwrap();
+
+    let (status_output, status_json) = benchmark_status_json(&fixture_dst);
+    assert_exit_code(
+        &status_output,
+        1,
+        "status with missing required discount strategy checkout flow proof",
+    );
+    let status_benchmark = lane_a_benchmark(&status_json, "BENCH-ECOM");
+    assert_eq!(status_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(status_benchmark["gate_status"], "open");
+    assert_eq!(
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "untested"
+    );
+
+    let (export_output, export_json) = benchmark_export_json(&fixture_dst);
+    assert_success(
+        &export_output,
+        "export with missing required discount strategy checkout flow proof",
+    );
+    let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
+    assert_eq!(export_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "untested"
+    );
+}
+
+#[test]
+fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_stale() {
+    let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
+    refresh_lane_a_required_benchmark_proofs(&fixture_dst);
+
+    let molecule_path =
+        fixture_dst.join("examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec");
+    let source = fs::read_to_string(&molecule_path).unwrap();
+    fs::write(
+        &molecule_path,
+        source.replace(
+            "Prove that the sum seam stays aligned with the pricing quote and tax flow.",
+            "Prove that the sum seam stays aligned with the pricing quote and tax flow after a fixture-only authored revision.",
+        ),
+    )
+    .unwrap();
+
+    let (status_output, status_json) = benchmark_status_json(&fixture_dst);
+    assert_exit_code(
+        &status_output,
+        1,
+        "status with stale required discount strategy checkout flow proof",
+    );
+    let status_benchmark = lane_a_benchmark(&status_json, "BENCH-ECOM");
+    assert_eq!(status_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(status_benchmark["gate_status"], "open");
+    assert_eq!(
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "stale"
+    );
+
+    let (export_output, export_json) = benchmark_export_json(&fixture_dst);
+    assert_success(
+        &export_output,
+        "export with stale required discount strategy checkout flow proof",
+    );
+    let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
+    assert_eq!(export_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "stale"
+    );
+}
+
+#[test]
+fn bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_failing() {
+    let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
+    refresh_lane_a_required_benchmark_proofs(&fixture_dst);
+
+    let molecule_path =
+        fixture_dst.join("examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec");
+    let source = fs::read_to_string(&molecule_path).unwrap();
+    fs::write(
+        &molecule_path,
+        source.replace(
+            "        assert!(fixed_taxed > fixed_discounted);\n",
+            "        assert_eq!(fixed_taxed, Decimal::ZERO);\n",
+        ),
+    )
+    .unwrap();
+
+    let failing_test_output = run_spec(
+        &fixture_dst,
+        &["test", "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec"],
+    );
+    assert_exit_code(
+        &failing_test_output,
+        1,
+        "failing discount strategy checkout flow proof refresh",
+    );
+
+    let (status_output, status_json) = benchmark_status_json(&fixture_dst);
+    assert_exit_code(
+        &status_output,
+        1,
+        "status with failing required discount strategy checkout flow proof",
+    );
+    let status_benchmark = lane_a_benchmark(&status_json, "BENCH-ECOM");
+    assert_eq!(status_benchmark["benchmark_status"], "failing");
+    assert_eq!(status_benchmark["gate_status"], "open");
+    assert_eq!(
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "failing"
+    );
+
+    let (export_output, export_json) = benchmark_export_json(&fixture_dst);
+    assert_success(
+        &export_output,
+        "export with failing required discount strategy checkout flow proof",
+    );
+    let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
+    assert_eq!(export_benchmark["benchmark_status"], "failing");
+    assert_eq!(
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
+            ["status"],
+        "failing"
+    );
+}
 // --- LANE A SECTION END ---
 
 // --- LANE B SECTION START ---
