@@ -100,8 +100,8 @@
       "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(725, 4)).total() == rust_decimal::Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-05-20T19:47:22Z",
-  "source_file": "examples/ecommerce/units/pricing/pricing_quote.unit.spec",
+  "generated_at": "2026-05-20T21:35:15Z",
+  "source_file": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-a/examples/ecommerce/units/pricing/pricing_quote.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -114,9 +114,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-05-11T19:48:16Z",
+    "observed_at": "2026-05-20T21:35:18Z",
     "provenance": {
-      "git_commit_sha": "4592dee4c57a65a877668811dfbebfbcedb8103f"
+      "git_commit_sha": "120b2dfbe3cb64bee44a88c57fa392ce7e37b91a"
     }
   },
   "freshness_anchor": {
@@ -143,9 +143,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-11T19:48:16Z",
+        "observed_at": "2026-05-20T21:35:18Z",
         "provenance": {
-          "git_commit_sha": "4592dee4c57a65a877668811dfbebfbcedb8103f"
+          "git_commit_sha": "120b2dfbe3cb64bee44a88c57fa392ce7e37b91a"
         }
       },
       "freshness_anchor": {
