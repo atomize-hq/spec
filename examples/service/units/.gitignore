@@ -1,0 +1,5 @@
+**/*.spec.passport.json
+**/*.test.evidence.json
+!billing/checkout_success_flow.test.evidence.json
+!billing/checkout_declined_discount_flow.test.evidence.json
+!billing/discount_strategy_quote_flow.test.evidence.json

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "billing/checkout_success_flow",
+  "source_file": "examples/service/units/billing/checkout_success_flow.test.spec",
+  "covers": [
+    "billing/apply_membership_discount",
+    "billing/apply_regional_fee",
+    "billing/checkout_net_total",
+    "billing/pricing_quote"
+  ],
+  "status": "pass",
+  "observed_at": "2026-05-21T16:55:20Z",
+  "test_body_hash": "sha256:95b181226d043260963e1be65446709c3bfdcdb296c532635a8254fc339b56b1",
+  "covered_unit_contract_hashes": {
+    "billing/apply_membership_discount": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb",
+    "billing/apply_regional_fee": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df",
+    "billing/checkout_net_total": "sha256:dce88e797aec53a663cd7d46bfbf44017feca6005a4ca77feec99fa8f9490c2d",
+    "billing/pricing_quote": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2"
+  },
+  "covered_unit_freshness": {
+    "billing/apply_membership_discount": {
+      "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527"
+    },
+    "billing/apply_regional_fee": {
+      "authored_truth_digest": "sha256:90d784f0777d66d897a6b748605f8871b6b2b42855432ce35eb0163acc55c77f"
+    },
+    "billing/checkout_net_total": {
+      "authored_truth_digest": "sha256:97edb97e2427faf25c10d6bda90d800a25d0aec1a7bc1e672ef4bf79f1f439e6"
+    },
+    "billing/pricing_quote": {
+      "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+      "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f"
+    }
+  },
+  "provenance": {
+    "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+  }
+}

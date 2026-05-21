@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "billing/checkout_declined_discount_flow",
+  "source_file": "examples/service/units/billing/checkout_declined_discount_flow.test.spec",
+  "covers": [
+    "billing/checkout_net_total_guarded_fee",
+    "billing/discount_strategy",
+    "billing/pricing_quote"
+  ],
+  "status": "pass",
+  "observed_at": "2026-05-21T16:55:23Z",
+  "test_body_hash": "sha256:dc0560fc3f71213cf2382d60af8bb8091a4bb72e5715006ea9965ca183769b1b",
+  "covered_unit_contract_hashes": {
+    "billing/checkout_net_total_guarded_fee": "sha256:dce88e797aec53a663cd7d46bfbf44017feca6005a4ca77feec99fa8f9490c2d",
+    "billing/discount_strategy": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+    "billing/pricing_quote": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2"
+  },
+  "covered_unit_freshness": {
+    "billing/checkout_net_total_guarded_fee": {
+      "authored_truth_digest": "sha256:22eee55b36620beec113ed5f3a9388342a51a3020bd728d242b8ea1d1c18318f"
+    },
+    "billing/discount_strategy": {
+      "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+      "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e"
+    },
+    "billing/pricing_quote": {
+      "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+      "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f"
+    }
+  },
+  "provenance": {
+    "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+  }
+}
