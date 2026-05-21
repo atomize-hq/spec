@@ -54,7 +54,7 @@ Owns:
 - benchmark roster and benchmark roles
 - writer-versus-reader boundaries
 - readability as an observation surface
-- `BENCH-SERVICE` as a required visible reserved benchmark
+- `BENCH-SERVICE` as the required service benchmark that stays within the frozen Rust V1 support boundary
 
 ### M68: Mechanics-Landing Implementation Contract
 
@@ -83,7 +83,7 @@ Use this routing rule before editing or extending any artifact in the stack:
 
 The current ladder is:
 
-- `M65-M68 -> I3 -> I3.5 -> I4`
+- `M65-M68 -> I3 -> I3.5 -> I4 -> I6`
 
 ### I3: Benchmark Mechanics Baseline
 
@@ -141,6 +141,23 @@ Scope:
 Primary outcome:
 
 - the I3.5 command wall becomes difficult to regress accidentally
+
+### I6: Rust V1 Service Benchmark Activation
+
+Goal:
+
+- activate `BENCH-SERVICE` as a real single-library proof wall without widening M66 support
+
+Frozen outcomes:
+
+- `examples/service/units` is the benchmark root for the service activation slice
+- `BENCH-SERVICE` stays frozen to the six authored service units and three required molecule proofs
+- service-root `status` and `export` become proof-authoritative alongside the existing ecommerce wall
+- `BENCH-SERVICE` closeout includes a current readability review and a stable committed snapshot
+
+Primary outcome:
+
+- the service benchmark is now a shipped, benchmark-root Rust V1 proof surface instead of a reserved placeholder
 
 ## Repo Note
 
