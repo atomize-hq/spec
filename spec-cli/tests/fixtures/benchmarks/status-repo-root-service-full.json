@@ -959,7 +959,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "fresh",
+            "authored_truth_status": "unknown",
             "backend_execution_status": "unknown"
           }
         },
@@ -970,7 +970,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "fresh",
+            "authored_truth_status": "unknown",
             "backend_execution_status": "unknown"
           }
         },
@@ -981,7 +981,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "fresh",
+            "authored_truth_status": "unknown",
             "backend_execution_status": "unknown"
           }
         },
@@ -992,7 +992,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "fresh",
+            "authored_truth_status": "unknown",
             "backend_execution_status": "unknown"
           }
         }
@@ -1899,7 +1899,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "fresh",
+        "authored_truth_status": "unknown",
         "backend_execution_status": "unknown"
       }
     },
@@ -1910,7 +1910,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "fresh",
+        "authored_truth_status": "unknown",
         "backend_execution_status": "unknown"
       }
     },
@@ -1921,7 +1921,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "fresh",
+        "authored_truth_status": "unknown",
         "backend_execution_status": "unknown"
       }
     },
@@ -1932,7 +1932,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "fresh",
+        "authored_truth_status": "unknown",
         "backend_execution_status": "unknown"
       }
     }

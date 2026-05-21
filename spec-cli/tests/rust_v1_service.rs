@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::TempDir;
@@ -11,27 +12,44 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn copy_dir_all(src: &Path, dst: &Path) {
-    fs::create_dir_all(dst).unwrap();
+fn copy_git_tracked_dir_from_repo(repo: &Path, src: &Path, dst: &Path) -> io::Result<()> {
+    let relative_src = src
+        .strip_prefix(repo)
+        .unwrap_or_else(|_| panic!("{src:?} should live under repo root {repo:?}"));
+    let output = Command::new("git")
+        .current_dir(repo)
+        .args(["ls-files", "--", &relative_src.to_string_lossy()])
+        .output()?;
 
-    for entry in fs::read_dir(src).unwrap() {
-        let entry = entry.unwrap();
-        let entry_path = entry.path();
-        let file_name = entry.file_name();
-        if file_name
-            .to_str()
-            .is_some_and(|name| matches!(name, "target" | ".git"))
-        {
-            continue;
-        }
-        let dst_path = dst.join(entry.file_name());
+    assert!(
+        output.status.success(),
+        "git ls-files failed for {}.\nstdout:\n{}\nstderr:\n{}",
+        relative_src.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
-        if entry.file_type().unwrap().is_dir() {
-            copy_dir_all(&entry_path, &dst_path);
-        } else {
-            fs::copy(&entry_path, &dst_path).unwrap();
+    let tracked_files = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !tracked_files.trim().is_empty(),
+        "git ls-files returned no tracked files under {}",
+        relative_src.display()
+    );
+
+    fs::create_dir_all(dst)?;
+    for tracked_path in tracked_files.lines().filter(|line| !line.is_empty()) {
+        let tracked_path = Path::new(tracked_path);
+        let suffix = tracked_path
+            .strip_prefix(relative_src)
+            .unwrap_or_else(|_| panic!("{tracked_path:?} was not nested under {relative_src:?}"));
+        let destination = dst.join(suffix);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
         }
+        fs::copy(repo.join(tracked_path), destination)?;
     }
+
+    Ok(())
 }
 
 fn run_spec(cwd: &Path, args: &[&str]) -> Output {
@@ -175,32 +193,41 @@ fn copy_service_benchmark_repo() -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().unwrap();
     let repo_dir = temp_dir.path().join("service-benchmark-repo");
     let examples_dir = repo_dir.join("examples");
+    let root = repo_root();
 
     fs::create_dir_all(&examples_dir).unwrap();
-    copy_dir_all(
-        &repo_root().join("benchmarks"),
-        &repo_dir.join("benchmarks"),
-    );
-    copy_dir_all(
-        &repo_root().join("examples/ecommerce"),
+    copy_git_tracked_dir_from_repo(&root, &root.join("benchmarks"), &repo_dir.join("benchmarks"))
+        .expect("failed to copy tracked benchmark fixture inputs");
+    copy_git_tracked_dir_from_repo(
+        &root,
+        &root.join("examples/ecommerce"),
         &examples_dir.join("ecommerce"),
-    );
-    copy_dir_all(
-        &repo_root().join("examples/crosslib-app"),
+    )
+    .expect("failed to copy tracked ecommerce benchmark fixture");
+    copy_git_tracked_dir_from_repo(
+        &root,
+        &root.join("examples/crosslib-app"),
         &examples_dir.join("crosslib-app"),
-    );
-    copy_dir_all(
-        &repo_root().join("examples/shared-crate"),
+    )
+    .expect("failed to copy tracked cross-library benchmark fixture");
+    copy_git_tracked_dir_from_repo(
+        &root,
+        &root.join("examples/shared-crate"),
         &examples_dir.join("shared-crate"),
-    );
-    copy_dir_all(
-        &repo_root().join("examples/shared-spec"),
+    )
+    .expect("failed to copy tracked shared crate benchmark fixture");
+    copy_git_tracked_dir_from_repo(
+        &root,
+        &root.join("examples/shared-spec"),
         &examples_dir.join("shared-spec"),
-    );
-    copy_dir_all(
-        &repo_root().join("examples/service"),
+    )
+    .expect("failed to copy tracked shared spec benchmark fixture");
+    copy_git_tracked_dir_from_repo(
+        &root,
+        &root.join("examples/service"),
         &examples_dir.join("service"),
-    );
+    )
+    .expect("failed to copy tracked service benchmark fixture");
     init_git_repo(&repo_dir);
 
     (temp_dir, repo_dir)
