@@ -19,6 +19,13 @@ fn copy_dir_all(src: &Path, dst: &Path) {
     for entry in fs::read_dir(src).unwrap() {
         let entry = entry.unwrap();
         let entry_path = entry.path();
+        let file_name = entry.file_name();
+        if file_name
+            .to_str()
+            .is_some_and(|name| matches!(name, "target" | ".git"))
+        {
+            continue;
+        }
         let dst_path = dst.join(entry.file_name());
 
         if entry.file_type().unwrap().is_dir() {

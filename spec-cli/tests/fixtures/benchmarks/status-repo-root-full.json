@@ -998,6 +998,1228 @@
         }
       ],
       "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/aligned",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/drift",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/under_specified",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures/unsupported_near_miss",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount_control_flow_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/aligned",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.helper.identity_passthrough.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Round monetary values (placeholder for compilation proof)."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "1 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function round with 1 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/apply_tax_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_tax_aligned with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/drift",
+      "units": [
+        {
+          "id": "pricing/apply_tax_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/under_specified",
+      "units": [
+        {
+          "id": "pricing/apply_tax_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures/unsupported_near_miss",
+      "units": [
+        {
+          "id": "pricing/apply_tax_control_flow_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.helper.identity_passthrough.v1/fixtures/aligned",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "passthrough/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.helper.identity_passthrough.v1/fixtures/drift",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "semantic_drift/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.helper.identity_passthrough.v1/fixtures/under_specified",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "vague/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.helper.identity_passthrough.v1/fixtures/unsupported_near_miss",
+      "units": [
+        {
+          "id": "control_flow/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/aligned",
+      "units": [
+        {
+          "id": "pricing/base_nested_chain3_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_chain3_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_nested_chain3_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_discount_leaf_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/drift",
+      "units": [
+        {
+          "id": "pricing/checkout_chain3_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_discount_leaf_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/under_specified",
+      "units": [
+        {
+          "id": "pricing/checkout_chain3_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_discount_leaf_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.chain3.v1/fixtures/unsupported_near_miss",
+      "units": [
+        {
+          "id": "pricing/checkout_chain3_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_discount_leaf_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures/aligned",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures/drift",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures/under_specified",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures/unsupported_near_miss",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.v1/fixtures/aligned",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_aligned",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.v1/fixtures/drift",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.v1/fixtures/under_specified",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "semantic-families/function.wrapper.pipeline.v1/fixtures/unsupported_near_miss",
+      "units": [
+        {
+          "id": "pricing/pricing_discount_leaf_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_tax_leaf_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "spec-cli/tests/fixtures/m19/semantic_falsification_pack",
+      "units": [
+        {
+          "id": "billing/apply_membership_discount",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_membership_discount_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_membership_discount_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_membership_discount_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_regional_fee",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_regional_fee_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_regional_fee_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/apply_regional_fee_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/checkout_net_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/checkout_net_total_drift",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/checkout_net_total_under_specified",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "billing/checkout_net_total_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "spec-cli/tests/fixtures/m20/unsupported_truth_pack",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount_control_flow",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_tax_control_flow",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_total_bad_body_shape",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_total_bad_dep_topology",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "spec-cli/tests/fixtures/typescript_local_supported_graph",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/display_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
     }
   ],
   "units": [
@@ -1927,6 +3149,1066 @@
     },
     {
       "id": "pricing/calculate_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount_control_flow_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.helper.identity_passthrough.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Round monetary values (placeholder for compilation proof)."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "1 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function round with 1 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_tax_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_tax_aligned with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_tax_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax_control_flow_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "passthrough/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "semantic_drift/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "vague/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "control_flow/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/base_nested_chain3_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_chain3_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_nested_chain3_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_chain3_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_chain3_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_chain3_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_aligned",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_discount_leaf_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_tax_leaf_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_membership_discount",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_membership_discount_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_membership_discount_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_membership_discount_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_regional_fee",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_regional_fee_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_regional_fee_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/apply_regional_fee_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/checkout_net_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/checkout_net_total_drift",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/checkout_net_total_under_specified",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "billing/checkout_net_total_unsupported_near_miss",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount_control_flow",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax_control_flow",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_total_bad_body_shape",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_total_bad_dep_topology",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/display_total",
       "status": "untested",
       "reason": "no evidence",
       "errors": [],

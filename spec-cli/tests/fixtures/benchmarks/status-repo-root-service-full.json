@@ -1,0 +1,2367 @@
+{
+  "schema_version": 4,
+  "scope_authority": "inventory_only",
+  "roots": [
+    {
+      "root": "examples/crosslib-app",
+      "units": [
+        {
+          "id": "pricing/apply_discount",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Apply a discount while importing the shared round helper from a sibling spec library."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_discount with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Apply tax while importing the shared round helper from a sibling spec library."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_tax with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_nested_chain3",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "under_specified",
+            "compatibility_key": "unsupported.function.v1",
+            "support_status": "unsupported",
+            "unsupported_reason_codes": [
+              "unsupported_dep_topology"
+            ],
+            "rewrite_hints": [
+              "Use zero or one helper dep for arithmetic leaves, exactly two supported dep callables for wrapper pipelines, or exactly three supported function dep callables for chain3 pipelines."
+            ],
+            "reason_codes": [
+              "unsupported_surface"
+            ],
+            "summary": "declared function deps fall outside the supported reviewer topology",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "5 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "deps",
+                "summary": "3 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function checkout_nested_chain3 with 5 input(s)"
+              }
+            ],
+            "evaluator_scope": "unsupported_surface"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "examples/ecommerce",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.helper.identity_passthrough.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Round monetary values (placeholder for compilation proof)."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "1 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function round with 1 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Apply a discount to a subtotal while keeping the result nonnegative."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "2 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_discount with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_tax with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.wrapper.pipeline.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Combine discount and tax so a checkout flow can produce the final price."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "3 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "2 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function calculate_total with 3 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/calculate_total_guarded_tax",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "3 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "2 declared dep(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function calculate_total_guarded_tax with 3 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/discount_strategy",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "backend_execution_digest": "sha256:06039f3e8df3a5ebeb557763c70a82a999f315e054df964a4af0bf7fd531f2e1",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "fresh"
+          },
+          "markers": [
+            {
+              "id": "backend_rust_derives",
+              "path": "backends.rust.derives"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.discount_amount.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.discounted_subtotal.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.percentage_example_holds.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.fixed_amount_example_holds.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.fixed_amount_capped_behavior_holds.lowering.rust.body"
+            }
+          ],
+          "proof_coverage": [
+            {
+              "id": "variant.none",
+              "surfaces": [
+                "atom",
+                "molecule"
+              ]
+            },
+            {
+              "id": "variant.percentage",
+              "surfaces": [
+                "atom",
+                "molecule"
+              ]
+            },
+            {
+              "id": "variant.fixed_amount",
+              "surfaces": [
+                "atom",
+                "molecule"
+              ]
+            },
+            {
+              "id": "behavior.fixed_amount_capped",
+              "surfaces": [
+                "atom",
+                "molecule"
+              ]
+            }
+          ],
+          "escape_hatch_gate": {
+            "status": "closed",
+            "required_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "present_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "missing_surfaces": []
+          },
+          "semantic_review": {
+            "verdict": "backend_only_meaning_preserved",
+            "compatibility_key": "sum.discount_strategy.v1",
+            "reason_codes": [
+              "backend_only_execution_marker",
+              "proof_helper_only_marker"
+            ],
+            "summary": "backend-only execution markers are present without changing authored meaning",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Represent mutually exclusive discount strategies for checkout pricing."
+              },
+              {
+                "path": "sum.variants",
+                "summary": "3 authored variant(s)"
+              },
+              {
+                "path": "methods",
+                "summary": "2 semantic method(s) on pricing/discount_strategy"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "sum",
+                "summary": "projects to Rust enum DiscountStrategy"
+              },
+              {
+                "path": "methods.*.lowering.rust.body",
+                "summary": "2 executable semantic method(s)"
+              },
+              {
+                "path": "backends.rust.derives",
+                "summary": "Rust derives contribute backend-only execution metadata"
+              }
+            ],
+            "evaluator_scope": "supported_sum_surface"
+          }
+        },
+        {
+          "id": "pricing/pricing_quote",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "fresh"
+          },
+          "markers": [
+            {
+              "id": "backend_rust_derives",
+              "path": "backends.rust.derives"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.discounted_subtotal.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.total.lowering.rust.body"
+            }
+          ],
+          "escape_hatch_gate": {
+            "status": "closed",
+            "required_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "present_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "missing_surfaces": []
+          },
+          "semantic_review": {
+            "verdict": "backend_only_meaning_preserved",
+            "compatibility_key": "data.pricing_quote.v1",
+            "reason_codes": [
+              "backend_only_execution_marker"
+            ],
+            "summary": "backend-only execution markers are present without changing authored meaning",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Quote a checkout total from subtotal plus discount and tax rates."
+              },
+              {
+                "path": "data.fields",
+                "summary": "3 authored data field(s)"
+              },
+              {
+                "path": "constructors",
+                "summary": "1 authored constructor(s)"
+              },
+              {
+                "path": "methods",
+                "summary": "2 semantic method(s) on pricing/pricing_quote"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "data",
+                "summary": "projects to Rust struct PricingQuote"
+              },
+              {
+                "path": "constructors",
+                "summary": "1 executable constructor(s)"
+              },
+              {
+                "path": "methods.*.lowering.rust.body",
+                "summary": "2 executable semantic method(s)"
+              },
+              {
+                "path": "backends.rust.derives",
+                "summary": "Rust derives contribute backend-only execution metadata"
+              }
+            ],
+            "evaluator_scope": "supported_data_surface"
+          }
+        }
+      ],
+      "molecule_tests": [
+        {
+          "id": "pricing/checkout_flow",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>"
+        },
+        {
+          "id": "pricing/discount_plus_tax",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>"
+        },
+        {
+          "id": "pricing/discount_strategy_checkout_flow",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>"
+        }
+      ]
+    },
+    {
+      "root": "examples/service",
+      "units": [
+        {
+          "id": "billing/apply_membership_discount",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the subtotal after applying the membership discount rate and clamping at zero."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "2 authored invariant(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_membership_discount with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "billing/apply_regional_fee",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the discounted subtotal after applying the regional fee rate."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_regional_fee with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "billing/checkout_net_total",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.wrapper.pipeline.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the net checkout total after discounting the subtotal and then applying the regional fee."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "3 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "2 declared dep(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function checkout_net_total with 3 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "billing/checkout_net_total_guarded_fee",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Return the net checkout total after discounting the subtotal and applying a nonnegative regional fee only."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "3 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "contract.invariants",
+                "summary": "1 authored invariant(s)"
+              },
+              {
+                "path": "deps",
+                "summary": "2 declared dep(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function checkout_net_total_guarded_fee with 3 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "billing/discount_strategy",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "fresh"
+          },
+          "markers": [
+            {
+              "id": "backend_rust_derives",
+              "path": "backends.rust.derives"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.discount_amount.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.discounted_subtotal.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.declined_example_holds.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.percentage_example_holds.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.fixed_credit_capped_behavior_holds.lowering.rust.body"
+            }
+          ],
+          "escape_hatch_gate": {
+            "status": "closed",
+            "required_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "present_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "missing_surfaces": []
+          }
+        },
+        {
+          "id": "billing/pricing_quote",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "fresh"
+          },
+          "markers": [
+            {
+              "id": "backend_rust_derives",
+              "path": "backends.rust.derives"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.discounted_subtotal.lowering.rust.body"
+            },
+            {
+              "id": "method_lowering_rust_body",
+              "path": "methods.total.lowering.rust.body"
+            }
+          ],
+          "escape_hatch_gate": {
+            "status": "closed",
+            "required_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "present_surfaces": [
+              "atom",
+              "molecule"
+            ],
+            "missing_surfaces": []
+          }
+        }
+      ],
+      "molecule_tests": [
+        {
+          "id": "billing/checkout_declined_discount_flow",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>"
+        },
+        {
+          "id": "billing/checkout_success_flow",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>"
+        },
+        {
+          "id": "billing/discount_strategy_quote_flow",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>"
+        }
+      ]
+    },
+    {
+      "root": "examples/shared-spec",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "valid",
+          "errors": [],
+          "evidence_at": "<normalized>",
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.helper.identity_passthrough.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Round a decimal for reuse by sibling spec libraries."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "1 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function round with 1 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/base_nested_chain3",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    }
+  ],
+  "units": [
+    {
+      "id": "pricing/apply_discount",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Apply a discount while importing the shared round helper from a sibling spec library."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Apply tax while importing the shared round helper from a sibling spec library."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_tax with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_nested_chain3",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "under_specified",
+        "compatibility_key": "unsupported.function.v1",
+        "support_status": "unsupported",
+        "unsupported_reason_codes": [
+          "unsupported_dep_topology"
+        ],
+        "rewrite_hints": [
+          "Use zero or one helper dep for arithmetic leaves, exactly two supported dep callables for wrapper pipelines, or exactly three supported function dep callables for chain3 pipelines."
+        ],
+        "reason_codes": [
+          "unsupported_surface"
+        ],
+        "summary": "declared function deps fall outside the supported reviewer topology",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "5 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "deps",
+            "summary": "3 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_nested_chain3 with 5 input(s)"
+          }
+        ],
+        "evaluator_scope": "unsupported_surface"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.helper.identity_passthrough.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Round monetary values (placeholder for compilation proof)."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "1 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function round with 1 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Apply a discount to a subtotal while keeping the result nonnegative."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "2 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_tax with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Combine discount and tax so a checkout flow can produce the final price."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function calculate_total with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/calculate_total_guarded_tax",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function calculate_total_guarded_tax with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/discount_strategy",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "backend_execution_digest": "sha256:06039f3e8df3a5ebeb557763c70a82a999f315e054df964a4af0bf7fd531f2e1",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      },
+      "markers": [
+        {
+          "id": "backend_rust_derives",
+          "path": "backends.rust.derives"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discount_amount.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discounted_subtotal.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.percentage_example_holds.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.fixed_amount_example_holds.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.fixed_amount_capped_behavior_holds.lowering.rust.body"
+        }
+      ],
+      "proof_coverage": [
+        {
+          "id": "variant.none",
+          "surfaces": [
+            "atom",
+            "molecule"
+          ]
+        },
+        {
+          "id": "variant.percentage",
+          "surfaces": [
+            "atom",
+            "molecule"
+          ]
+        },
+        {
+          "id": "variant.fixed_amount",
+          "surfaces": [
+            "atom",
+            "molecule"
+          ]
+        },
+        {
+          "id": "behavior.fixed_amount_capped",
+          "surfaces": [
+            "atom",
+            "molecule"
+          ]
+        }
+      ],
+      "escape_hatch_gate": {
+        "status": "closed",
+        "required_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "present_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "missing_surfaces": []
+      },
+      "semantic_review": {
+        "verdict": "backend_only_meaning_preserved",
+        "compatibility_key": "sum.discount_strategy.v1",
+        "reason_codes": [
+          "backend_only_execution_marker",
+          "proof_helper_only_marker"
+        ],
+        "summary": "backend-only execution markers are present without changing authored meaning",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Represent mutually exclusive discount strategies for checkout pricing."
+          },
+          {
+            "path": "sum.variants",
+            "summary": "3 authored variant(s)"
+          },
+          {
+            "path": "methods",
+            "summary": "2 semantic method(s) on pricing/discount_strategy"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "sum",
+            "summary": "projects to Rust enum DiscountStrategy"
+          },
+          {
+            "path": "methods.*.lowering.rust.body",
+            "summary": "2 executable semantic method(s)"
+          },
+          {
+            "path": "backends.rust.derives",
+            "summary": "Rust derives contribute backend-only execution metadata"
+          }
+        ],
+        "evaluator_scope": "supported_sum_surface"
+      }
+    },
+    {
+      "id": "pricing/pricing_quote",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "backend_execution_digest": "sha256:c8273f70a404bcaf8efe4b6e20c12ade43c33ce209c23e7192f3c7e2fbfc8205",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      },
+      "markers": [
+        {
+          "id": "backend_rust_derives",
+          "path": "backends.rust.derives"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discounted_subtotal.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.total.lowering.rust.body"
+        }
+      ],
+      "escape_hatch_gate": {
+        "status": "closed",
+        "required_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "present_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "missing_surfaces": []
+      },
+      "semantic_review": {
+        "verdict": "backend_only_meaning_preserved",
+        "compatibility_key": "data.pricing_quote.v1",
+        "reason_codes": [
+          "backend_only_execution_marker"
+        ],
+        "summary": "backend-only execution markers are present without changing authored meaning",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Quote a checkout total from subtotal plus discount and tax rates."
+          },
+          {
+            "path": "data.fields",
+            "summary": "3 authored data field(s)"
+          },
+          {
+            "path": "constructors",
+            "summary": "1 authored constructor(s)"
+          },
+          {
+            "path": "methods",
+            "summary": "2 semantic method(s) on pricing/pricing_quote"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "data",
+            "summary": "projects to Rust struct PricingQuote"
+          },
+          {
+            "path": "constructors",
+            "summary": "1 executable constructor(s)"
+          },
+          {
+            "path": "methods.*.lowering.rust.body",
+            "summary": "2 executable semantic method(s)"
+          },
+          {
+            "path": "backends.rust.derives",
+            "summary": "Rust derives contribute backend-only execution metadata"
+          }
+        ],
+        "evaluator_scope": "supported_data_surface"
+      }
+    },
+    {
+      "id": "billing/apply_membership_discount",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the subtotal after applying the membership discount rate and clamping at zero."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "2 authored invariant(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_membership_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "billing/apply_regional_fee",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the discounted subtotal after applying the regional fee rate."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_regional_fee with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "billing/checkout_net_total",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the net checkout total after discounting the subtotal and then applying the regional fee."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_net_total with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "billing/checkout_net_total_guarded_fee",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the net checkout total after discounting the subtotal and applying a nonnegative regional fee only."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_net_total_guarded_fee with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "billing/discount_strategy",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      },
+      "markers": [
+        {
+          "id": "backend_rust_derives",
+          "path": "backends.rust.derives"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discount_amount.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discounted_subtotal.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.declined_example_holds.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.percentage_example_holds.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.fixed_credit_capped_behavior_holds.lowering.rust.body"
+        }
+      ],
+      "escape_hatch_gate": {
+        "status": "closed",
+        "required_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "present_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "missing_surfaces": []
+      }
+    },
+    {
+      "id": "billing/pricing_quote",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      },
+      "markers": [
+        {
+          "id": "backend_rust_derives",
+          "path": "backends.rust.derives"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discounted_subtotal.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.total.lowering.rust.body"
+        }
+      ],
+      "escape_hatch_gate": {
+        "status": "closed",
+        "required_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "present_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "missing_surfaces": []
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "valid",
+      "errors": [],
+      "evidence_at": "<normalized>",
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.helper.identity_passthrough.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Round a decimal for reuse by sibling spec libraries."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "1 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function round with 1 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/base_nested_chain3",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  ],
+  "benchmarks": [
+    {
+      "benchmark_id": "BENCH-CROSSLIB",
+      "kind": "companion_negative_proof",
+      "lifecycle": "active",
+      "required_for_v1": false,
+      "path_scope": "full",
+      "accounting_status": "valid",
+      "benchmark_status": "passing",
+      "gate_status": "not_applicable",
+      "readability_review_status": "not_applicable",
+      "label_digest": "<normalized>",
+      "projection_digest": "<normalized>",
+      "summary": {
+        "total_cases": 4,
+        "supported_cases": 0,
+        "supported_valid_cases": 0,
+        "positive_credit_cases": 0,
+        "case_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 4
+        },
+        "required_molecule_total": 0,
+        "required_molecule_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 0
+        }
+      },
+      "cases": [
+        {
+          "case_id": "pricing/apply_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_discount",
+          "classification": "companion_negative_proof",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/crosslib-app/units/pricing/apply_discount.spec.passport.json"
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "pricing/apply_tax",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_tax",
+          "classification": "companion_negative_proof",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/crosslib-app/units/pricing/apply_tax.spec.passport.json"
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "pricing/calculate_total",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/calculate_total",
+          "classification": "companion_negative_proof",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/crosslib-app/units/pricing/calculate_total.spec.passport.json"
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "pricing/checkout_nested_chain3",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/checkout_nested_chain3",
+          "classification": "companion_negative_proof",
+          "status": "valid",
+          "semantic_support_status": "unsupported",
+          "proof_refs": {
+            "passport": "examples/crosslib-app/units/pricing/checkout_nested_chain3.spec.passport.json"
+          },
+          "counts_as_supported_positive": false
+        }
+      ],
+      "readability_generated_files": []
+    },
+    {
+      "benchmark_id": "BENCH-ECOM",
+      "kind": "positive",
+      "lifecycle": "active",
+      "required_for_v1": true,
+      "path_scope": "full",
+      "accounting_status": "valid",
+      "benchmark_status": "passing",
+      "gate_status": "satisfied",
+      "readability_review_status": "current",
+      "readability_verdict": {
+        "decision": "approved",
+        "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
+      },
+      "label_digest": "<normalized>",
+      "projection_digest": "<normalized>",
+      "summary": {
+        "total_cases": 7,
+        "supported_cases": 7,
+        "supported_valid_cases": 7,
+        "positive_credit_cases": 7,
+        "case_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 7
+        },
+        "required_molecule_total": 3,
+        "required_molecule_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 3
+        }
+      },
+      "required_molecule_proofs": [
+        {
+          "molecule_id": "pricing/checkout_flow",
+          "status": "valid",
+          "proof_ref": "examples/ecommerce/units/pricing/checkout_flow.test.evidence.json"
+        },
+        {
+          "molecule_id": "pricing/discount_plus_tax",
+          "status": "valid",
+          "proof_ref": "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+        },
+        {
+          "molecule_id": "pricing/discount_strategy_checkout_flow",
+          "status": "valid",
+          "proof_ref": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "money/round",
+          "carrier_kind": "unit",
+          "carrier_id": "money/round",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/money/round.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "pricing/apply_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_discount",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/pricing/apply_discount.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/ecommerce/units/pricing/checkout_flow.test.evidence.json",
+              "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "pricing/apply_tax",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/apply_tax",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/pricing/apply_tax.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json",
+              "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "pricing/calculate_total",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/calculate_total",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/pricing/calculate_total.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/ecommerce/units/pricing/checkout_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "pricing/calculate_total_guarded_tax",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/calculate_total_guarded_tax",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/pricing/calculate_total_guarded_tax.spec.passport.json"
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "pricing/discount_strategy",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/discount_strategy",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/pricing/discount_strategy.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "pricing/pricing_quote",
+          "carrier_kind": "unit",
+          "carrier_id": "pricing/pricing_quote",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/ecommerce/units/pricing/pricing_quote.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/ecommerce/units/pricing/checkout_flow.test.evidence.json",
+              "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        }
+      ],
+      "readability_generated_files": [
+        "examples/ecommerce/src/generated/mod.rs",
+        "examples/ecommerce/src/generated/money/mod.rs",
+        "examples/ecommerce/src/generated/money/round.rs",
+        "examples/ecommerce/src/generated/pricing/apply_discount.rs",
+        "examples/ecommerce/src/generated/pricing/apply_tax.rs",
+        "examples/ecommerce/src/generated/pricing/calculate_total.rs",
+        "examples/ecommerce/src/generated/pricing/calculate_total_guarded_tax.rs",
+        "examples/ecommerce/src/generated/pricing/discount_strategy.rs",
+        "examples/ecommerce/src/generated/pricing/mod.rs",
+        "examples/ecommerce/src/generated/pricing/molecule_tests.rs",
+        "examples/ecommerce/src/generated/pricing/pricing_quote.rs"
+      ]
+    },
+    {
+      "benchmark_id": "BENCH-SERVICE",
+      "kind": "positive",
+      "lifecycle": "active",
+      "required_for_v1": true,
+      "path_scope": "full",
+      "accounting_status": "valid",
+      "benchmark_status": "passing",
+      "gate_status": "satisfied",
+      "readability_review_status": "current",
+      "readability_verdict": {
+        "decision": "approved",
+        "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
+      },
+      "label_digest": "<normalized>",
+      "projection_digest": "<normalized>",
+      "summary": {
+        "total_cases": 6,
+        "supported_cases": 6,
+        "supported_valid_cases": 6,
+        "positive_credit_cases": 6,
+        "case_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 6
+        },
+        "required_molecule_total": 3,
+        "required_molecule_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 3
+        }
+      },
+      "required_molecule_proofs": [
+        {
+          "molecule_id": "billing/checkout_declined_discount_flow",
+          "status": "valid",
+          "proof_ref": "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json"
+        },
+        {
+          "molecule_id": "billing/checkout_success_flow",
+          "status": "valid",
+          "proof_ref": "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+        },
+        {
+          "molecule_id": "billing/discount_strategy_quote_flow",
+          "status": "valid",
+          "proof_ref": "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "billing/apply_membership_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/apply_membership_discount",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/apply_membership_discount.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/apply_regional_fee",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/apply_regional_fee",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/apply_regional_fee.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/checkout_net_total",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/checkout_net_total",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/checkout_net_total.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/checkout_net_total_guarded_fee",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/checkout_net_total_guarded_fee",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/checkout_net_total_guarded_fee.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/discount_strategy",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/discount_strategy",
+          "classification": "supported",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/discount_strategy.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/pricing_quote",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/pricing_quote",
+          "classification": "supported",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/pricing_quote.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json",
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        }
+      ],
+      "readability_generated_files": [
+        "examples/service/src/generated/billing/apply_membership_discount.rs",
+        "examples/service/src/generated/billing/apply_regional_fee.rs",
+        "examples/service/src/generated/billing/checkout_net_total.rs",
+        "examples/service/src/generated/billing/checkout_net_total_guarded_fee.rs",
+        "examples/service/src/generated/billing/discount_strategy.rs",
+        "examples/service/src/generated/billing/mod.rs",
+        "examples/service/src/generated/billing/molecule_tests.rs",
+        "examples/service/src/generated/billing/pricing_quote.rs",
+        "examples/service/src/generated/mod.rs"
+      ]
+    }
+  ]
+}

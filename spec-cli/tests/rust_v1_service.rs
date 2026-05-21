@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -17,6 +17,13 @@ fn copy_dir_all(src: &Path, dst: &Path) {
     for entry in fs::read_dir(src).unwrap() {
         let entry = entry.unwrap();
         let entry_path = entry.path();
+        let file_name = entry.file_name();
+        if file_name
+            .to_str()
+            .is_some_and(|name| matches!(name, "target" | ".git"))
+        {
+            continue;
+        }
         let dst_path = dst.join(entry.file_name());
 
         if entry.file_type().unwrap().is_dir() {
@@ -36,7 +43,11 @@ fn run_spec(cwd: &Path, args: &[&str]) -> Output {
 }
 
 fn run_git(cwd: &Path, args: &[&str]) -> Output {
-    Command::new("git").current_dir(cwd).args(args).output().unwrap()
+    Command::new("git")
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .unwrap()
 }
 
 fn assert_success(output: &Output, context: &str) {
@@ -74,7 +85,10 @@ fn init_git_repo(cwd: &Path) {
         "git config user.name",
     );
     assert_success(&run_git(cwd, &["add", "."]), "git add");
-    assert_success(&run_git(cwd, &["commit", "-m", "test fixture"]), "git commit");
+    assert_success(
+        &run_git(cwd, &["commit", "-m", "test fixture"]),
+        "git commit",
+    );
 }
 
 const NORMALIZED_CONTRACT_VALUE: &str = "<normalized>";
@@ -163,7 +177,10 @@ fn copy_service_benchmark_repo() -> (TempDir, PathBuf) {
     let examples_dir = repo_dir.join("examples");
 
     fs::create_dir_all(&examples_dir).unwrap();
-    copy_dir_all(&repo_root().join("benchmarks"), &repo_dir.join("benchmarks"));
+    copy_dir_all(
+        &repo_root().join("benchmarks"),
+        &repo_dir.join("benchmarks"),
+    );
     copy_dir_all(
         &repo_root().join("examples/ecommerce"),
         &examples_dir.join("ecommerce"),
@@ -217,7 +234,10 @@ fn write_service_readability_review(
 fn rust_v1_service_status_contract_matches_frozen_fixture() {
     let (_temp_dir, repo_dir) = copy_service_benchmark_repo();
 
-    let output = run_spec(&repo_dir, &["status", "examples/service/units", "--format", "json"]);
+    let output = run_spec(
+        &repo_dir,
+        &["status", "examples/service/units", "--format", "json"],
+    );
     assert_success(&output, "service benchmark-root status");
     let json = parse_stdout_json(&output);
     let benchmark = benchmark(&json, "BENCH-SERVICE");
@@ -274,7 +294,12 @@ fn rust_v1_service_namespace_status_contract_matches_frozen_fixture() {
 
     let output = run_spec(
         &repo_dir,
-        &["status", "examples/service/units/billing", "--format", "json"],
+        &[
+            "status",
+            "examples/service/units/billing",
+            "--format",
+            "json",
+        ],
     );
     assert_exit_code(&output, 1, "service namespace status should stay non-green");
     let json = parse_stdout_json(&output);
@@ -353,7 +378,7 @@ fn rust_v1_service_repo_root_inventory_contract_matches_updated_fixture() {
 
     assert_contract_matches_fixture(
         normalize_status_contract_json(json),
-        "status-repo-root-full.json",
+        "status-repo-root-service-full.json",
     );
 }
 
@@ -365,7 +390,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_missing() {
     )
     .unwrap();
 
-    let status_output = run_spec(&repo_dir, &["status", "examples/service/units", "--format", "json"]);
+    let status_output = run_spec(
+        &repo_dir,
+        &["status", "examples/service/units", "--format", "json"],
+    );
     assert_exit_code(
         &status_output,
         1,
@@ -381,7 +409,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_missing() {
     );
 
     let export_output = run_spec(&repo_dir, &["export", "examples/service/units"]);
-    assert_success(&export_output, "service export with missing required molecule proof");
+    assert_success(
+        &export_output,
+        "service export with missing required molecule proof",
+    );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
     assert_eq!(export_benchmark["benchmark_status"], "incomplete");
@@ -407,7 +438,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_stale() {
     )
     .unwrap();
 
-    let status_output = run_spec(&repo_dir, &["status", "examples/service/units", "--format", "json"]);
+    let status_output = run_spec(
+        &repo_dir,
+        &["status", "examples/service/units", "--format", "json"],
+    );
     assert_exit_code(
         &status_output,
         1,
@@ -423,7 +457,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_stale() {
     );
 
     let export_output = run_spec(&repo_dir, &["export", "examples/service/units"]);
-    assert_success(&export_output, "service export with stale required molecule proof");
+    assert_success(
+        &export_output,
+        "service export with stale required molecule proof",
+    );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
     assert_eq!(export_benchmark["benchmark_status"], "incomplete");
@@ -451,7 +488,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_failing() {
 
     let failing_test_output = run_spec(
         &repo_dir,
-        &["test", "examples/service/units/billing/checkout_success_flow.test.spec"],
+        &[
+            "test",
+            "examples/service/units/billing/checkout_success_flow.test.spec",
+        ],
     );
     assert_exit_code(
         &failing_test_output,
@@ -459,7 +499,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_failing() {
         "failing service checkout_success_flow proof refresh",
     );
 
-    let status_output = run_spec(&repo_dir, &["status", "examples/service/units", "--format", "json"]);
+    let status_output = run_spec(
+        &repo_dir,
+        &["status", "examples/service/units", "--format", "json"],
+    );
     assert_exit_code(
         &status_output,
         1,
@@ -475,7 +518,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_failing() {
     );
 
     let export_output = run_spec(&repo_dir, &["export", "examples/service/units"]);
-    assert_success(&export_output, "service export with failing required molecule proof");
+    assert_success(
+        &export_output,
+        "service export with failing required molecule proof",
+    );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
     assert_eq!(export_benchmark["benchmark_status"], "failing");
@@ -489,7 +535,10 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_failing() {
 fn rust_v1_service_readability_review_becomes_stale_when_projection_digest_drifts() {
     let (_temp_dir, repo_dir) = copy_service_benchmark_repo();
 
-    let baseline_output = run_spec(&repo_dir, &["status", "examples/service/units", "--format", "json"]);
+    let baseline_output = run_spec(
+        &repo_dir,
+        &["status", "examples/service/units", "--format", "json"],
+    );
     assert_success(&baseline_output, "service status before readability drift");
     let baseline_json = parse_stdout_json(&baseline_output);
     let baseline_benchmark = benchmark(&baseline_json, "BENCH-SERVICE");
@@ -505,15 +554,24 @@ fn rust_v1_service_readability_review_becomes_stale_when_projection_digest_drift
         &generated_files,
     );
 
-    let status_output = run_spec(&repo_dir, &["status", "examples/service/units", "--format", "json"]);
-    assert_success(&status_output, "service status with stale readability review");
+    let status_output = run_spec(
+        &repo_dir,
+        &["status", "examples/service/units", "--format", "json"],
+    );
+    assert_success(
+        &status_output,
+        "service status with stale readability review",
+    );
     let status_json = parse_stdout_json(&status_output);
     let status_benchmark = benchmark(&status_json, "BENCH-SERVICE");
     assert_eq!(status_benchmark["benchmark_status"], "passing");
     assert_eq!(status_benchmark["readability_review_status"], "stale");
 
     let export_output = run_spec(&repo_dir, &["export", "examples/service/units"]);
-    assert_success(&export_output, "service export with stale readability review");
+    assert_success(
+        &export_output,
+        "service export with stale readability review",
+    );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
     assert_eq!(export_benchmark["benchmark_status"], "passing");
