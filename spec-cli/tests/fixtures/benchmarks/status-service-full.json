@@ -567,7 +567,11 @@
       "accounting_status": "valid",
       "benchmark_status": "passing",
       "gate_status": "satisfied",
-      "readability_review_status": "missing",
+      "readability_review_status": "current",
+      "readability_verdict": {
+        "decision": "approved",
+        "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
+      },
       "label_digest": "<normalized>",
       "projection_digest": "<normalized>",
       "summary": {
