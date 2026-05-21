@@ -8713,7 +8713,7 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
     let output = run_in(temp_dir.path(), &["status", ".", "--format", "json"]);
     assert!(
         !output.status.success(),
-        "repo status should stay non-green when copied roots include an unproven wrapper unit"
+        "repo status should stay non-green when copied roots still include unproven shared library units"
     );
 
     let json = parse_stdout_json(&output);
@@ -8737,9 +8737,9 @@ fn spec_status_repo_root_honors_each_root_workspace_config() {
         "{json}"
     );
     assert_eq!(units[2]["id"], "pricing/calculate_total");
-    assert_eq!(units[2]["status"], "untested", "{json}");
+    assert_eq!(units[2]["status"], "valid", "{json}");
     assert_eq!(units[3]["id"], "pricing/checkout_nested_chain3");
-    assert_eq!(units[3]["status"], "untested", "{json}");
+    assert_eq!(units[3]["status"], "valid", "{json}");
     assert!(
         units.iter().all(|unit| {
             !unit["errors"]
