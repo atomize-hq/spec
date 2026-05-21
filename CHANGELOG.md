@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.15.2 - 2026-05-21
+
+### Added
+
+- **Rust V1 closure now has a dedicated benchmark wall** — `spec-cli/tests/rust_v1_closure.rs` and its lane fixtures now freeze the required BENCH-ECOM molecule-proof gate, the BENCH-CROSSLIB zero-credit companion-negative behavior, and the supported-boundary rejection cases that must never count as positive credit.
+
+### Changed
+
+- **Benchmark truth now carries seeded readability state directly through full-scope status and export** — full benchmark projections load the committed readability review when it still matches the current projection, so BENCH-ECOM and snapshot consumers see the same current-vs-stale truth.
+- **The i5 closeout artifacts now match the shipped supported-core benchmark story** — benchmark labels, snapshots, proof artifacts, fixture contracts, and TODO wording now all point at the supported-core closure instead of the older mechanics-only gap list.
+
+### Fixed
+
+- **Benchmark snapshots stop rewriting themselves when nothing meaningful changed** — `spec benchmark snapshot` now preserves the existing artifact bytes when the computed projection is identical, which keeps the closeout snapshot step idempotent.
+- **Cross-library and benchmark fixture refreshes now stay truthful under live repo churn** — the benchmark fixture copy path respects git-tracked sources, ignores untracked shared-spec passport noise, and keeps the frozen export/status fixtures aligned with the refreshed proof surfaces.
+
 ## 0.15.1 - 2026-05-20
 
 ### Added
