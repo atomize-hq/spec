@@ -3532,13 +3532,12 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn copy_git_tracked_dir(src: &Path, dst: &Path) -> io::Result<()> {
-    let root = repo_root();
+fn copy_git_tracked_dir_from_repo(repo: &Path, src: &Path, dst: &Path) -> io::Result<()> {
     let relative_src = src
-        .strip_prefix(&root)
+        .strip_prefix(repo)
         .expect("tracked fixture source should live under the repo root");
     let output = Command::new("git")
-        .current_dir(&root)
+        .current_dir(repo)
         .args(["ls-files", "--", relative_src.to_str().unwrap()])
         .output()
         .expect("failed to run git ls-files for tracked fixture copy");
@@ -3568,10 +3567,14 @@ fn copy_git_tracked_dir(src: &Path, dst: &Path) -> io::Result<()> {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(root.join(tracked_path), destination)?;
+        fs::copy(repo.join(tracked_path), destination)?;
     }
 
     Ok(())
+}
+
+fn copy_git_tracked_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    copy_git_tracked_dir_from_repo(&repo_root(), src, dst)
 }
 
 fn setup_detached_shared_example() -> (tempfile::TempDir, PathBuf, PathBuf) {
@@ -4328,8 +4331,7 @@ fn copy_ecommerce_example() -> (tempfile::TempDir, PathBuf) {
     (temp_dir, dst_ecommerce)
 }
 
-fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
-    let root = repo_root();
+fn copy_benchmark_repo_fixture_from_root(root: &Path) -> (tempfile::TempDir, PathBuf) {
     let temp_dir = temp_repo_dir();
     let repo_dir = temp_dir.path().join("benchmark-repo");
     let examples_dir = repo_dir.join("examples");
@@ -4337,22 +4339,26 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     let spec_cli_fixtures_dir = repo_dir.join("spec-cli/tests/fixtures");
 
     fs::create_dir_all(&examples_dir).unwrap();
-    copy_dir_recursive(
+    copy_git_tracked_dir_from_repo(
+        root,
         &root.join("examples/ecommerce"),
         &examples_dir.join("ecommerce"),
     )
     .expect("failed to copy ecommerce benchmark fixture");
-    copy_dir_recursive(
+    copy_git_tracked_dir_from_repo(
+        root,
         &root.join("examples/crosslib-app"),
         &examples_dir.join("crosslib-app"),
     )
     .expect("failed to copy cross-library benchmark fixture");
-    copy_dir_recursive(
+    copy_git_tracked_dir_from_repo(
+        root,
         &root.join("examples/shared-crate"),
         &examples_dir.join("shared-crate"),
     )
     .expect("failed to copy shared crate benchmark fixture");
-    copy_dir_recursive(
+    copy_git_tracked_dir_from_repo(
+        root,
         &root.join("examples/shared-spec"),
         &examples_dir.join("shared-spec"),
     )
@@ -4413,6 +4419,97 @@ fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
     init_git_repo(&repo_dir);
 
     (temp_dir, repo_dir)
+}
+
+fn copy_benchmark_repo_fixture() -> (tempfile::TempDir, PathBuf) {
+    copy_benchmark_repo_fixture_from_root(&repo_root())
+}
+
+fn setup_benchmark_source_repo_fixture() -> (tempfile::TempDir, PathBuf) {
+    let root = repo_root();
+    let temp_dir = temp_repo_dir();
+    let source_root = temp_dir.path().join("source-repo");
+    let examples_dir = source_root.join("examples");
+    let semantic_families_dir = source_root.join("semantic-families");
+    let spec_cli_fixtures_dir = source_root.join("spec-cli/tests/fixtures");
+
+    fs::create_dir_all(&examples_dir).unwrap();
+    copy_git_tracked_dir(
+        &root.join("examples/ecommerce"),
+        &examples_dir.join("ecommerce"),
+    )
+    .expect("failed to copy ecommerce benchmark source fixture");
+    copy_git_tracked_dir(
+        &root.join("examples/crosslib-app"),
+        &examples_dir.join("crosslib-app"),
+    )
+    .expect("failed to copy cross-library benchmark source fixture");
+    copy_git_tracked_dir(
+        &root.join("examples/shared-crate"),
+        &examples_dir.join("shared-crate"),
+    )
+    .expect("failed to copy shared crate benchmark source fixture");
+    copy_git_tracked_dir(
+        &root.join("examples/shared-spec"),
+        &examples_dir.join("shared-spec"),
+    )
+    .expect("failed to copy shared spec benchmark source fixture");
+    copy_git_tracked_dir(&root.join("benchmarks"), &source_root.join("benchmarks"))
+        .expect("failed to copy benchmark registry source fixture");
+    copy_git_tracked_dir(
+        &root.join(
+            "semantic-families/function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures",
+        ),
+        &semantic_families_dir
+            .join("function.arithmetic_leaf.monotone_down_nonnegative.v1/fixtures"),
+    )
+    .expect("failed to copy monotone-down semantic source fixtures");
+    copy_git_tracked_dir(
+        &root.join("semantic-families/function.arithmetic_leaf.monotone_up.v1/fixtures"),
+        &semantic_families_dir.join("function.arithmetic_leaf.monotone_up.v1/fixtures"),
+    )
+    .expect("failed to copy monotone-up semantic source fixtures");
+    copy_git_tracked_dir(
+        &root.join("semantic-families/function.helper.identity_passthrough.v1/fixtures"),
+        &semantic_families_dir.join("function.helper.identity_passthrough.v1/fixtures"),
+    )
+    .expect("failed to copy helper semantic source fixtures");
+    copy_git_tracked_dir(
+        &root.join("semantic-families/function.wrapper.pipeline.chain3.v1/fixtures"),
+        &semantic_families_dir.join("function.wrapper.pipeline.chain3.v1/fixtures"),
+    )
+    .expect("failed to copy chain3 semantic source fixtures");
+    copy_git_tracked_dir(
+        &root.join(
+            "semantic-families/function.wrapper.pipeline.normalized_required_arg.v1/fixtures",
+        ),
+        &semantic_families_dir
+            .join("function.wrapper.pipeline.normalized_required_arg.v1/fixtures"),
+    )
+    .expect("failed to copy normalized-required-arg semantic source fixtures");
+    copy_git_tracked_dir(
+        &root.join("semantic-families/function.wrapper.pipeline.v1/fixtures"),
+        &semantic_families_dir.join("function.wrapper.pipeline.v1/fixtures"),
+    )
+    .expect("failed to copy wrapper semantic source fixtures");
+    copy_git_tracked_dir(
+        &root.join("spec-cli/tests/fixtures/m19/semantic_falsification_pack"),
+        &spec_cli_fixtures_dir.join("m19/semantic_falsification_pack"),
+    )
+    .expect("failed to copy M19 source fixture pack");
+    copy_git_tracked_dir(
+        &root.join("spec-cli/tests/fixtures/m20/unsupported_truth_pack"),
+        &spec_cli_fixtures_dir.join("m20/unsupported_truth_pack"),
+    )
+    .expect("failed to copy M20 source fixture pack");
+    copy_git_tracked_dir(
+        &root.join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
+        &spec_cli_fixtures_dir.join("typescript_local_supported_graph"),
+    )
+    .expect("failed to copy TypeScript source fixture pack");
+    init_git_repo(&source_root);
+
+    (temp_dir, source_root)
 }
 
 fn copy_crosslib_typescript_example() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
@@ -14897,6 +14994,55 @@ fn status_single_file_contract_matches_frozen_fixture() {
         normalize_status_contract_json(json),
         "status-apply-discount-partial-full.json",
     );
+}
+
+fn normalized_repo_root_status_contract_from_fixture_root(root: &Path) -> Value {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture_from_root(root);
+    let output = run_in(&repo_dir, &["status", ".", "--format", "json"]);
+    assert!(
+        !output.status.success(),
+        "repo-root status should stay non-green when broad inventory includes untested work"
+    );
+    normalize_status_contract_json(parse_stdout_json(&output))
+}
+
+#[test]
+fn status_repo_root_fixture_copy_ignores_untracked_shared_spec_pricing_passports() {
+    let (_temp_dir, source_root) = setup_benchmark_source_repo_fixture();
+    let clean_contract = normalized_repo_root_status_contract_from_fixture_root(&source_root);
+
+    let shared_spec_dir = source_root.join("examples/shared-spec");
+    let output = run_in(
+        &shared_spec_dir,
+        &["test", "units/pricing/apply_discount.unit.spec"],
+    );
+    assert_output_success(
+        "shared-spec apply_discount test should generate an ignored pricing passport",
+        &output,
+    );
+
+    let ignored_passport =
+        source_root.join("examples/shared-spec/units/pricing/apply_discount.spec.passport.json");
+    assert!(
+        ignored_passport.exists(),
+        "{ignored_passport:?} should exist"
+    );
+
+    let ignored_status = run_git(&source_root, &["status", "--short", "--ignored"]);
+    assert_output_success(
+        "git status --short --ignored should succeed for source fixture repo",
+        &ignored_status,
+    );
+    let ignored_stdout = String::from_utf8_lossy(&ignored_status.stdout);
+    assert!(
+        ignored_stdout
+            .contains("!! examples/shared-spec/units/pricing/apply_discount.spec.passport.json"),
+        "expected ignored pricing passport to stay untracked, got:\n{ignored_stdout}"
+    );
+
+    let contaminated_contract =
+        normalized_repo_root_status_contract_from_fixture_root(&source_root);
+    assert_eq!(contaminated_contract, clean_contract);
 }
 
 #[test]
