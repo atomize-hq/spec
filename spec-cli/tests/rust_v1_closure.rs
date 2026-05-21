@@ -92,7 +92,11 @@ fn copied_lane_a_benchmark_fixture() -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().unwrap();
     let fixture_dst = temp_dir.path().join("lane_a_bench_ecom");
     fs::create_dir_all(fixture_dst.join("benchmarks")).unwrap();
-    fs::write(fixture_dst.join(".git"), "gitdir: .git/modules/lane_a_bench_ecom\n").unwrap();
+    fs::write(
+        fixture_dst.join(".git"),
+        "gitdir: .git/modules/lane_a_bench_ecom\n",
+    )
+    .unwrap();
     fs::copy(
         repo_root().join("benchmarks/labels.json"),
         fixture_dst.join("benchmarks/labels.json"),
@@ -159,45 +163,47 @@ fn required_molecule_proof<'a>(benchmark_json: &'a Value, molecule_id: &str) -> 
 }
 
 #[test]
-fn rust_v1_closure_lane_a_bench_ecom_passes_when_discount_strategy_checkout_flow_is_required_and_fresh(
-) {
+fn rust_v1_closure_lane_a_bench_ecom_passes_when_discount_strategy_checkout_flow_is_required_and_fresh()
+ {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
 
     let (status_output, status_json) = benchmark_status_json(&fixture_dst);
-    assert_success(&status_output, "status with required discount strategy checkout flow");
+    assert_success(
+        &status_output,
+        "status with required discount strategy checkout flow",
+    );
     let status_benchmark = lane_a_benchmark(&status_json, "BENCH-ECOM");
     assert_eq!(status_benchmark["benchmark_status"], "passing");
     assert_eq!(status_benchmark["gate_status"], "satisfied");
     assert_eq!(status_benchmark["summary"]["required_molecule_total"], 3);
     assert_eq!(
-        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "valid"
     );
 
     let (export_output, export_json) = benchmark_export_json(&fixture_dst);
-    assert_success(&export_output, "export with required discount strategy checkout flow");
+    assert_success(
+        &export_output,
+        "export with required discount strategy checkout flow",
+    );
     let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
     assert_eq!(export_benchmark["benchmark_status"], "passing");
     assert_eq!(export_benchmark["summary"]["required_molecule_total"], 3);
     assert_eq!(
-        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "valid"
     );
 }
 
 #[test]
-fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_missing(
-) {
+fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_missing()
+ {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
-    fs::remove_file(
-        fixture_dst.join(
-            "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json",
-        ),
-    )
+    fs::remove_file(fixture_dst.join(
+        "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json",
+    ))
     .unwrap();
 
     let (status_output, status_json) = benchmark_status_json(&fixture_dst);
@@ -210,8 +216,7 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
     assert_eq!(status_benchmark["benchmark_status"], "incomplete");
     assert_eq!(status_benchmark["gate_status"], "open");
     assert_eq!(
-        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "untested"
     );
 
@@ -223,20 +228,19 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
     let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
     assert_eq!(export_benchmark["benchmark_status"], "incomplete");
     assert_eq!(
-        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "untested"
     );
 }
 
 #[test]
-fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_stale(
-) {
+fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_stale()
+ {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
 
-    let molecule_path =
-        fixture_dst.join("examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec");
+    let molecule_path = fixture_dst
+        .join("examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec");
     let source = fs::read_to_string(&molecule_path).unwrap();
     fs::write(
         &molecule_path,
@@ -257,8 +261,7 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
     assert_eq!(status_benchmark["benchmark_status"], "incomplete");
     assert_eq!(status_benchmark["gate_status"], "open");
     assert_eq!(
-        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "stale"
     );
 
@@ -270,20 +273,19 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
     let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
     assert_eq!(export_benchmark["benchmark_status"], "incomplete");
     assert_eq!(
-        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "stale"
     );
 }
 
 #[test]
-fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_failing(
-) {
+fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strategy_checkout_flow_proof_is_failing()
+ {
     let (_temp_dir, fixture_dst) = copied_lane_a_benchmark_fixture();
     refresh_lane_a_required_benchmark_proofs(&fixture_dst);
 
-    let molecule_path =
-        fixture_dst.join("examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec");
+    let molecule_path = fixture_dst
+        .join("examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec");
     let source = fs::read_to_string(&molecule_path).unwrap();
     fs::write(
         &molecule_path,
@@ -296,7 +298,10 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
 
     let failing_test_output = run_spec(
         &fixture_dst,
-        &["test", "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec"],
+        &[
+            "test",
+            "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec",
+        ],
     );
     assert_exit_code(
         &failing_test_output,
@@ -314,8 +319,7 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
     assert_eq!(status_benchmark["benchmark_status"], "failing");
     assert_eq!(status_benchmark["gate_status"], "open");
     assert_eq!(
-        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(status_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "failing"
     );
 
@@ -327,8 +331,7 @@ fn rust_v1_closure_lane_a_bench_ecom_is_non_passing_when_required_discount_strat
     let export_benchmark = lane_a_benchmark(&export_json, "BENCH-ECOM");
     assert_eq!(export_benchmark["benchmark_status"], "failing");
     assert_eq!(
-        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")
-            ["status"],
+        required_molecule_proof(export_benchmark, "pricing/discount_strategy_checkout_flow")["status"],
         "failing"
     );
 }
@@ -359,8 +362,8 @@ fn lane_b_case<'a>(benchmark: &'a Value, case_id: &str) -> &'a Value {
 }
 
 #[test]
-fn rust_v1_closure_lane_b_status_keeps_active_companion_negative_missing_current_proof_incomplete(
-) {
+fn rust_v1_closure_lane_b_status_keeps_active_companion_negative_missing_current_proof_incomplete()
+{
     let (_temp_dir, fixture_root) = lane_b_fixture_root("companion_negative_missing_current_proof");
 
     let output = run_spec(&fixture_root, &["status", "units", "--format", "json"]);
@@ -374,7 +377,8 @@ fn rust_v1_closure_lane_b_status_keeps_active_companion_negative_missing_current
     assert_eq!(benchmark["summary"]["positive_credit_cases"], 0);
     assert_eq!(cases.len(), 4);
     assert!(
-        cases.iter()
+        cases
+            .iter()
             .all(|case| case["counts_as_supported_positive"] == Value::Bool(false))
     );
     assert_eq!(
@@ -401,7 +405,8 @@ fn rust_v1_closure_lane_b_export_never_counts_companion_negative_cases_as_positi
     assert_eq!(benchmark["benchmark_status"], "incomplete");
     assert_eq!(benchmark["summary"]["positive_credit_cases"], 0);
     assert!(
-        cases.iter()
+        cases
+            .iter()
             .all(|case| case["counts_as_supported_positive"] == Value::Bool(false))
     );
     assert_eq!(
@@ -571,9 +576,15 @@ fn lane_c_wrapper_pipeline_boundary_fixture() -> (TempDir, PathBuf) {
         &fixture_root,
         "BENCH-LANE-C-WRAPPER",
         vec![
-            lane_c_case_label("pricing/pricing_discount_leaf_unsupported_near_miss", "deferred"),
+            lane_c_case_label(
+                "pricing/pricing_discount_leaf_unsupported_near_miss",
+                "deferred",
+            ),
             lane_c_case_label("pricing/pricing_tax_leaf_unsupported_near_miss", "deferred"),
-            lane_c_case_label("pricing/pricing_total_wrapper_unsupported_near_miss", "supported"),
+            lane_c_case_label(
+                "pricing/pricing_total_wrapper_unsupported_near_miss",
+                "supported",
+            ),
         ],
     );
 
@@ -623,7 +634,14 @@ fn rust_v1_closure_lane_c_monotone_down_supported_boundary_is_rejected_from_posi
 
     let test_output = run_spec(
         &fixture_root,
-        &["test", "units", "--output", "src/generated", "--crate-root", "."],
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
     );
     assert_success(
         &test_output,
@@ -650,7 +668,14 @@ fn rust_v1_closure_lane_c_monotone_up_supported_boundary_is_rejected_from_positi
 
     let test_output = run_spec(
         &fixture_root,
-        &["test", "units", "--output", "src/generated", "--crate-root", "."],
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
     );
     assert_success(
         &test_output,
@@ -677,7 +702,14 @@ fn rust_v1_closure_lane_c_wrapper_pipeline_supported_boundary_is_rejected_from_p
 
     let test_output = run_spec(
         &fixture_root,
-        &["test", "units", "--output", "src/generated", "--crate-root", "."],
+        &[
+            "test",
+            "units",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            ".",
+        ],
     );
     assert_success(
         &test_output,
