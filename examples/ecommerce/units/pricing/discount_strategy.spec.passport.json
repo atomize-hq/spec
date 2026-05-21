@@ -143,8 +143,8 @@
       "expect": "DiscountStrategy::None.fixed_amount_capped_behavior_holds()"
     }
   ],
-  "generated_at": "2026-05-20T19:47:22Z",
-  "source_file": "examples/ecommerce/units/pricing/discount_strategy.unit.spec",
+  "generated_at": "2026-05-21T02:26:40Z",
+  "source_file": "/home/azureuser/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/discount_strategy.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [
@@ -165,9 +165,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-05-11T19:48:13Z",
+    "observed_at": "2026-05-21T02:26:40Z",
     "provenance": {
-      "git_commit_sha": "4592dee4c57a65a877668811dfbebfbcedb8103f"
+      "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
     }
   },
   "freshness_anchor": {
@@ -202,9 +202,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-11T19:48:13Z",
+        "observed_at": "2026-05-21T02:26:40Z",
         "provenance": {
-          "git_commit_sha": "4592dee4c57a65a877668811dfbebfbcedb8103f"
+          "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
         }
       },
       "freshness_anchor": {

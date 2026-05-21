@@ -909,7 +909,11 @@
       "accounting_status": "valid",
       "benchmark_status": "passing",
       "gate_status": "satisfied",
-      "readability_review_status": "missing",
+      "readability_review_status": "current",
+      "readability_verdict": {
+        "decision": "approved",
+        "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
+      },
       "label_digest": "<normalized>",
       "projection_digest": "<normalized>",
       "summary": {
@@ -925,14 +929,14 @@
           "untested": 0,
           "valid": 7
         },
-        "required_molecule_total": 2,
+        "required_molecule_total": 3,
         "required_molecule_status_counts": {
           "invalid": 0,
           "failing": 0,
           "stale": 0,
           "incomplete": 0,
           "untested": 0,
-          "valid": 2
+          "valid": 3
         }
       },
       "required_molecule_proofs": [
@@ -945,6 +949,11 @@
           "molecule_id": "pricing/discount_plus_tax",
           "status": "valid",
           "proof_ref": "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+        },
+        {
+          "molecule_id": "pricing/discount_strategy_checkout_flow",
+          "status": "valid",
+          "proof_ref": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
         }
       ],
       "cases": [

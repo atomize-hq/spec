@@ -46,6 +46,7 @@
       "readability_scope": "supported_closure",
       "required_molecule_ids": [
         "pricing/checkout_flow",
+        "pricing/discount_strategy_checkout_flow",
         "pricing/discount_plus_tax"
       ],
       "cases": [

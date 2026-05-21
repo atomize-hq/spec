@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "run_id": "i5",
+  "basis_commit": "1dbff70",
+  "basis_override_from_live_main": "55d506e",
+  "tasks": [
+    {
+      "task_id": "i5-a-freeze-basis",
+      "branch": "codex/i5-prep",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/parent",
+      "owner": "parent",
+      "depends_on": [],
+      "owned_paths": [
+        ".runs/i5/**",
+        "spec-cli/tests/rust_v1_closure.rs",
+        "spec-cli/tests/fixtures/benchmarks/rust_v1_closure/**"
+      ],
+      "forbidden_paths": [
+        "benchmarks/reviews/BENCH-ECOM.readability.review.json",
+        "benchmarks/snapshots/*.json",
+        "TODOS.md"
+      ],
+      "required_commands": [
+        "git rev-parse --abbrev-ref HEAD",
+        "git rev-parse --short HEAD"
+      ],
+      "status": "RUNNING"
+    },
+    {
+      "task_id": "i5-b-launch-abc",
+      "branch": "codex/i5-prep",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/parent",
+      "owner": "parent",
+      "depends_on": [
+        "i5-a-freeze-basis"
+      ],
+      "owned_paths": [
+        ".runs/i5/**"
+      ],
+      "forbidden_paths": [],
+      "required_commands": [
+        "git worktree add .../int -b codex/i5-int codex/i5-prep",
+        "git worktree add .../lane-a -b codex/i5-lane-a-ecom codex/i5-prep",
+        "git worktree add .../lane-b -b codex/i5-lane-b-crosslib codex/i5-prep",
+        "git worktree add .../lane-c -b codex/i5-lane-c-boundary codex/i5-prep"
+      ],
+      "status": "QUEUED"
+    },
+    {
+      "task_id": "i5-c-phase1-bench-ecom",
+      "branch": "codex/i5-lane-a-ecom",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-a",
+      "owner": "lane-a",
+      "depends_on": [
+        "i5-b-launch-abc"
+      ],
+      "owned_paths": [
+        "benchmarks/labels.json",
+        "examples/ecommerce/units/**",
+        "spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_a/**",
+        "spec-cli/tests/rust_v1_closure.rs#lane-a"
+      ],
+      "forbidden_paths": [
+        "examples/crosslib-app/units/**",
+        "spec-core/src/benchmark.rs",
+        "spec-core/src/validator.rs",
+        "spec-cli/src/commands.rs",
+        "benchmarks/reviews/BENCH-ECOM.readability.review.json",
+        "benchmarks/snapshots/*.json",
+        "TODOS.md"
+      ],
+      "required_commands": [
+        "cargo run -p spec-cli -- test examples/ecommerce/units/pricing/pricing_quote.unit.spec",
+        "cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec",
+        "cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec",
+        "cargo run -p spec-cli -- status examples/ecommerce/units --format json",
+        "cargo run -p spec-cli -- export examples/ecommerce/units",
+        "cargo test -p spec-cli rust_v1_closure"
+      ],
+      "status": "QUEUED"
+    },
+    {
+      "task_id": "i5-d-phase2-bench-crosslib",
+      "branch": "codex/i5-lane-b-crosslib",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-b",
+      "owner": "lane-b",
+      "depends_on": [
+        "i5-b-launch-abc"
+      ],
+      "owned_paths": [
+        "examples/crosslib-app/units/**",
+        "spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_b/**",
+        "spec-cli/tests/rust_v1_closure.rs#lane-b"
+      ],
+      "forbidden_paths": [
+        "benchmarks/labels.json",
+        "examples/ecommerce/units/**",
+        "spec-core/src/benchmark.rs",
+        "spec-core/src/validator.rs",
+        "spec-cli/src/commands.rs",
+        "benchmarks/reviews/BENCH-ECOM.readability.review.json",
+        "benchmarks/snapshots/*.json",
+        "TODOS.md"
+      ],
+      "required_commands": [
+        "cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_discount.unit.spec",
+        "cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec",
+        "cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec",
+        "cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec",
+        "cargo run -p spec-cli -- status examples/crosslib-app/units --format json",
+        "cargo run -p spec-cli -- export examples/crosslib-app/units",
+        "cargo test -p spec-cli rust_v1_closure"
+      ],
+      "status": "QUEUED"
+    },
+    {
+      "task_id": "i5-e-phase3-boundary-wall",
+      "branch": "codex/i5-lane-c-boundary",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-c",
+      "owner": "lane-c",
+      "depends_on": [
+        "i5-b-launch-abc"
+      ],
+      "owned_paths": [
+        "spec-core/src/validator.rs",
+        "spec-core/src/benchmark.rs",
+        "spec-cli/src/commands.rs",
+        "spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_c/**",
+        "spec-cli/tests/rust_v1_closure.rs#lane-c"
+      ],
+      "forbidden_paths": [
+        "benchmarks/labels.json",
+        "examples/ecommerce/units/**",
+        "examples/crosslib-app/units/**",
+        "benchmarks/reviews/BENCH-ECOM.readability.review.json",
+        "benchmarks/snapshots/*.json",
+        "TODOS.md"
+      ],
+      "required_commands": [
+        "cargo test -p spec-cli rust_v1_closure",
+        "cargo run -p spec-cli -- status . --format json"
+      ],
+      "status": "QUEUED"
+    },
+    {
+      "task_id": "i5-f-integrate-abc",
+      "branch": "codex/i5-int",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/int",
+      "owner": "parent",
+      "depends_on": [
+        "i5-c-phase1-bench-ecom",
+        "i5-d-phase2-bench-crosslib",
+        "i5-e-phase3-boundary-wall"
+      ],
+      "owned_paths": [
+        ".runs/i5/**"
+      ],
+      "forbidden_paths": [],
+      "required_commands": [
+        "cargo run -p spec-cli -- status examples/ecommerce/units --format json",
+        "cargo run -p spec-cli -- export examples/ecommerce/units",
+        "cargo run -p spec-cli -- status examples/crosslib-app/units --format json",
+        "cargo run -p spec-cli -- export examples/crosslib-app/units",
+        "cargo run -p spec-cli -- status . --format json",
+        "cargo test -p spec-cli rust_v1_closure"
+      ],
+      "status": "QUEUED"
+    },
+    {
+      "task_id": "i5-g-phase4-readability-closeout",
+      "branch": "codex/i5-lane-d-closeout",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-d",
+      "owner": "lane-d",
+      "depends_on": [
+        "i5-f-integrate-abc"
+      ],
+      "owned_paths": [
+        "benchmarks/reviews/BENCH-ECOM.readability.review.json",
+        "benchmarks/snapshots/BENCH-ECOM.snapshot.json",
+        "benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json",
+        "spec-cli/tests/fixtures/benchmarks/**",
+        "TODOS.md"
+      ],
+      "forbidden_paths": [
+        "benchmarks/labels.json",
+        "examples/**",
+        "spec-core/src/**",
+        "spec-cli/src/**",
+        "spec-cli/tests/rust_v1_closure.rs"
+      ],
+      "required_commands": [
+        "cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM",
+        "cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB",
+        "cargo run -p spec-cli -- status . --format json",
+        "cargo test -p spec-cli rust_v1_closure"
+      ],
+      "status": "QUEUED"
+    },
+    {
+      "task_id": "i5-h-final-acceptance",
+      "branch": "codex/i5-int",
+      "worktree": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/int",
+      "owner": "parent",
+      "depends_on": [
+        "i5-g-phase4-readability-closeout"
+      ],
+      "owned_paths": [
+        ".runs/i5/**"
+      ],
+      "forbidden_paths": [],
+      "required_commands": [
+        "cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM",
+        "cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB",
+        "cargo run -p spec-cli -- status . --format json",
+        "cargo test -p spec-cli rust_v1_closure"
+      ],
+      "status": "QUEUED"
+    }
+  ]
+}

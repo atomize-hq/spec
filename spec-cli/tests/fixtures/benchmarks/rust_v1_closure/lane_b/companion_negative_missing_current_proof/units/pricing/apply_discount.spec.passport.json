@@ -1,0 +1,107 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/apply_discount",
+  "intent": "Apply a discount while importing the shared round helper from a sibling spec library.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [
+    "shared::money/round"
+  ],
+  "local_tests": [
+    {
+      "id": "happy_path",
+      "expect": "apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+    }
+  ],
+  "generated_at": "2026-05-20T21:42:18Z",
+  "source_file": "examples/crosslib-app/units/pricing/apply_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "happy_path",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-20T21:42:21Z",
+    "provenance": {
+      "git_commit_sha": "120b2dfbe3cb64bee44a88c57fa392ce7e37b91a"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "happy_path",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-20T21:42:21Z",
+        "provenance": {
+          "git_commit_sha": "120b2dfbe3cb64bee44a88c57fa392ce7e37b91a"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:416092af84fe5e8b991237fbe809f5507f6163746739501a3e8addc3b4f3ae36",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Apply a discount while importing the shared round helper from a sibling spec library."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "2 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "deps",
+        "summary": "1 declared dep(s)"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function apply_discount with 2 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
+  },
+  "contract_hash": "sha256:a40bb5809eb8af8ebe7f3e247aff4691f1c22a13fd72baf3ed6ca67e269d6b67"
+}

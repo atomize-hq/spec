@@ -24,7 +24,7 @@
       "expect": "apply_tax(Decimal::new(10000, 2), Decimal::new(725, 4)) == Decimal::new(10725, 2)"
     }
   ],
-  "generated_at": "2026-05-15T19:06:40Z",
+  "generated_at": "2026-05-21T02:28:29Z",
   "source_file": "examples/crosslib-app/units/pricing/apply_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -34,9 +34,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-05-02T15:59:40Z",
+    "observed_at": "2026-05-21T02:28:31Z",
     "provenance": {
-      "git_commit_sha": "8577dfb5a64daaa02be54501f97131fb25459f72"
+      "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
     }
   },
   "freshness_anchor": {
@@ -57,9 +57,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-02T15:59:40Z",
+        "observed_at": "2026-05-21T02:28:31Z",
         "provenance": {
-          "git_commit_sha": "8577dfb5a64daaa02be54501f97131fb25459f72"
+          "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
         }
       },
       "freshness_anchor": {
@@ -67,29 +67,6 @@
       },
       "freshness": {
         "authored_truth_digest": "sha256:695b199a2fc2a1073658d52bd80efe5658e4cc55debaf5de2d029cdfe8197617",
-        "authored_truth_status": "fresh",
-        "backend_execution_status": "unknown"
-      }
-    },
-    "typescript": {
-      "evidence": {
-        "build_status": "pass",
-        "test_results": [
-          {
-            "id": "happy_path",
-            "status": "pass"
-          }
-        ],
-        "observed_at": "2026-05-15T19:06:40Z",
-        "provenance": {
-          "git_commit_sha": "756ee6119a02a13b01623cdf5814096c3410415a"
-        }
-      },
-      "freshness_anchor": {
-        "authored_truth_digest": "sha256:dc857f9ce5e43cdcd14c4f9ca879fe1fd8a8bc2b59b81f103c04cfb9faaa6e31"
-      },
-      "freshness": {
-        "authored_truth_digest": "sha256:dc857f9ce5e43cdcd14c4f9ca879fe1fd8a8bc2b59b81f103c04cfb9faaa6e31",
         "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }

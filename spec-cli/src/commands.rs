@@ -1269,6 +1269,8 @@ fn benchmark_projections_for_command(
             continue;
         };
         let request = build_benchmark_projection_request(
+            &repo_root,
+            benchmark,
             &benchmark_root,
             &absolute_command_path,
             path_scope,
@@ -1281,6 +1283,8 @@ fn benchmark_projections_for_command(
 }
 
 fn build_benchmark_projection_request(
+    repo_root: &Path,
+    benchmark: &BenchmarkLabel,
     benchmark_root: &Path,
     absolute_command_path: &Path,
     path_scope: spec_core::benchmark::BenchmarkPathScope,
@@ -1482,14 +1486,16 @@ fn build_benchmark_projection_request(
         &molecule_report.tests,
     );
 
-    Ok(BenchmarkProjectionRequest {
+    let mut request = BenchmarkProjectionRequest {
         benchmark_root_exists: true,
         path_scope,
         root_case_truths,
         selected_carrier_ids,
         required_molecule_truths,
         readability_review: None,
-    })
+    };
+    request.readability_review = load_snapshot_readability_review(repo_root, benchmark, &request)?;
+    Ok(request)
 }
 
 fn selected_benchmark_carrier_ids(
@@ -1935,7 +1941,7 @@ struct SnapshotReadabilityReviewFile {
     verdict: Option<Value>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct BenchmarkSnapshotFile {
     generated_at: String,
     projection: BenchmarkProjection,
@@ -1993,6 +1999,15 @@ fn write_benchmark_snapshot(
                 parent.display()
             )
         })?;
+    }
+    if let Some(existing) = fs::read_to_string(&snapshot_path)
+        .ok()
+        .and_then(|json| serde_json::from_str::<BenchmarkSnapshotFile>(&json).ok())
+    {
+        // Preserve the existing artifact when the projected truth is unchanged.
+        if existing.projection == projection {
+            return Ok(snapshot_path);
+        }
     }
     let snapshot = BenchmarkSnapshotFile {
         generated_at: rfc3339_now(),

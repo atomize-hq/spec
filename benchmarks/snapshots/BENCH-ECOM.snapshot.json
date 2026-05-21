@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-19T01:21:48Z",
+  "generated_at": "2026-05-20T22:06:56Z",
   "projection": {
     "benchmark_id": "BENCH-ECOM",
     "kind": "positive",
@@ -14,8 +14,8 @@
       "decision": "approved",
       "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
     },
-    "label_digest": "sha256:9b6a18cf5b3ac7b75449d25870863f0817595c289b89b5ee5cd3ad7cf4ed2dcb",
-    "projection_digest": "sha256:0c1881b37d93c4c8b5332ecc0237edf2e5dac15dd85a559718b2b13ded4ae67d",
+    "label_digest": "sha256:b3cb83c0fc1d42b0c2d469db332870227e1f4819e7274636cbef9a9d2dc9cee8",
+    "projection_digest": "sha256:07abdc7583aeb203ad6063fafc77bac72845674e5736acdda8fd6a8424f4e00e",
     "summary": {
       "total_cases": 7,
       "supported_cases": 7,
@@ -29,14 +29,14 @@
         "untested": 0,
         "valid": 7
       },
-      "required_molecule_total": 2,
+      "required_molecule_total": 3,
       "required_molecule_status_counts": {
         "invalid": 0,
         "failing": 0,
         "stale": 0,
         "incomplete": 0,
         "untested": 0,
-        "valid": 2
+        "valid": 3
       }
     },
     "required_molecule_proofs": [
@@ -49,6 +49,11 @@
         "molecule_id": "pricing/discount_plus_tax",
         "status": "valid",
         "proof_ref": "examples/ecommerce/units/pricing/discount_plus_tax.test.evidence.json"
+      },
+      {
+        "molecule_id": "pricing/discount_strategy_checkout_flow",
+        "status": "valid",
+        "proof_ref": "examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.evidence.json"
       }
     ],
     "cases": [

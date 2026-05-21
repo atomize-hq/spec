@@ -1,0 +1,134 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/checkout_nested_chain3",
+  "intent": "Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "discount_rate",
+        "type": "Decimal"
+      },
+      {
+        "name": "tax_rate",
+        "type": "Decimal"
+      },
+      {
+        "name": "surcharge_rate",
+        "type": "Decimal"
+      },
+      {
+        "name": "loyalty_rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [
+    "shared::pricing/base_nested_chain3",
+    "shared::pricing/apply_tax",
+    "shared::pricing/apply_discount"
+  ],
+  "local_tests": [
+    {
+      "id": "happy_path",
+      "expect": "checkout_nested_chain3(Decimal::new(1000, 2), Decimal::new(10, 2), Decimal::new(7, 2), Decimal::new(5, 2), Decimal::new(5, 2)) == Decimal::new(95760, 4)"
+    }
+  ],
+  "generated_at": "2026-05-21T02:28:34Z",
+  "source_file": "examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "happy_path",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-21T02:28:36Z",
+    "provenance": {
+      "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:f82128e70e8d10ebc161d4271ac43f553e7fea27a269223168d105e0dfc6e736"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:f82128e70e8d10ebc161d4271ac43f553e7fea27a269223168d105e0dfc6e736",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "happy_path",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-21T02:28:36Z",
+        "provenance": {
+          "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:f82128e70e8d10ebc161d4271ac43f553e7fea27a269223168d105e0dfc6e736"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:f82128e70e8d10ebc161d4271ac43f553e7fea27a269223168d105e0dfc6e736",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "under_specified",
+    "compatibility_key": "unsupported.function.v1",
+    "support_status": "unsupported",
+    "unsupported_reason_codes": [
+      "unsupported_dep_topology"
+    ],
+    "rewrite_hints": [
+      "Use zero or one helper dep for arithmetic leaves, exactly two supported dep callables for wrapper pipelines, or exactly three supported function dep callables for chain3 pipelines."
+    ],
+    "reason_codes": [
+      "unsupported_surface"
+    ],
+    "summary": "declared function deps fall outside the supported reviewer topology",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Return the app checkout total by extending the shared nested chain3 with one outer surcharge and loyalty discount."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "5 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "deps",
+        "summary": "3 declared dep(s)"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function checkout_nested_chain3 with 5 input(s)"
+      }
+    ],
+    "evaluator_scope": "unsupported_surface"
+  },
+  "contract_hash": "sha256:a0ddcc184a7895e98f5e671a4ca014c5ef8f16e55df45ff5b320106373fee70b"
+}

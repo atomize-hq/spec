@@ -1,0 +1,125 @@
+{
+  "spec_version": "0.3.0",
+  "id": "pricing/calculate_total",
+  "intent": "Return the checkout total after discounting the subtotal and then applying tax with shared pricing leaves.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "discount_rate",
+        "type": "Decimal"
+      },
+      {
+        "name": "tax_rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal"
+  },
+  "deps": [
+    "shared::pricing/apply_discount",
+    "shared::pricing/apply_tax"
+  ],
+  "local_tests": [
+    {
+      "id": "happy_path",
+      "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(9653, 2)"
+    }
+  ],
+  "generated_at": "2026-05-21T02:28:32Z",
+  "source_file": "examples/crosslib-app/units/pricing/calculate_total.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "happy_path",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-21T02:28:34Z",
+    "provenance": {
+      "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:36c656851cd7fa950c686532c2c2b8eb52d02d06e46d56f22d946ce7518d9041"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:36c656851cd7fa950c686532c2c2b8eb52d02d06e46d56f22d946ce7518d9041",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "happy_path",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-21T02:28:34Z",
+        "provenance": {
+          "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:36c656851cd7fa950c686532c2c2b8eb52d02d06e46d56f22d946ce7518d9041"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:36c656851cd7fa950c686532c2c2b8eb52d02d06e46d56f22d946ce7518d9041",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "under_specified",
+    "compatibility_key": "unsupported.function.v1",
+    "support_status": "unsupported",
+    "unsupported_reason_codes": [
+      "unsupported_dep_topology"
+    ],
+    "rewrite_hints": [
+      "Use zero or one helper dep for arithmetic leaves, exactly two supported dep callables for wrapper pipelines, or exactly three supported function dep callables for chain3 pipelines."
+    ],
+    "reason_codes": [
+      "unsupported_surface"
+    ],
+    "summary": "declared function deps fall outside the supported reviewer topology",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Return the checkout total after discounting the subtotal and then applying tax with shared pricing leaves."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "3 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "deps",
+        "summary": "2 declared dep(s)"
+      },
+      {
+        "path": "body.typescript",
+        "summary": "authored TypeScript body present"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function calculate_total with 3 input(s)"
+      }
+    ],
+    "evaluator_scope": "unsupported_surface"
+  },
+  "contract_hash": "sha256:e384039a62fd1b030eae84d0b1231e1bfc49d5f7f77da876d36ff00505635faf"
+}
