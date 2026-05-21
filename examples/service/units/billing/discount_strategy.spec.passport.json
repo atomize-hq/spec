@@ -1,0 +1,258 @@
+{
+  "spec_version": "0.3.0",
+  "id": "billing/discount_strategy",
+  "kind": "sum",
+  "intent": "Represent mutually exclusive membership discount strategies for a service checkout flow.",
+  "sum": {
+    "variants": {
+      "declined": {},
+      "percentage": {
+        "fields": {
+          "rate": {
+            "type": "rust_decimal::Decimal"
+          }
+        }
+      },
+      "fixed_credit": {
+        "fields": {
+          "amount": {
+            "type": "rust_decimal::Decimal"
+          }
+        }
+      }
+    }
+  },
+  "methods": [
+    {
+      "id": "discount_amount",
+      "intent": {
+        "why": "Return the discount amount to subtract from the subtotal."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal"
+        },
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    match self {\n        Self::Declined => rust_decimal::Decimal::ZERO,\n        Self::Percentage { rate } => subtotal * *rate,\n        Self::FixedCredit { amount } => (*amount).min(subtotal),\n    }\n}\n"
+        }
+      }
+    },
+    {
+      "id": "discounted_subtotal",
+      "intent": {
+        "why": "Return the subtotal after applying the selected discount strategy."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal"
+        },
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    subtotal - self.discount_amount(subtotal)\n}\n"
+        }
+      }
+    },
+    {
+      "id": "declined_example_holds",
+      "intent": {
+        "why": "Support direct atom proof for the canonical declined-discount example."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "bool",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    let policy = Self::Declined;\n    policy.discount_amount(rust_decimal::Decimal::new(10000, 2))\n        == rust_decimal::Decimal::ZERO\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))\n            == rust_decimal::Decimal::new(10000, 2)\n}\n"
+        }
+      }
+    },
+    {
+      "id": "percentage_example_holds",
+      "intent": {
+        "why": "Support direct atom proof for the canonical percentage discount example."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "bool",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    let policy = Self::Percentage {\n        rate: rust_decimal::Decimal::new(10, 2),\n    };\n    policy.discount_amount(rust_decimal::Decimal::new(10000, 2))\n        == rust_decimal::Decimal::new(1000, 2)\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))\n            == rust_decimal::Decimal::new(9000, 2)\n}\n"
+        }
+      }
+    },
+    {
+      "id": "fixed_credit_capped_behavior_holds",
+      "intent": {
+        "why": "Support direct atom proof for capped fixed-credit behavior."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "bool",
+        "invariants": []
+      },
+      "deps": [],
+      "lowering": {
+        "rust": {
+          "body": "{\n    let policy = Self::FixedCredit {\n        amount: rust_decimal::Decimal::new(2000, 2),\n    };\n    policy.discount_amount(rust_decimal::Decimal::new(1500, 2))\n        == rust_decimal::Decimal::new(1500, 2)\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(1500, 2))\n            == rust_decimal::Decimal::ZERO\n}\n"
+        }
+      }
+    }
+  ],
+  "backends": {
+    "rust": {
+      "derives": [
+        "Clone",
+        "Debug",
+        "PartialEq"
+      ]
+    }
+  },
+  "deps": [],
+  "local_tests": [
+    {
+      "id": "variant_declined",
+      "expect": "DiscountStrategy::Declined.declined_example_holds()"
+    },
+    {
+      "id": "variant_percentage",
+      "expect": "DiscountStrategy::Declined.percentage_example_holds()"
+    },
+    {
+      "id": "behavior_fixed_credit_capped",
+      "expect": "DiscountStrategy::Declined.fixed_credit_capped_behavior_holds()"
+    }
+  ],
+  "generated_at": "2026-05-21T16:55:23Z",
+  "source_file": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a/examples/service/units/billing/discount_strategy.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "variant_declined",
+        "status": "pass"
+      },
+      {
+        "id": "variant_percentage",
+        "status": "pass"
+      },
+      {
+        "id": "behavior_fixed_credit_capped",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-21T16:55:15Z",
+    "provenance": {
+      "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+    "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+    "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "fresh"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "variant_declined",
+            "status": "pass"
+          },
+          {
+            "id": "variant_percentage",
+            "status": "pass"
+          },
+          {
+            "id": "behavior_fixed_credit_capped",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-21T16:55:15Z",
+        "provenance": {
+          "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+        "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+        "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      }
+    }
+  },
+  "markers": [
+    {
+      "id": "backend_rust_derives",
+      "path": "backends.rust.derives"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.discount_amount.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.discounted_subtotal.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.declined_example_holds.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.percentage_example_holds.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.fixed_credit_capped_behavior_holds.lowering.rust.body"
+    }
+  ],
+  "escape_hatch_gate": {
+    "status": "closed",
+    "required_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "present_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "missing_surfaces": []
+  },
+  "semantic_review": {
+    "verdict": "under_specified",
+    "compatibility_key": "unsupported.sum.v1",
+    "reason_codes": [
+      "unsupported_surface"
+    ],
+    "summary": "this 'sum' surface is not evaluated by the semantic reviewer for this unit",
+    "evaluator_scope": "unsupported_surface"
+  },
+  "contract_hash": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80"
+}
