@@ -3,7 +3,7 @@
 Status: **authoritative execution runbook**  
 Milestone: **I6 Rust V1 service benchmark activation**  
 Plan authority: **`/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Frozen basis: **`codex/i6-service-benchmark-activation` at `df5c7f2`**  
+Frozen basis: **current `HEAD` of `codex/i6-service-benchmark-activation` when the run begins**  
 Primary workspace: **`/home/azureuser/__Active_Code/atomize-hq/spec`**  
 Last rewritten: **2026-05-21**
 
@@ -32,7 +32,7 @@ Last rewritten: **2026-05-21**
 
 ## Starting Truth
 
-Observed on `codex/i6-service-benchmark-activation` at `df5c7f2`:
+Observed on `codex/i6-service-benchmark-activation` at the then-current `HEAD`:
 
 - `cargo run -p spec-cli -- status . --format json` reports:
   - `schema_version: 4`
@@ -100,7 +100,7 @@ git -C /home/azureuser/__Active_Code/atomize-hq/spec rev-parse --short HEAD
 Expected basis:
 
 - branch: `codex/i6-service-benchmark-activation`
-- commit: `df5c7f2`
+- commit: record the current `HEAD` in `.runs/i6/basis.json` at queue freeze and use that as the run-local basis for all later drift checks
 
 Use the live primary checkout as the parent lane:
 
@@ -192,7 +192,7 @@ Task id: `i6-a0-freeze-basis`
 Advance only when:
 
 - live branch is `codex/i6-service-benchmark-activation`
-- live commit is `df5c7f2`
+- live commit is the branch `HEAD` recorded in `basis.json` for this run
 - `.runs/i6/` exists
 - `basis.json`, `tasks.json`, and task packets exist
 - frozen positive service roster and required molecules are recorded

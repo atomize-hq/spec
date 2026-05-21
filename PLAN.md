@@ -7,7 +7,7 @@ Implementation readiness: **ready for implementation**
 Plan scope: **turn `BENCH-SERVICE` from a reserved benchmark into the active service-shaped proof workload required by `M67`, without widening `M66` support rows, reopening `M68` mechanics, or admitting async/IO, generics, traits, lifetimes, or framework-heavy authored surfaces**
 Base branch: **main**
 Working branch: **`codex/i6-service-benchmark-activation`**
-Validated at commit: **`df5c7f2`**
+Validated on branch: **`codex/i6-service-benchmark-activation`**
 Last rewritten: **2026-05-21**
 
 Supersedes:
@@ -21,7 +21,7 @@ Locked authority inputs:
 - `M66`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-213928.md`
 - `M67`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-220646.md`
 - `M68`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-225503.md`
-- live repo truth run on branch `codex/i6-service-benchmark-activation` at `df5c7f2`:
+- live repo truth run on branch `codex/i6-service-benchmark-activation` at the then-current `HEAD`:
   - `cargo run -p spec-cli -- status . --format json`
   - `git rev-parse --short HEAD`
   - `git branch --show-current`
@@ -69,8 +69,8 @@ workload and a service-shaped workload.
 
 ## Current Validated Truth
 
-Observed on branch `codex/i6-service-benchmark-activation` at commit `df5c7f2`
-on 2026-05-21:
+Observed on branch `codex/i6-service-benchmark-activation` at the then-current
+`HEAD` on 2026-05-21:
 
 - `cargo run -p spec-cli -- status . --format json` reports:
   - `schema_version: 4`
