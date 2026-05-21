@@ -143,7 +143,7 @@
       "expect": "DiscountStrategy::None.fixed_amount_capped_behavior_holds()"
     }
   ],
-  "generated_at": "2026-05-21T22:49:56Z",
+  "generated_at": "2026-05-21T23:49:29Z",
   "source_file": "examples/ecommerce/units/pricing/discount_strategy.unit.spec",
   "evidence": {
     "build_status": "pass",

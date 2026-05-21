@@ -196,8 +196,12 @@ fn copy_service_benchmark_repo() -> (TempDir, PathBuf) {
     let root = repo_root();
 
     fs::create_dir_all(&examples_dir).unwrap();
-    copy_git_tracked_dir_from_repo(&root, &root.join("benchmarks"), &repo_dir.join("benchmarks"))
-        .expect("failed to copy tracked benchmark fixture inputs");
+    copy_git_tracked_dir_from_repo(
+        &root,
+        &root.join("benchmarks"),
+        &repo_dir.join("benchmarks"),
+    )
+    .expect("failed to copy tracked benchmark fixture inputs");
     copy_git_tracked_dir_from_repo(
         &root,
         &root.join("examples/ecommerce"),
