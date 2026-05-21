@@ -29,7 +29,7 @@
       "expect": "calculate_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(9653, 2)"
     }
   ],
-  "generated_at": "2026-05-20T22:07:09Z",
+  "generated_at": "2026-05-21T02:28:32Z",
   "source_file": "examples/crosslib-app/units/pricing/calculate_total.unit.spec",
   "evidence": {
     "build_status": "pass",
@@ -39,9 +39,9 @@
         "status": "pass"
       }
     ],
-    "observed_at": "2026-05-20T22:07:11Z",
+    "observed_at": "2026-05-21T02:28:34Z",
     "provenance": {
-      "git_commit_sha": "423c8e2efb3f7f678875ae62c9ae46713c1d6c81"
+      "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
     }
   },
   "freshness_anchor": {
@@ -62,9 +62,9 @@
             "status": "pass"
           }
         ],
-        "observed_at": "2026-05-20T22:07:11Z",
+        "observed_at": "2026-05-21T02:28:34Z",
         "provenance": {
-          "git_commit_sha": "423c8e2efb3f7f678875ae62c9ae46713c1d6c81"
+          "git_commit_sha": "ac24db48fd69248ccc84744e4bc778dab9e4b97d"
         }
       },
       "freshness_anchor": {
