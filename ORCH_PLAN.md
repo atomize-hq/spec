@@ -1,664 +1,652 @@
-# I5 Orchestration Plan
+# I6 Orchestration Plan
 
 Status: **authoritative execution runbook**  
-Milestone: **I5 Rust V1 supported-core closure**  
-Frozen basis: **`main` at `1dbff70`**  
-Working parent branch: **`codex/i5-prep`**  
-Worker model: **GPT-5.4 with `reasoning_effort=high`**  
-Last rewritten: **2026-05-20**
+Milestone: **I6 Rust V1 service benchmark activation**  
+Plan authority: **`/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md`**  
+Frozen basis: **`codex/i6-service-benchmark-activation` at `df5c7f2`**  
+Primary workspace: **`/home/azureuser/__Active_Code/atomize-hq/spec`**  
+Last rewritten: **2026-05-21**
 
 ## Summary
 
 - Execute from `/home/azureuser/__Active_Code/atomize-hq/spec`.
-- Treat `/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md` as the only milestone authority.
-- Treat the existing `/home/azureuser/__Active_Code/atomize-hq/spec/ORCH_PLAN.md` as historical context only.
-- The parent agent is the only integrator, the only merge authority, and the only owner of final acceptance.
-- I5 closes exactly four things and nothing broader:
-  1. `BENCH-ECOM` must deliberately require `pricing/discount_strategy_checkout_flow`.
-  2. `BENCH-CROSSLIB` must stop carrying active untested cases.
-  3. the shipped supported-boundary rejection wall must be frozen behind one deliberate closure suite.
-  4. `BENCH-ECOM` readability must become current again and stay regression-protected.
-- Parallelize only the disjoint implementation lanes:
-  - Lane A: positive benchmark closure
-  - Lane B: companion-negative closure
-  - Lane C: supported-boundary rejection wall
-- Launch Lane D only after A, B, and C are merged and the live benchmark wall is stable.
-- Cap concurrency at **3 active worker lanes**. Do not exceed A, B, and C in parallel.
-- Keep the critical path in the parent for:
+- Treat `PLAN.md` as the only milestone authority.
+- Treat the existing `ORCH_PLAN.md` as stale I5 context only.
+- Keep the live primary checkout on `codex/i6-service-benchmark-activation` as the parent lane and canonical run-state root.
+- Use dedicated worker worktrees under `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/`.
+- All worker lanes use **GPT-5.4** with **`reasoning_effort=high`**.
+- Cap concurrency at **2 active worker lanes**:
+  - Lane A runs first alone
+  - Lane B and conditional Lane C may overlap only after the Lane A freeze commit exists
+  - Lane D starts only after the post-B/C truth gate passes
+- The parent agent remains the **only integrator**, **only merge authority**, and **only final acceptance authority**.
+- Keep the critical path local to the parent for:
   - basis freeze
-  - shared-suite scaffolding
-  - fixture partition freeze
-  - worktree and branch setup
-  - merge order
+  - queue freeze
+  - service-freeze record
+  - worker launch
   - gate decisions
-  - final artifact refresh launch
+  - merge order
   - final proof wall
+  - final fast-forward of the parent branch
 
 ## Starting Truth
 
-- Current repo root is `/home/azureuser/__Active_Code/atomize-hq/spec`.
-- Current branch is `main`.
-- Current commit is `1dbff70`.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs` does **not** exist yet.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/reviews/BENCH-ECOM.readability.review.json` exists but is stale against the live projection digest.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/BENCH-ECOM.snapshot.json` exists.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json` exists.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/BENCH-SERVICE.snapshot.json` exists and remains reserved-only context.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec` and its evidence file already exist.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/examples/crosslib-app/units/pricing/calculate_total.unit.spec` and `/home/azureuser/__Active_Code/atomize-hq/spec/examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec` exist and are the live untested active companion-negative cases called out by `PLAN.md`.
-- `/home/azureuser/__Active_Code/atomize-hq/spec/TODOS.md` still describes `M69` with stale benchmark-expansion wording and must be updated during closeout.
+Observed on `codex/i6-service-benchmark-activation` at `df5c7f2`:
+
+- `cargo run -p spec-cli -- status . --format json` reports:
+  - `schema_version: 4`
+  - `scope_authority: "inventory_only"`
+  - `BENCH-CROSSLIB` is `active`, `passing`, and `positive_credit_cases: 0`
+  - `BENCH-ECOM` is `active`, `passing`, and `readability_review_status: "current"`
+  - `BENCH-SERVICE` is `reserved`, `accounting_status: "reserved_missing_cases"`, and `summary.total_cases: 0`
+- `benchmarks/labels.json` already declares:
+  - `id: "BENCH-SERVICE"`
+  - `root: "examples/service/units"`
+  - `generated_root: "examples/service/src/generated"`
+  - `readability_scope: "supported_closure"`
+  - `cases: []`
+- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json` exists and is still reserved-form.
+- `benchmarks/reviews/BENCH-SERVICE.readability.review.json` does not exist.
+- `examples/service/` does not exist.
+- `spec-cli/tests/rust_v1_service.rs` does not exist.
+- `.runs/` already exists and can host `.runs/i6/`.
+- Existing reusable patterns live in:
+  - `examples/ecommerce/units/pricing/discount_strategy.unit.spec`
+  - `examples/ecommerce/units/pricing/pricing_quote.unit.spec`
+  - `examples/ecommerce/units/pricing/*.test.spec`
+  - `spec-cli/tests/rust_v1_closure.rs`
+  - `spec-cli/tests/fixtures/benchmarks/**`
+  - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/**`
 
 ## Hard Guards
 
-- Do not implement `BENCH-SERVICE`.
-- Do not author `examples/service/**`.
-- Do not widen Rust V1 support rows.
-- Do not promote new semantic families.
-- Do not reopen the I3.5/I4 command-scope contract.
-- Repo-root `status . --format json` must remain `scope_authority: "inventory_only"`.
-- Repo-root `export .` must remain unsupported for this workspace shape.
-- Reuse the M68 writer/reader boundary exactly.
-- Treat readability as a closure gate, not a support classifier.
-- Keep benchmark accounting label-driven.
-- Do not invent a new rejection taxonomy for Phase 3.
-- Do not redesign benchmark schemas, projection shapes, or artifact families.
-- `benchmarks/labels.json` belongs to Lane A only during parallel work.
-- `benchmarks/reviews/BENCH-ECOM.readability.review.json` belongs to Lane D only.
-- `benchmarks/snapshots/BENCH-ECOM.snapshot.json` and `benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json` belong to Lane D only for committed refresh.
-- `TODOS.md` belongs to Lane D only.
-- Shared benchmark fixture refresh for final committed full-output files belongs to Lane D only.
-- The parent is the only integrator and the only lane allowed to resolve cross-lane conflicts.
+- Do not widen M66 support.
+- Do not reopen M68 benchmark design or command-scope mechanics.
+- Do not introduce async, IO, traits, generics, lifetimes, framework-heavy authored surfaces, or cross-library service proof.
+- Keep `BENCH-SERVICE` single-library under `examples/service/**`.
+- Keep the positive service roster exactly:
+  - `billing/apply_membership_discount`
+  - `billing/apply_regional_fee`
+  - `billing/checkout_net_total`
+  - `billing/checkout_net_total_guarded_fee`
+  - `billing/discount_strategy`
+  - `billing/pricing_quote`
+- Keep the required molecule roster exactly:
+  - `billing/checkout_success_flow`
+  - `billing/checkout_declined_discount_flow`
+  - `billing/discount_strategy_quote_flow`
+- Treat `.unit.spec` and `.test.spec` files as authored truth.
+- Treat generated Rust, passports, molecule evidence, snapshots, and readability reviews as derived or observation surfaces.
+- Allow projection/core edits only if the active service benchmark exposes a real read-side truth bug.
+- Keep `BENCH-ECOM` and `BENCH-CROSSLIB` green and truthful throughout I6.
+- Keep repo-root `status . --format json` diagnostic-only. It must remain `scope_authority: "inventory_only"` and is not a zero-exit acceptance gate.
 
 ## Worktree And Branch Plan
 
-Create the I5 worktree root once:
+Create the I6 worktree root once:
 
 ```bash
-mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5
+mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6
 ```
 
-Freeze the basis explicitly before creating any I5 branch:
+Freeze the live basis before any worker branch is created:
 
 ```bash
 git -C /home/azureuser/__Active_Code/atomize-hq/spec rev-parse --abbrev-ref HEAD
 git -C /home/azureuser/__Active_Code/atomize-hq/spec rev-parse --short HEAD
 ```
 
-The expected basis is `main` at `1dbff70`. If `main` has moved, stop and either re-freeze the plan against the new SHA or re-check out `1dbff70` as the run basis before branching.
+Expected basis:
 
-Create the parent worktree first and only from `main`:
+- branch: `codex/i6-service-benchmark-activation`
+- commit: `df5c7f2`
+
+Use the live primary checkout as the parent lane:
+
+- Parent branch: `codex/i6-service-benchmark-activation`
+- Parent workspace: `/home/azureuser/__Active_Code/atomize-hq/spec`
+
+Create Lane A first and only:
 
 ```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/parent -b codex/i5-prep main
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a -b codex/i6-lane-a-service-root codex/i6-service-benchmark-activation
 ```
 
-Run the parent freeze task on `codex/i5-prep` before any other worktree exists. That freeze task must:
-
-- create `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/`
-- seed `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs`
-- freeze the lane section markers inside that suite
-- freeze the lane-specific fixture partition policy
-- commit that parent-owned scaffolding on `codex/i5-prep`
-
-Only after that parent-owned scaffold commit exists may the parent create the remaining worktrees from `codex/i5-prep`:
+After Lane A merges and the parent records `service_freeze_commit`, create integration and Lane B from that exact commit:
 
 ```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/int -b codex/i5-int codex/i5-prep
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-a -b codex/i5-lane-a-ecom codex/i5-prep
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-b -b codex/i5-lane-b-crosslib codex/i5-prep
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-c -b codex/i5-lane-c-boundary codex/i5-prep
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/int -b codex/i6-int <service_freeze_commit>
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-b -b codex/i6-lane-b-service-regressions <service_freeze_commit>
 ```
 
-Do **not** create Lane D yet. Create it only after Gate 1 passes:
+Create Lane C only if the parent confirms a real read-side truth bug:
 
 ```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-d -b codex/i5-lane-d-closeout codex/i5-int
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-c -b codex/i6-lane-c-projection-fix <service_freeze_commit>
+```
+
+Create Lane D only after Gate 2 passes:
+
+```bash
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-d -b codex/i6-lane-d-closeout codex/i6-int
+```
+
+Final landing is parent-owned only:
+
+```bash
+git -C /home/azureuser/__Active_Code/atomize-hq/spec merge --ff-only codex/i6-int
 ```
 
 ## Orchestration State
 
 Canonical run state lives under:
 
-- `I5_RUN_ROOT=/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5`
-- queue: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/tasks.json`
-- session log: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/session-log.md`
-- per-task state: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/task/<task-id>/`
+- `I6_RUN_ROOT=/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6`
+- queue: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/tasks.json`
+- session log: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/session-log.md`
+- basis record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/basis.json`
+- Gate 1 record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/service-freeze.json`
+- Gate 2 record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/service-truth-gate.json`
+- Gate 3 record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/final-acceptance.json`
+- per-task state: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/task/<task-id>/`
 
-The parent owns all writes under `.runs/i5/`. Workers do not update orchestration state directly.
+The parent owns all writes under `.runs/i6/`. Workers do not update orchestration state directly.
 
-Per-task sentinel files are zero-byte files inside `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/task/<task-id>/`:
+Per-task sentinels inside `.runs/i6/task/<task-id>/`:
 
 | Sentinel | Meaning |
 | --- | --- |
 | `QUEUED` | task frozen, not started |
-| `RUNNING` | worker or parent actively executing |
-| `BLOCKED` | waiting on parent decision or prior dependency |
-| `READY` | lane believes acceptance is satisfied and requests merge |
-| `MERGED` | parent merged the task result |
-| `REJECTED` | parent rejected the lane result or bounced it back |
+| `RUNNING` | lane or parent actively executing |
+| `BLOCKED` | waiting on parent decision or dependency |
+| `READY` | lane believes acceptance is satisfied |
+| `MERGED` | parent merged result |
+| `REJECTED` | parent bounced lane for scope or quality reasons |
 
-Each task directory also carries:
+Each task directory carries:
 
-- `scope.md` with exact owned files and forbidden surfaces
-- `acceptance.md` with exact commands and expected outcomes
-- `handoff.md` with the lane summary the worker returns
-- `decisions.md` for parent-only gate outcomes and bounce-back notes
-
-`tasks.json` is the authoritative execution queue. Every task row should include:
-
-- `task_id`
-- `branch`
-- `worktree`
-- `owner`
-- `depends_on`
-- `owned_paths`
-- `forbidden_paths`
-- `required_commands`
-- `status`
+- `scope.md`
+- `acceptance.md`
+- `handoff.md`
+- `decisions.md`
 
 ## Lane Map
 
 | Lane | Branch | Worktree | Owned write set | Goal |
 | --- | --- | --- | --- | --- |
-| Parent | `codex/i5-prep` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/parent` | `.runs/i5/**`, parent-owned shared-suite prelude/helpers, lane section markers, fixture-partition freeze | freeze basis and orchestrate |
-| Lane A | `codex/i5-lane-a-ecom` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-a` | `benchmarks/labels.json`, `examples/ecommerce/units/**`, Lane A-owned closure fixture files, Lane A section only in `spec-cli/tests/rust_v1_closure.rs` | Phase 1 positive benchmark closure |
-| Lane B | `codex/i5-lane-b-crosslib` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-b` | `examples/crosslib-app/units/**`, Lane B-owned closure fixture files, Lane B section only in `spec-cli/tests/rust_v1_closure.rs` | Phase 2 companion-negative closure |
-| Lane C | `codex/i5-lane-c-boundary` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-c` | `spec-core/src/validator.rs`, `spec-core/src/benchmark.rs`, `spec-cli/src/commands.rs`, Lane C-owned dedicated closure fixtures, Lane C section only in `spec-cli/tests/rust_v1_closure.rs` | Phase 3 supported-boundary rejection wall |
-| Lane D | `codex/i5-lane-d-closeout` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-d` | `benchmarks/reviews/BENCH-ECOM.readability.review.json`, impacted snapshot files, final benchmark fixtures, `TODOS.md` | Phase 4 readability currentness and closeout |
-| Integration | `codex/i5-int` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/int` | merge-only plus minimal parent reconciliation | merge and final acceptance |
-
-## Fixture Partition Policy
-
-This policy is frozen by the parent before fan-out and is not invented at runtime.
-
-1. Lane A and Lane B do **not** edit the same full-output benchmark fixture files in parallel.
-2. Shared committed benchmark fixture refresh is deferred to Lane D only.
-3. During parallel work, Lane A and Lane B may add or edit only lane-local closure fixtures under lane-specific subtrees, for example:
-   - `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_a/**`
-   - `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_b/**`
-4. Lane C may add or edit only its own dedicated closure fixtures under:
-   - `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_c/**`
-5. Existing shared full-output benchmark fixtures such as the repo’s general `status-*.json` and `export-*.json` files are read-only until Lane D.
-6. Lane A and Lane B validate their work against live `status` and `export` output plus their own lane-local adversarial closure fixtures, not by refreshing shared committed full-output fixtures.
-7. If a lane believes a shared full-output fixture must change earlier, that is a bounce-back request to the parent, not permission to edit the shared fixture file.
-8. Lane D is the only lane allowed to refresh the final committed benchmark fixture outputs after A, B, and C are integrated.
-
-This partition is the default even if it costs some duplication in lane-local fixture files. Avoiding merge fights is more important than minimizing temporary fixture count.
-
-## Shared Suite Ownership
-
-`/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs` is a seeded shared suite with strict section ownership.
-
-- The parent owns the common prelude, imports, helpers, and suite skeleton.
-- The parent seeds and commits that skeleton before any worker lane is created.
-- Lane A owns only the Lane A section.
-- Lane B owns only the Lane B section.
-- Lane C owns only the Lane C section.
-- No worker may edit the common prelude/helpers.
-- If any lane believes shared helpers must change, it must stop and bounce that request back to the parent.
-- The parent either:
-  - applies the helper change on `codex/i5-prep` and rebases affected lanes, or
-  - rejects the helper change as unnecessary or out of scope.
-- Any lane that edits another lane’s section or the parent-owned common block is rejected and bounced back.
-
-## Snapshot Policy
-
-Committed snapshot refresh is reserved to Lane D and the final parent wall.
-
-- Lane A does not run `cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM`.
-- Lane B does not run `cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB`.
-- Gate 1 does not rely on committed snapshot refresh.
-- Lane D performs the deliberate committed refresh of:
-  - `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
-  - `benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json`
-- The parent may run the benchmark snapshot commands again during final acceptance after Lane D lands. At that point they are verification of clean final state, not a new source of truth. If they produce a diff, final acceptance fails and the run returns to Lane D.
-
-## Workstream Plan
-
-### WS-PARENT (`codex/i5-prep`) — parent only
-
-Task id: `i5-a-freeze-basis`
-
-1. Basis freeze
-- Confirm `main` is at `1dbff70`.
-- Create `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/parent` on `codex/i5-prep` from `main`.
-- Create `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/`.
-- Record the basis SHA and the live I5 gap list in `session-log.md`.
-
-2. Shared-suite and partition freeze
-- Seed `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs`.
-- Seed parent-owned common prelude/helpers and explicit section markers for:
-  - Lane A
-  - Lane B
-  - Lane C
-- Freeze the fixture partition policy under `spec-cli/tests/fixtures/benchmarks/rust_v1_closure/`.
-- Create any empty lane-local fixture subtree scaffolding that workers are expected to inherit.
-- Freeze lane scope and acceptance documents under `.runs/i5/task/<task-id>/`.
-- Commit the parent-owned scaffold on `codex/i5-prep`.
-
-3. Post-freeze worktree creation
-- Only after the scaffold commit exists, create:
-  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/int`
-  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-a`
-  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-b`
-  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i5/lane-c`
-
-Acceptance for `i5-a-freeze-basis`:
-
-- `tasks.json` exists and reflects the full lane map.
-- `session-log.md` records the frozen basis SHA and the I5 gap list.
-- `spec-cli/tests/rust_v1_closure.rs` exists on `codex/i5-prep` with parent-owned prelude/helpers plus lane section markers.
-- Any lane-local fixture subtree scaffolding needed for the partition policy exists on `codex/i5-prep`.
-- The scaffold commit exists before `codex/i5-int` or any worker branch is created.
-- Each lane has a bounded `scope.md` and `acceptance.md`.
-- No worker needs to guess owned files, shared-suite rules, snapshot policy, or fixture policy.
-
-Task id: `i5-b-launch-abc`
-
-- Create the integration and A/B/C worktrees from `codex/i5-prep`.
-- Launch Lane C first only in the sense that it receives the shared-suite contract packet first.
-- Launch Lane A and Lane B immediately after the parent confirms the scaffold commit is the basis of their branches.
-- Mark the relevant task sentinels `RUNNING`.
-- Record each launch in `session-log.md`.
-
-### WS-A (`codex/i5-lane-a-ecom`) — worker lane A
-
-Task id: `i5-c-phase1-bench-ecom`
-
-Own only:
-
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/labels.json`
-- `/home/azureuser/__Active_Code/atomize-hq/spec/examples/ecommerce/units/**`
-- Lane A-owned closure fixtures under `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_a/**`
-- Lane A section only inside `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs`
-
-Required work:
-
-- Add `pricing/discount_strategy_checkout_flow` to `BENCH-ECOM.required_molecule_ids`.
-- Preserve the current `BENCH-ECOM` supported-case roster unless there is a proven mislabel that the parent explicitly approves.
-- Refresh the proof surfaces needed to keep the positive benchmark truthful:
-  - `pricing_quote.unit.spec`
-  - `discount_strategy.unit.spec`
-  - `discount_strategy_checkout_flow.test.spec`
-- Add phase-1 closure assertions that `BENCH-ECOM` becomes non-passing when `pricing/discount_strategy_checkout_flow` is required but missing, stale, or failing.
-- Use only Lane A-owned closure fixtures if adversarial fixture inputs are needed.
-- Validate against live `status` and `export` output. Do not refresh committed snapshots or shared full-output fixtures.
-
-Forbidden work:
-
-- no edits under `/home/azureuser/__Active_Code/atomize-hq/spec/examples/crosslib-app/units/**`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/benchmark.rs`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/reviews/BENCH-ECOM.readability.review.json`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/*.json`
-- no edits to shared benchmark fixture files outside the Lane A closure subtree
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/TODOS.md`
-- no edits outside the Lane A section of `spec-cli/tests/rust_v1_closure.rs`
-
-Worker verification:
-
-```bash
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/pricing_quote.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- export examples/ecommerce/units
-cargo test -p spec-cli rust_v1_closure
-```
-
-Acceptance:
-
-- `BENCH-ECOM.required_molecule_ids` deliberately includes `pricing/discount_strategy_checkout_flow`.
-- The three targeted proof-refresh commands above pass.
-- `BENCH-ECOM` still presents as passing on live benchmark-root output.
-- The phase-1 closure suite makes missing or stale seam proof observable as a regression.
-- The lane diff stays inside the Lane A write set.
-
-Bounce-back rule:
-
-- If Lane A concludes a supported-case roster change is required beyond the planned required-molecule addition, it must stop, mark `BLOCKED`, and return a concrete parent decision request. Lane A must not silently widen or relabel support on its own authority.
-- If Lane A believes the common suite helpers must change, it must stop and return that request to the parent. It may not edit the parent-owned common block directly.
-
-### WS-B (`codex/i5-lane-b-crosslib`) — worker lane B
-
-Task id: `i5-d-phase2-bench-crosslib`
-
-Own only:
-
-- `/home/azureuser/__Active_Code/atomize-hq/spec/examples/crosslib-app/units/**`
-- Lane B-owned closure fixtures under `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_b/**`
-- Lane B section only inside `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs`
-
-Required work:
-
-- Refresh proof for the two currently untested active companion-negative cases:
-  - `pricing/calculate_total`
-  - `pricing/checkout_nested_chain3`
-- Preserve the rule that companion-negative cases remain visible but contribute zero positive credit.
-- Add phase-2 closure assertions that an active companion-negative case without current proof makes `BENCH-CROSSLIB` incomplete.
-- Add phase-2 closure assertions that companion-negative cases never increment `positive_credit_cases`.
-- Use only Lane B-owned closure fixtures if adversarial fixture inputs are needed.
-- Validate against live `status` and `export` output. Do not edit `benchmarks/labels.json`, committed snapshots, or shared full-output fixtures.
-
-Forbidden work:
-
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/labels.json`
-- no edits under `/home/azureuser/__Active_Code/atomize-hq/spec/examples/ecommerce/units/**`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/benchmark.rs`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/reviews/BENCH-ECOM.readability.review.json`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/*.json`
-- no edits to shared benchmark fixture files outside the Lane B closure subtree
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/TODOS.md`
-- no edits outside the Lane B section of `spec-cli/tests/rust_v1_closure.rs`
-
-Worker verification:
-
-```bash
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_discount.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
-cargo run -p spec-cli -- export examples/crosslib-app/units
-cargo test -p spec-cli rust_v1_closure
-```
-
-Acceptance:
-
-- The two targeted crosslib proof-refresh commands for `calculate_total` and `checkout_nested_chain3` pass.
-- `BENCH-CROSSLIB` becomes complete instead of incomplete on live benchmark-root output.
-- `BENCH-CROSSLIB` still reports zero positive credit.
-- The phase-2 closure suite makes missing active companion proof observable as a regression.
-- The lane diff stays inside the Lane B write set.
-
-Bounce-back rule:
-
-- If Lane B believes a crosslib case should stop being active companion proof, it must not change `benchmarks/labels.json` directly. It returns a concrete parent request with the exact case id and rationale. The parent either rejects that scope drift or applies the minimal label change during post-merge integration.
-- If Lane B believes the common suite helpers must change, it must stop and return that request to the parent. It may not edit the parent-owned common block directly.
-
-### WS-C (`codex/i5-lane-c-boundary`) — worker lane C
-
-Task id: `i5-e-phase3-boundary-wall`
-
-Own only:
-
-- `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/validator.rs`
-- `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/benchmark.rs`
-- `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/src/commands.rs`
-- Lane C-owned closure fixtures under `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_c/**`
-- Lane C section only inside `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs`
-
-Required work:
-
-- Inventory the exact already-detectable supported-boundary rejections that belong to the shipped supported core.
-- Freeze one machine-visible regression assertion per in-scope rejection boundary.
-- Prefer existing unsupported and near-miss fixture families where they already match the boundary being frozen.
-- Add new Lane C-owned dedicated closure fixtures only when an existing fixture family cannot truthfully encode the frozen boundary.
-- Change product code only if the current surface fails to emit a stable, truthful early rejection for a boundary already in scope.
-- Keep repo-root inventory semantics unchanged.
-
-Forbidden work:
-
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/labels.json`
-- no edits under `/home/azureuser/__Active_Code/atomize-hq/spec/examples/ecommerce/units/**`
-- no edits under `/home/azureuser/__Active_Code/atomize-hq/spec/examples/crosslib-app/units/**`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/reviews/BENCH-ECOM.readability.review.json`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/*.json`
-- no edits to shared benchmark fixture files outside the Lane C closure subtree
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/TODOS.md`
-- no edits to the parent-owned common prelude/helpers in `spec-cli/tests/rust_v1_closure.rs`
-- no edits to Lane A or Lane B sections in `spec-cli/tests/rust_v1_closure.rs`
-
-Worker verification:
-
-```bash
-cargo test -p spec-cli rust_v1_closure
-cargo run -p spec-cli -- status . --format json
-```
-
-Acceptance:
-
-- The supported-boundary wall is frozen behind one deliberate suite instead of scattered folklore.
-- Every in-scope rejection in the lane packet has one stable observable failure contract.
-- Repo-root inventory-only status semantics remain unchanged.
-- Any product-code diff is minimal and directly tied to making an already-in-scope rejection stable and truthful.
-- The lane diff stays inside the Lane C write set.
-
-Bounce-back rule:
-
-- If Lane C cannot freeze a boundary without inventing a new taxonomy, widening support, redesigning benchmark/read-side semantics, or changing shared suite helpers, it must stop and return that boundary or helper request to the parent as out of lane scope.
-
-### WS-INT-ABC (`codex/i5-int`) — parent-only integration of Phases 1-3
-
-Task id: `i5-f-integrate-abc`
-
-Merge order is fixed:
-
-1. merge `codex/i5-lane-c-boundary`
-2. merge `codex/i5-lane-a-ecom`
-3. merge `codex/i5-lane-b-crosslib`
-
-Why this order is fixed:
-
-- Lane C owns the boundary implementation and its section of the shared closure suite.
-- Lane A owns the only allowed parallel edit to `benchmarks/labels.json`.
-- Lane B owns no label edits and must land after the positive benchmark contract is frozen.
-
-Integration rules:
-
-- If a lane edited outside its owned file list, reject the lane and bounce it back.
-- If a lane edited outside its named section in `spec-cli/tests/rust_v1_closure.rs`, reject the lane and bounce it back.
-- If a lane edited shared full-output benchmark fixture files reserved to Lane D, reject the lane and bounce it back.
-- If B returns a legitimate label change request, the parent may apply the minimal post-merge `benchmarks/labels.json` adjustment on `codex/i5-int` only after recording the rationale in `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i5/task/i5-f-integrate-abc/decisions.md`.
-- If C’s boundary work would force new benchmark schema, new support taxonomy, or changed repo-root semantics, reject the lane as out of scope.
-- If A, B, or C still causes benchmark outputs to drift between repeated runs, stop. Lane D is not allowed to chase unstable outputs.
-
-Gate 1 is the **post-Phase-3 launch gate** for Lane D. Run these commands on `codex/i5-int` after A, B, and C are merged:
-
-```bash
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/pricing_quote.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_discount.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
-cargo test -p spec-cli rust_v1_closure
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- export examples/ecommerce/units
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
-cargo run -p spec-cli -- export examples/crosslib-app/units
-cargo run -p spec-cli -- status . --format json
-```
-
-Gate 1 passes only when all of the following are true:
-
-- `BENCH-ECOM` is passing with the required seam molecule deliberately part of the gate.
-- `BENCH-CROSSLIB` is complete and still zero-credit.
-- the supported-boundary suite is green.
-- repo-root status remains `inventory_only`.
-- the only remaining intentional drift is readability currentness plus final committed snapshot and shared fixture refresh.
-
-Only after Gate 1 passes may the parent create and launch Lane D.
-
-### WS-D (`codex/i5-lane-d-closeout`) — worker lane D, strictly sequential
-
-Task id: `i5-g-phase4-readability-closeout`
-
-Own only:
-
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/reviews/BENCH-ECOM.readability.review.json`
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/BENCH-ECOM.snapshot.json`
-- `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json`
-- final shared benchmark fixtures under `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/fixtures/benchmarks/**`
-- `/home/azureuser/__Active_Code/atomize-hq/spec/TODOS.md`
-
-Required work:
-
-- Refresh `BENCH-ECOM.readability.review.json` against the final live projection digest and final `readability_generated_files`.
-- Refresh only the benchmark snapshots impacted by the now-frozen closure wall.
-- Refresh the final shared committed benchmark fixtures after A, B, and C are already integrated.
-- Update the `M69` entry in `TODOS.md` so it names supported-core closure rather than stale benchmark-expansion wording.
-- Keep all code and proof surfaces frozen. Lane D is an artifact and closeout lane, not a reopen-the-milestone lane.
-
-Forbidden work:
-
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/benchmarks/labels.json`
-- no edits under `/home/azureuser/__Active_Code/atomize-hq/spec/examples/**`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-core/src/**`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/src/**`
-- no edits to `/home/azureuser/__Active_Code/atomize-hq/spec/spec-cli/tests/rust_v1_closure.rs`
-- no edits to unrelated fixture files
-
-Worker verification:
-
-```bash
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- export examples/ecommerce/units
-cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
-cargo run -p spec-cli -- export examples/crosslib-app/units
-cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB
-cargo run -p spec-cli -- status . --format json
-cargo test -p spec-cli rust_v1_closure
-```
-
-Acceptance:
-
-- `BENCH-ECOM` readability review is current again on live read-side output.
-- impacted snapshots match the frozen final benchmark state.
-- impacted shared benchmark fixtures match the frozen final benchmark state.
-- `TODOS.md` truthfully describes the closure milestone.
-- The lane diff stays inside the Lane D write set.
-
-Bounce-back rule:
-
-- If Lane D sees the projection digest or benchmark outputs still moving after Gate 1, it must stop immediately and return the run to `i5-f-integrate-abc`. Lane D must not hand-edit readability, snapshots, or fixtures to fit unstable upstream outputs.
-
-### WS-FINAL (`codex/i5-int` then `codex/i5-prep`) — parent-only closeout
-
-Task id: `i5-h-final-acceptance`
-
-- Merge `codex/i5-lane-d-closeout` into `codex/i5-int`.
-- Verify the merged diff still stays inside the allowed I5 write set.
-- Run the full acceptance wall.
-- If green, fast-forward or merge `codex/i5-int` back into `codex/i5-prep`.
-- Record the final outcome in `.runs/i5/session-log.md`.
-- Mark all completed task sentinels `MERGED`.
-
-Final closeout command wall:
-
-```bash
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- export examples/ecommerce/units
-cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
-cargo run -p spec-cli -- export examples/crosslib-app/units
-cargo run -p spec-cli -- benchmark snapshot BENCH-CROSSLIB
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/pricing_quote.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_discount.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/apply_tax.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/calculate_total.unit.spec
-cargo run -p spec-cli -- test examples/crosslib-app/units/pricing/checkout_nested_chain3.unit.spec
-cargo test -p spec-cli rust_v1_closure
-cargo run -p spec-cli -- status . --format json
-```
-
-Final acceptance requires all of the following:
-
-- `BENCH-ECOM` still passes.
-- `BENCH-ECOM.required_molecule_ids` explicitly includes `pricing/discount_strategy_checkout_flow`.
-- `BENCH-ECOM` reports a current readability review.
-- `BENCH-CROSSLIB` is complete, not incomplete.
-- `BENCH-CROSSLIB` still contributes zero positive credit.
-- the supported-boundary rejection wall is green and machine-visible.
-- repo-root `status . --format json` still reports `scope_authority: "inventory_only"`.
-- `BENCH-SERVICE` remains reserved-only context.
-- the final snapshot commands produce no new diff after Lane D.
-- the final diff introduced no new scope outside I5.
+| Parent | `codex/i6-service-benchmark-activation` | `/home/azureuser/__Active_Code/atomize-hq/spec` | `.runs/i6/**`, gate records, merge decisions, final fast-forward | orchestration and final authority |
+| Lane A | `codex/i6-lane-a-service-root` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a` | `benchmarks/labels.json`, `examples/service/**`, generated Rust under `examples/service/src/generated/**`, service passports, service molecule evidence | service scaffold, active labels, authored proof wall |
+| Lane B | `codex/i6-lane-b-service-regressions` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-b` | `spec-cli/tests/rust_v1_service.rs`, `spec-cli/tests/fixtures/benchmarks/**` | service regression truth and benchmark fixtures |
+| Lane C | `codex/i6-lane-c-projection-fix` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-c` | `spec-core/src/benchmark.rs`, `spec-cli/src/commands.rs` | minimal read-side truth fix only if needed |
+| Lane D | `codex/i6-lane-d-closeout` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-d` | `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`, `benchmarks/reviews/BENCH-SERVICE.readability.review.json`, `README.md`, `docs/rust_v1_contract_stack.md`, `TODOS.md`, `CHANGELOG.md`, and only-if-truthfully-required closeout refreshes for existing ECOM/CROSSLIB snapshot or readability or doc surfaces | artifact/docs closeout only |
+| Integration | `codex/i6-int` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/int` | merge-only plus minimal parent reconciliation | integration and gate execution |
 
 ## Gate Model
 
-Gate 0: **basis and lane freeze**
+### Gate 0: Basis Freeze / Queue Freeze
 
-- Owned by the parent.
-- Must pass before any worker launch.
-- Requires the frozen basis SHA, `.runs/i5/` state, the parent scaffold commit on `codex/i5-prep`, lane packets, the seeded `spec-cli/tests/rust_v1_closure.rs`, and the frozen fixture partition policy.
+Owner: parent  
+Task id: `i6-a0-freeze-basis`
 
-Gate 1: **post-Phase-3 integration gate**
+Advance only when:
 
-- Owned by the parent.
-- Must pass before Lane D exists.
-- Requires A, B, and C merged into `codex/i5-int`, the live closure wall stable, and readability/snapshot/shared-fixture/doc refresh to be the only remaining work.
+- live branch is `codex/i6-service-benchmark-activation`
+- live commit is `df5c7f2`
+- `.runs/i6/` exists
+- `basis.json`, `tasks.json`, and task packets exist
+- frozen positive service roster and required molecules are recorded
+- Lane A is the only worker branch created
 
-Gate 2: **final closeout gate**
+Reopens if:
 
-- Owned by the parent.
-- Must pass before I5 is declared done.
-- Requires the full acceptance wall above plus session-log closeout.
+- the live parent basis drifts before worker launch
+- queue ownership or frozen rosters are unclear
+- any worker needs to guess write-set or gate behavior
 
-These gates are practical, not ceremonial. They exist to stop two failure patterns that would otherwise waste time:
+### Gate 1: Post-Lane-A Service-Freeze Gate
 
-- launching Lane D against moving benchmark truth
-- masking Phase 1-3 scope drift with late artifact churn
+Owner: parent  
+Task id: `i6-a1-service-freeze`
 
-## Context-Control Rules
+Advance only when:
 
-- Every worker lane runs on GPT-5.4 with `reasoning_effort=high`.
-- Each worker receives only:
-  - its branch name
-  - its worktree path
-  - its owned files
-  - its forbidden files
-  - the exact `PLAN.md` excerpt relevant to its phase
-  - the exact commands it must run
-  - its lane-specific acceptance rules
-- No worker receives the entire repo planning context unless the parent determines the lane is blocked without it.
-- No worker may expand its owned file set on its own authority.
-- No worker may edit `PLAN.md` or `ORCH_PLAN.md`.
-- No worker may create a new side lane.
-- No worker may pass raw transcripts to another worker.
-- Workers return only:
-  - changed files
-  - commands run
-  - exit codes
-  - blockers
-  - any explicit decision request for the parent
-- The parent integrates from narrow summaries plus diffs, not from whole worker transcripts.
-- Keep concurrency capped at 3. If the parent cannot keep the shared-suite partition clean, reduce to 2 or pause a lane. Do not add more lanes.
+- `examples/service/**` exists as a real single-library benchmark root
+- `benchmarks/labels.json` marks `BENCH-SERVICE` active
+- labels list exactly the frozen six service units and three required molecules
+- all six service units have fresh passports
+- all three service molecules have fresh evidence
+- the parent writes `service-freeze.json` with:
+  - `service_freeze_commit`
+  - frozen rosters
+  - current `label_digest`
+  - whether a projection bug is open
+
+Reopens Lane A if:
+
+- authored service truth is incomplete, stale, invalid, or out of roster
+- service root or labels drift from the frozen roster
+- any claimed proof depends on widened support
+
+### Gate 2: Post-B/C Service-Truth Gate
+
+Owner: parent  
+Task id: `i6-d0-service-truth-gate`
+
+Advance only when:
+
+- Lane B is merged into `codex/i6-int`
+- Lane C is either merged or explicitly skipped
+- `cargo run -p spec-cli -- status examples/service/units --format json` and `cargo run -p spec-cli -- export examples/service/units` project truthful service-root benchmark state
+- service-root benchmark truth is passing with full proof
+- service-root fixtures and assertions in Lane B are derived from direct service-root `status` and `export` truth, not only indirect unit-test expectations
+- partial service scopes emit zero positive credit
+- `BENCH-ECOM` remains green/current
+- `BENCH-CROSSLIB` remains green with zero positive credit
+
+Reopens prior lanes if:
+
+- service-root truth is wrong because authored proof or labels are wrong: reopen Lane A
+- service-root truth is wrong because regression tests or fixtures are missing or dishonest: reopen Lane B
+- service-root truth is wrong because projection/core behavior is wrong: reopen Lane C
+- any cross-lane disagreement conflicts with `PLAN.md`: bounce to the owning lane, do not resolve creatively in integration
+
+### Gate 3: Final Acceptance Gate
+
+Owner: parent  
+Task id: `i6-e-final-acceptance`
+
+Advance only when:
+
+- `BENCH-SERVICE` is active, passing, and gate-satisfied at service-root scope
+- `BENCH-SERVICE` readability review is `current`
+- committed `BENCH-SERVICE.snapshot.json` is stable on rerun
+- service-root `status` and `export` remain the proof wall
+- `BENCH-ECOM` and `BENCH-CROSSLIB` stay truthful
+- repo-root `status . --format json` remains diagnostic inventory with `scope_authority: "inventory_only"`
+
+Reopens prior lanes if:
+
+- snapshot or readability truth drifts: reopen Lane D
+- service-root proof wall drifts: reopen Lane A, B, or C based on cause
+- docs overstate shipped truth: reopen Lane D
 
 ## Conflict And Bounce-Back Rules
 
-- `spec-cli/tests/rust_v1_closure.rs` is the highest-risk shared file. Parent-owned prelude/helpers and lane section markers are mandatory.
-- Lane A, Lane B, and Lane C may not rewrite imports, helper signatures, or shared harness shape in `spec-cli/tests/rust_v1_closure.rs`.
-- If a lane needs shared helper changes, it must bounce that request back to the parent.
-- Shared full-output benchmark fixtures are reserved to Lane D. Any earlier lane edit to those files is an automatic bounce-back.
-- If benchmark fixture ownership becomes ambiguous, stop the merge, update `tasks.json`, and bounce the conflicting lane back. Do not hand-merge a hybrid fixture contract.
-- If a worker requests BENCH-SERVICE work, support-row widening, new semantic-family promotions, repo-root export support, or schema redesign, reject the request as out of I5 scope.
-- If a worker finds scope drift that could still be solved by a minimal parent integration edit, record that request in `decisions.md` and keep the lane otherwise frozen. Do not let the worker self-expand.
+- If a lane edits outside its write set, the parent rejects it.
+- If a lane discovers required scope drift to the frozen positive roster or required molecule roster, it must stop, mark `BLOCKED`, and escalate to the parent.
+- Lane A may not change regression suites, fixtures, snapshots, reviews, or docs.
+- Lane B may not patch core behavior. If it requires `spec-core/src/benchmark.rs` or `spec-cli/src/commands.rs` changes, it must bounce to the parent and conditional Lane C.
+- Lane C may not patch labels, specs, proof artifacts, tests, fixtures, snapshots, reviews, or docs.
+- Lane D is closeout-only. It may not reopen service semantics, labels, tests, fixtures, or core behavior.
+- Integration does not resolve creative cross-lane disagreements. It either:
+  - applies `PLAN.md` literally, or
+  - bounces the issue back to the owning lane
+- If a lane believes another lane’s owned surface must change, it does not edit that surface directly. It returns a narrow parent escalation.
+
+## Shared Ownership And Artifact Policy
+
+- `PLAN.md` is the only milestone authority.
+- Source service specs are authored truth:
+  - `examples/service/units/**/*.unit.spec`
+  - `examples/service/units/**/*.test.spec`
+- Lane A may refresh the derived service proof surfaces required by those specs:
+  - `examples/service/src/generated/**`
+  - `examples/service/units/**/*.spec.passport.json`
+  - `examples/service/units/**/*.test.evidence.json`
+- No lane hand-edits generated Rust, passports, molecule evidence, snapshot JSON, or readability review JSON.
+- Lane D alone owns committed snapshot and readability refresh for `BENCH-SERVICE`.
+- If merged I6 truth makes `BENCH-ECOM` or `BENCH-CROSSLIB` snapshot or readability or closeout docs require refresh, that refresh belongs to Lane D and nowhere else.
+- Lane B owns benchmark test fixtures, including any repo-root benchmark fixture JSON that changes because `BENCH-SERVICE` becomes active.
+- Repo-root `status . --format json` is always interpreted as structured inventory, never as a zero-exit proof command.
+
+## Workstream Plan
+
+### WS-PARENT-0 — basis freeze and queue freeze
+
+Task id: `i6-a0-freeze-basis`
+
+Parent actions:
+
+- confirm live branch and commit
+- create `.runs/i6/`
+- write `basis.json`
+- write `tasks.json`, `session-log.md`, and task packets
+- create Lane A only
+- freeze the exact positive roster and required molecule roster in run state
+
+Acceptance:
+
+- Gate 0 is green
+- no worker needs to guess branch names, worktree paths, write-sets, or gate rules
+
+### WS-A — service scaffold, labels, and proof wall
+
+Task id: `i6-a1-service-freeze`
+
+Lane A owns:
+
+- `benchmarks/labels.json`
+- `examples/service/**`
+- generated Rust under `examples/service/src/generated/**`
+- service passports and service molecule evidence
+
+Required outcomes:
+
+- scaffold the service example
+- author the six frozen service units
+- author the three frozen molecule tests
+- activate `BENCH-SERVICE`
+- build generated Rust
+- refresh all six unit passports
+- refresh all three molecule evidence files
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- build examples/service/units --output examples/service/src/generated
+cargo run -p spec-cli -- test examples/service/units/billing/apply_membership_discount.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/apply_regional_fee.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total_guarded_fee.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/pricing_quote.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_success_flow.test.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_declined_discount_flow.test.spec
+cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy_quote_flow.test.spec
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
+```
+
+Hard rules:
+
+- no snapshot refresh
+- no readability review authoring
+- no test fixture edits
+- no docs edits
+- no core projection edits
+
+Acceptance:
+
+- Gate 1 is green
+- if read-side truth is wrong, Lane A returns a narrow reproduced bug statement rather than patching core behavior itself
+
+### WS-PARENT-1 — post-freeze fan-out
+
+Task id: `i6-a2-launch-int-b-c`
+
+Parent actions:
+
+- create `codex/i6-int` and `codex/i6-lane-b-service-regressions` from `service_freeze_commit`
+- create `codex/i6-lane-c-projection-fix` only if needed
+- mark Lane B running
+- mark Lane C running only if spawned
+
+Acceptance:
+
+- all post-freeze branches fork from the exact same `service_freeze_commit`
+- active worker count never exceeds 2
+
+### WS-B — service regression truth and benchmark fixtures
+
+Task id: `i6-b1-service-regressions`
+
+Lane B owns:
+
+- `spec-cli/tests/rust_v1_service.rs`
+- `spec-cli/tests/fixtures/benchmarks/**`
+
+Required outcomes:
+
+- add a dedicated `rust_v1_service` suite
+- add or refresh benchmark fixtures for:
+  - full service-root `status`
+  - full service-root `export`
+  - partial service-scope zero-credit behavior
+  - active repo-root benchmark inventory with `BENCH-SERVICE`
+- prove regressions for:
+  - missing required molecule proof
+  - stale required molecule proof
+  - failing required molecule proof
+  - readability drift becoming non-current
+  - partial service scopes emitting zero positive credit
+  - preserved `BENCH-ECOM`
+  - preserved `BENCH-CROSSLIB`
+  - preserved repo-root inventory semantics
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
+cargo test -p spec-cli rust_v1_service
+cargo test -p spec-cli rust_v1_closure
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/crosslib-app/units --format json
+cargo run -p spec-cli -- status . --format json
+```
+
+Hard rules:
+
+- no edits to `benchmarks/labels.json`
+- no edits under `examples/service/**`
+- no snapshot or readability-review edits
+- no docs edits
+- no core behavior edits
+
+Acceptance:
+
+- lane diff stays entirely within Lane B ownership
+- service-root fixtures are derived from direct `status examples/service/units --format json` and `export examples/service/units` truth
+- service-root fixtures are not justified only by indirect unit-test expectations
+- repo-root inventory fixtures stay truthful to active `BENCH-SERVICE`
+
+### WS-C — minimal projection/core fix only if needed
+
+Task id: `i6-c1-projection-fix`
+
+Lane C owns:
+
+- `spec-core/src/benchmark.rs`
+- `spec-cli/src/commands.rs`
+
+Required outcomes:
+
+- reproduce the exact read-side truth bug
+- fix only the minimum code needed for truthful service-root projection
+- preserve M68 mechanics and current command-scope behavior
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
+```
+
+Hard rules:
+
+- no edits to specs, proof artifacts, labels, tests, fixtures, snapshots, reviews, or docs
+- no benchmark-schema redesign
+- no support expansion
+
+Acceptance:
+
+- diff stays entirely inside Lane C ownership
+- bug is explained as read-side truth repair, not feature work
+
+### WS-INT-2 — post-B/C service-truth gate
+
+Task id: `i6-d0-service-truth-gate`
+
+Parent actions in `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/int`:
+
+- merge Lane C first if present
+- merge Lane B second
+- run Gate 2 before Lane D exists
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
+cargo test -p spec-cli rust_v1_service
+cargo test -p spec-cli rust_v1_closure
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/crosslib-app/units --format json
+```
+
+Acceptance:
+
+- Gate 2 is green
+- service-root `status` and `export` are truthful proof walls
+- `readability_review_status` may still be non-current here because Lane D has not run yet
+
+### WS-D — artifact/docs closeout only
+
+Task id: `i6-d1-closeout`
+
+Lane D owns:
+
+- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`
+- `benchmarks/reviews/BENCH-SERVICE.readability.review.json`
+- `README.md`
+- `docs/rust_v1_contract_stack.md`
+- `TODOS.md`
+- `CHANGELOG.md`
+- only-if-truthfully-required closeout refreshes for ECOM/CROSSLIB snapshot, readability, or docs surfaces
+
+Required outcomes:
+
+- refresh `BENCH-SERVICE.snapshot.json` from reserved-form to active-form
+- author the first `BENCH-SERVICE.readability.review.json`
+- align repo-facing docs to shipped truth only
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
+```
+
+Hard rules:
+
+- no service semantic edits
+- no label edits
+- no spec edits
+- no test edits
+- no fixture edits
+- no core behavior edits
+- Lane D is artifact/docs closeout only
+
+Acceptance:
+
+- `BENCH-SERVICE` snapshot is active-form
+- `BENCH-SERVICE` readability review is current against final projection digest and generated file set
+- docs teach the same story the CLI now projects
+
+### WS-INT-3 — final acceptance and landing
+
+Task id: `i6-e-final-acceptance`
+
+Parent actions:
+
+- merge Lane D into `codex/i6-int`
+- run Gate 3
+- if green, fast-forward the parent branch
+- if red, bounce only the owning lane
+
+Required commands:
+
+```bash
+cargo run -p spec-cli -- build examples/service/units --output examples/service/src/generated
+cargo run -p spec-cli -- test examples/service/units/billing/apply_membership_discount.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/apply_regional_fee.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total_guarded_fee.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/pricing_quote.unit.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_success_flow.test.spec
+cargo run -p spec-cli -- test examples/service/units/billing/checkout_declined_discount_flow.test.spec
+cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy_quote_flow.test.spec
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
+cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
+cargo test -p spec-cli rust_v1_service
+cargo test -p spec-cli rust_v1_closure
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/crosslib-app/units --format json
+cargo run -p spec-cli -- status . --format json
+```
+
+Acceptance:
+
+- Gate 3 is green
+- `BENCH-SERVICE` is active, passing, gate-satisfied, and `readability_review_status: "current"`
+- rerunning `cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE` leaves the committed snapshot stable
+- service-root `status` and `export` are the proof wall
+- repo-root `status . --format json` remains diagnostic inventory with `scope_authority: "inventory_only"`
+
+## Merge Order
+
+1. Parent freezes basis and queue.
+2. Lane A lands on the parent branch.
+3. Parent records `service_freeze_commit`.
+4. Parent creates `codex/i6-int` and Lane B from `service_freeze_commit`.
+5. Parent creates Lane C only if a real projection bug exists.
+6. Lane C, if present, merges into `codex/i6-int` first.
+7. Lane B rebases if Lane C changed truth-surface behavior, then merges into `codex/i6-int`.
+8. Parent runs Gate 2.
+9. Lane D branches from `codex/i6-int` only after Gate 2 passes.
+10. Lane D merges into `codex/i6-int`.
+11. Parent runs Gate 3.
+12. Parent fast-forwards `codex/i6-service-benchmark-activation` to `codex/i6-int`.
+
+## Context-Control Rules
+
+- Parent keeps only:
+  - `PLAN.md`
+  - `.runs/i6/tasks.json`
+  - gate records
+  - the latest narrow diff summary per lane
+- Each worker prompt contains only:
+  - owned files
+  - forbidden files
+  - relevant `PLAN.md` excerpt
+  - required commands
+  - the recorded `service_freeze_commit` when applicable
+- Workers return only:
+  - changed files
+  - commands run and exit codes
+  - blockers
+  - unresolved assumptions
+- Workers do not write `.runs/i6/**`.
+- Close each worker immediately after merge or rejection.
+
+## Tests And Acceptance
+
+- Lane A acceptance is authored service truth plus refreshed proof.
+- Lane B acceptance is direct service-root regression truth plus truthful benchmark fixtures.
+- Lane C acceptance is a minimal reproduced-and-fixed read-side bug.
+- Lane D acceptance is snapshot, readability, and docs closeout only.
+- Final acceptance is the full service benchmark wall plus non-regression across `BENCH-ECOM`, `BENCH-CROSSLIB`, and repo-root inventory semantics.
+
+The service benchmark wall is closed only when all are true at once:
+
+- `BENCH-SERVICE` is active rather than reserved.
+- the roster is exactly six positive units and three required molecules.
+- all six positive units are valid with fresh proof.
+- all three required molecules are valid with fresh evidence.
+- service-root `status` and `export` both project passing active truth.
+- service partial scopes do not launder positive credit.
+- `BENCH-SERVICE` readability review is current.
+- committed `BENCH-SERVICE.snapshot.json` is stable on rerun.
+- `BENCH-ECOM` remains passing/current.
+- `BENCH-CROSSLIB` remains passing with zero positive credit.
+- repo-root `status . --format json` remains diagnostic inventory and not a zero-exit acceptance gate.
 
 ## Assumptions
 
-- `PLAN.md` at `/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md` remains the sole authority for I5 scope and acceptance.
-- The current frozen basis is still correctly represented by `main@1dbff70`.
-- `spec-cli/tests/rust_v1_closure.rs` is the preferred dedicated suite path and may be created during I5 because it is absent today.
-- Running `cargo run -p spec-cli -- test <spec>` continues to be the correct way to refresh unit passports and molecule evidence in place.
-- Benchmark snapshot artifacts remain explicit committed files, not side effects of read-only status or export commands.
-- The historical `ORCH_PLAN.md` is useful only for execution shape, not for scope or decisions.
-
-## Success Condition
-
-I5 is complete only when one parent agent can execute the final command wall on the integrated branch and see, without interpretation drift:
-
-- `BENCH-ECOM` passing
-- `pricing/discount_strategy_checkout_flow` deliberately required by the benchmark gate
-- `BENCH-ECOM` readability current again
-- `BENCH-CROSSLIB` complete and zero-credit
-- the supported-boundary rejection wall frozen behind one deliberate suite
-- repo-root inventory semantics unchanged
-- `BENCH-SERVICE` still reserved and still untouched
+- The primary checkout on `codex/i6-service-benchmark-activation` remains the parent workspace for the full run.
+- `spec-cli/tests/fixtures/benchmarks/**` is broad enough that Lane B may own all service-root and repo-root benchmark fixture refresh required by active `BENCH-SERVICE`.
+- `.runs/i6/**` is parent-owned run state and is not assumed to be a checked-in deliverable.
