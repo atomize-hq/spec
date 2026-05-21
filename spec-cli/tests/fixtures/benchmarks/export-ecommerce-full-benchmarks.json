@@ -8,7 +8,11 @@
     "accounting_status": "valid",
     "benchmark_status": "passing",
     "gate_status": "satisfied",
-    "readability_review_status": "missing",
+    "readability_review_status": "current",
+    "readability_verdict": {
+      "decision": "approved",
+      "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
+    },
     "label_digest": "sha256:b3cb83c0fc1d42b0c2d469db332870227e1f4819e7274636cbef9a9d2dc9cee8",
     "projection_digest": "sha256:395e26e4feea904365721c7f744de9b367750e6784bdc4e99fceec7b4265befa",
     "summary": {

@@ -670,7 +670,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
@@ -681,7 +681,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
@@ -692,7 +692,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
@@ -703,7 +703,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         }
@@ -2568,7 +2568,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -2579,7 +2579,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -2590,7 +2590,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -2601,7 +2601,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -3762,7 +3762,11 @@
       "accounting_status": "valid",
       "benchmark_status": "passing",
       "gate_status": "satisfied",
-      "readability_review_status": "missing",
+      "readability_review_status": "current",
+      "readability_verdict": {
+        "decision": "approved",
+        "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
+      },
       "label_digest": "<normalized>",
       "projection_digest": "<normalized>",
       "summary": {

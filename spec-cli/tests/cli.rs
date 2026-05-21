@@ -21,6 +21,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread::sleep;
+use std::time::Duration;
 use walkdir::WalkDir;
 
 fn bin() -> PathBuf {
@@ -15020,6 +15022,34 @@ fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
         "reserved"
     );
     assert_eq!(service_snapshot["projection"]["gate_status"], "reserved");
+}
+
+#[test]
+fn benchmark_snapshot_preserves_existing_artifact_when_projection_is_unchanged() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+
+    for benchmark_id in ["BENCH-ECOM", "BENCH-CROSSLIB"] {
+        let output = run_in(&repo_dir, &["benchmark", "snapshot", benchmark_id]);
+        assert_output_success("initial benchmark snapshot should succeed", &output);
+    }
+
+    let ecom_path = repo_dir.join("benchmarks/snapshots/BENCH-ECOM.snapshot.json");
+    let crosslib_path = repo_dir.join("benchmarks/snapshots/BENCH-CROSSLIB.snapshot.json");
+    let ecom_before = fs::read_to_string(&ecom_path).unwrap();
+    let crosslib_before = fs::read_to_string(&crosslib_path).unwrap();
+
+    sleep(Duration::from_secs(1));
+
+    for benchmark_id in ["BENCH-ECOM", "BENCH-CROSSLIB"] {
+        let output = run_in(&repo_dir, &["benchmark", "snapshot", benchmark_id]);
+        assert_output_success("repeat benchmark snapshot should succeed", &output);
+    }
+
+    let ecom_after = fs::read_to_string(&ecom_path).unwrap();
+    let crosslib_after = fs::read_to_string(&crosslib_path).unwrap();
+
+    assert_eq!(ecom_after, ecom_before);
+    assert_eq!(crosslib_after, crosslib_before);
 }
 
 #[test]
