@@ -1399,6 +1399,11 @@ fn copy_typescript_local_supported_graph_fixture() -> (tempfile::TempDir, PathBu
         &fixture_dir,
     )
     .expect("failed to copy local supported-graph fixture");
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .expect("failed to mark local supported-graph temp repo root");
     (temp_dir, fixture_dir)
 }
 
@@ -4308,6 +4313,11 @@ fn copy_ecommerce_example_preserving_artifacts() -> (tempfile::TempDir, PathBuf)
     let dst_ecommerce = temp_dir.path().join("ecommerce");
     copy_git_tracked_dir(&root.join("examples/ecommerce"), &dst_ecommerce)
         .expect("failed to copy ecommerce example");
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .expect("failed to mark ecommerce temp repo root");
     (temp_dir, dst_ecommerce)
 }
 
@@ -4363,6 +4373,12 @@ fn copy_benchmark_repo_fixture_from_root(root: &Path) -> (tempfile::TempDir, Pat
         &examples_dir.join("shared-spec"),
     )
     .expect("failed to copy shared spec benchmark fixture");
+    copy_git_tracked_dir_from_repo(
+        root,
+        &root.join("examples/service"),
+        &examples_dir.join("service"),
+    )
+    .expect("failed to copy service benchmark fixture");
     copy_dir_recursive(&root.join("benchmarks"), &repo_dir.join("benchmarks"))
         .expect("failed to copy benchmark registry fixture");
     copy_dir_recursive(
@@ -4454,6 +4470,11 @@ fn setup_benchmark_source_repo_fixture() -> (tempfile::TempDir, PathBuf) {
         &examples_dir.join("shared-spec"),
     )
     .expect("failed to copy shared spec benchmark source fixture");
+    copy_git_tracked_dir(
+        &root.join("examples/service"),
+        &examples_dir.join("service"),
+    )
+    .expect("failed to copy service benchmark source fixture");
     copy_git_tracked_dir(&root.join("benchmarks"), &source_root.join("benchmarks"))
         .expect("failed to copy benchmark registry source fixture");
     copy_git_tracked_dir(
@@ -15165,9 +15186,13 @@ fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
     .unwrap();
     assert_eq!(
         service_snapshot["projection"]["benchmark_status"],
-        "reserved"
+        "passing"
     );
-    assert_eq!(service_snapshot["projection"]["gate_status"], "reserved");
+    assert_eq!(service_snapshot["projection"]["gate_status"], "satisfied");
+    assert_eq!(
+        service_snapshot["projection"]["readability_review_status"],
+        "current"
+    );
 }
 
 #[test]
@@ -16509,6 +16534,11 @@ fn typescript_local_supported_graph_chain3_root_executes_with_bun() {
 fn typescript_local_supported_graph_reachable_shared_dep_rejects_before_bun_runs() {
     let temp_dir = tempfile::TempDir::new_in(repo_root().join("target")).unwrap();
     let fixture_dir = temp_dir.path().join("typescript_local_supported_graph");
+    fs::write(
+        temp_dir.path().join(".git"),
+        "gitdir: .git/modules/spec-tests\n",
+    )
+    .expect("failed to mark local supported-graph temp repo root");
     copy_dir_recursive(
         &repo_root().join("spec-cli/tests/fixtures/typescript_local_supported_graph"),
         &fixture_dir,

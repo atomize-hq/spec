@@ -1,0 +1,116 @@
+{
+  "schema_version": 4,
+  "roots": [],
+  "units": [],
+  "benchmarks": [
+    {
+      "benchmark_id": "BENCH-SERVICE",
+      "kind": "positive",
+      "lifecycle": "active",
+      "required_for_v1": true,
+      "path_scope": "partial",
+      "accounting_status": "partial_valid",
+      "cases": [
+        {
+          "case_id": "billing/apply_membership_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/apply_membership_discount",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/apply_membership_discount.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "billing/apply_regional_fee",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/apply_regional_fee",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/apply_regional_fee.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "billing/checkout_net_total",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/checkout_net_total",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/checkout_net_total.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "billing/checkout_net_total_guarded_fee",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/checkout_net_total_guarded_fee",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/checkout_net_total_guarded_fee.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "billing/discount_strategy",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/discount_strategy",
+          "classification": "supported",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/discount_strategy.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": false
+        },
+        {
+          "case_id": "billing/pricing_quote",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/pricing_quote",
+          "classification": "supported",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/pricing_quote.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json",
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": false
+        }
+      ]
+    }
+  ],
+  "loader_errors": [
+    {
+      "code": "SPEC_NO_LIBRARY_ROOTS",
+      "path": "examples/service/units/billing",
+      "message": "no library roots discovered under examples/service/units/billing"
+    }
+  ]
+}

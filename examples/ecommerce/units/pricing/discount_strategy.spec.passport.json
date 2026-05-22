@@ -143,8 +143,8 @@
       "expect": "DiscountStrategy::None.fixed_amount_capped_behavior_holds()"
     }
   ],
-  "generated_at": "2026-05-21T02:26:40Z",
-  "source_file": "/home/azureuser/__Active_Code/atomize-hq/spec/examples/ecommerce/units/pricing/discount_strategy.unit.spec",
+  "generated_at": "2026-05-21T23:49:29Z",
+  "source_file": "examples/ecommerce/units/pricing/discount_strategy.unit.spec",
   "evidence": {
     "build_status": "pass",
     "test_results": [

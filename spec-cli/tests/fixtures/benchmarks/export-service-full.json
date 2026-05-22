@@ -1,0 +1,1601 @@
+{
+  "schema_version": 4,
+  "spec_version": "0.3.0",
+  "exported_at": "<normalized>",
+  "provenance": {
+    "git_commit_sha": "<normalized>"
+  },
+  "units": [
+    {
+      "id": "billing/apply_membership_discount",
+      "intent": "Return the subtotal after applying the membership discount rate and clamping at zero.",
+      "contract": {
+        "inputs": {
+          "subtotal": "Decimal",
+          "rate": "Decimal"
+        },
+        "returns": "Decimal",
+        "invariants": [
+          "output <= subtotal",
+          "output >= 0"
+        ]
+      },
+      "deps": [],
+      "local_tests": [
+        {
+          "id": "membership_discount_basic",
+          "expect": "apply_membership_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+        }
+      ],
+      "source_file": "examples/service/units/billing/apply_membership_discount.unit.spec"
+    },
+    {
+      "id": "billing/apply_regional_fee",
+      "intent": "Return the discounted subtotal after applying the regional fee rate.",
+      "contract": {
+        "inputs": {
+          "subtotal": "Decimal",
+          "rate": "Decimal"
+        },
+        "returns": "Decimal",
+        "invariants": [
+          "output >= subtotal"
+        ]
+      },
+      "deps": [],
+      "local_tests": [
+        {
+          "id": "regional_fee_basic",
+          "expect": "apply_regional_fee(Decimal::new(10000, 2), Decimal::new(5, 2)) == Decimal::new(10500, 2)"
+        }
+      ],
+      "source_file": "examples/service/units/billing/apply_regional_fee.unit.spec"
+    },
+    {
+      "id": "billing/checkout_net_total",
+      "intent": "Return the net checkout total after discounting the subtotal and then applying the regional fee.",
+      "contract": {
+        "inputs": {
+          "subtotal": "Decimal",
+          "membership_rate": "Decimal",
+          "regional_rate": "Decimal"
+        },
+        "returns": "Decimal",
+        "invariants": [
+          "output >= 0"
+        ]
+      },
+      "deps": [
+        {
+          "library": null,
+          "id": "billing/apply_membership_discount"
+        },
+        {
+          "library": null,
+          "id": "billing/apply_regional_fee"
+        }
+      ],
+      "local_tests": [
+        {
+          "id": "checkout_net_total_basic",
+          "expect": "checkout_net_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(5, 2)) == Decimal::new(9450, 2)"
+        }
+      ],
+      "source_file": "examples/service/units/billing/checkout_net_total.unit.spec"
+    },
+    {
+      "id": "billing/checkout_net_total_guarded_fee",
+      "intent": "Return the net checkout total after discounting the subtotal and applying a nonnegative regional fee only.",
+      "contract": {
+        "inputs": {
+          "subtotal": "Decimal",
+          "membership_rate": "Decimal",
+          "regional_rate": "Decimal"
+        },
+        "returns": "Decimal",
+        "invariants": [
+          "output >= 0"
+        ]
+      },
+      "deps": [
+        {
+          "library": null,
+          "id": "billing/apply_membership_discount"
+        },
+        {
+          "library": null,
+          "id": "billing/apply_regional_fee"
+        }
+      ],
+      "local_tests": [
+        {
+          "id": "checkout_net_total_guarded_fee_clamps_negative_rates",
+          "expect": "checkout_net_total_guarded_fee(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(-5, 2)) == Decimal::new(9000, 2)"
+        }
+      ],
+      "source_file": "examples/service/units/billing/checkout_net_total_guarded_fee.unit.spec"
+    },
+    {
+      "id": "billing/discount_strategy",
+      "kind": "sum",
+      "intent": "Represent mutually exclusive membership discount strategies for a service checkout flow.",
+      "sum": {
+        "variants": {
+          "declined": {},
+          "percentage": {
+            "fields": {
+              "rate": {
+                "type": "rust_decimal::Decimal"
+              }
+            }
+          },
+          "fixed_credit": {
+            "fields": {
+              "amount": {
+                "type": "rust_decimal::Decimal"
+              }
+            }
+          }
+        }
+      },
+      "methods": [
+        {
+          "id": "discount_amount",
+          "intent": {
+            "why": "Return the discount amount to subtract from the subtotal."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "inputs": {
+              "subtotal": "rust_decimal::Decimal"
+            },
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    match self {\n        Self::Declined => rust_decimal::Decimal::ZERO,\n        Self::Percentage { rate } => subtotal * *rate,\n        Self::FixedCredit { amount } => (*amount).min(subtotal),\n    }\n}\n"
+            }
+          }
+        },
+        {
+          "id": "discounted_subtotal",
+          "intent": {
+            "why": "Return the subtotal after applying the selected discount strategy."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "inputs": {
+              "subtotal": "rust_decimal::Decimal"
+            },
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    subtotal - self.discount_amount(subtotal)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "declined_example_holds",
+          "intent": {
+            "why": "Support direct atom proof for the canonical declined-discount example."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "bool",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    let policy = Self::Declined;\n    policy.discount_amount(rust_decimal::Decimal::new(10000, 2))\n        == rust_decimal::Decimal::ZERO\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))\n            == rust_decimal::Decimal::new(10000, 2)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "percentage_example_holds",
+          "intent": {
+            "why": "Support direct atom proof for the canonical percentage discount example."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "bool",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    let policy = Self::Percentage {\n        rate: rust_decimal::Decimal::new(10, 2),\n    };\n    policy.discount_amount(rust_decimal::Decimal::new(10000, 2))\n        == rust_decimal::Decimal::new(1000, 2)\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))\n            == rust_decimal::Decimal::new(9000, 2)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "fixed_credit_capped_behavior_holds",
+          "intent": {
+            "why": "Support direct atom proof for capped fixed-credit behavior."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "bool",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    let policy = Self::FixedCredit {\n        amount: rust_decimal::Decimal::new(2000, 2),\n    };\n    policy.discount_amount(rust_decimal::Decimal::new(1500, 2))\n        == rust_decimal::Decimal::new(1500, 2)\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(1500, 2))\n            == rust_decimal::Decimal::ZERO\n}\n"
+            }
+          }
+        }
+      ],
+      "backends": {
+        "rust": {
+          "derives": [
+            "Clone",
+            "Debug",
+            "PartialEq"
+          ]
+        }
+      },
+      "deps": [],
+      "local_tests": [
+        {
+          "id": "variant_declined",
+          "expect": "DiscountStrategy::Declined.declined_example_holds()"
+        },
+        {
+          "id": "variant_percentage",
+          "expect": "DiscountStrategy::Declined.percentage_example_holds()"
+        },
+        {
+          "id": "behavior_fixed_credit_capped",
+          "expect": "DiscountStrategy::Declined.fixed_credit_capped_behavior_holds()"
+        }
+      ],
+      "source_file": "examples/service/units/billing/discount_strategy.unit.spec"
+    },
+    {
+      "id": "billing/pricing_quote",
+      "kind": "data",
+      "intent": "Quote a service checkout total from subtotal plus membership discount and regional fee rates.",
+      "data": {
+        "fields": {
+          "subtotal": {
+            "type": "rust_decimal::Decimal"
+          },
+          "membership_rate": {
+            "type": "rust_decimal::Decimal"
+          },
+          "regional_rate": {
+            "type": "rust_decimal::Decimal"
+          }
+        }
+      },
+      "constructors": [
+        {
+          "id": "new",
+          "intent": {
+            "why": "Create a quote from explicit subtotal and rates."
+          },
+          "contract": {
+            "inputs": {
+              "subtotal": "rust_decimal::Decimal",
+              "membership_rate": "rust_decimal::Decimal",
+              "regional_rate": "rust_decimal::Decimal"
+            },
+            "invariants": []
+          },
+          "initializes": {
+            "subtotal": "subtotal",
+            "membership_rate": "membership_rate",
+            "regional_rate": "regional_rate"
+          }
+        }
+      ],
+      "methods": [
+        {
+          "id": "discounted_subtotal",
+          "intent": {
+            "why": "Return the subtotal after the membership discount and before the regional fee."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [
+            "billing/apply_membership_discount"
+          ],
+          "lowering": {
+            "rust": {
+              "body": "{\n    apply_membership_discount(self.subtotal, self.membership_rate)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "total",
+          "intent": {
+            "why": "Return the final checkout total after the membership discount and regional fee."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [
+            "billing/apply_regional_fee"
+          ],
+          "lowering": {
+            "rust": {
+              "body": "{\n    apply_regional_fee(self.discounted_subtotal(), self.regional_rate)\n}\n"
+            }
+          }
+        }
+      ],
+      "backends": {
+        "rust": {
+          "derives": [
+            "Clone",
+            "Debug",
+            "PartialEq"
+          ]
+        }
+      },
+      "deps": [
+        {
+          "library": null,
+          "id": "billing/apply_membership_discount"
+        },
+        {
+          "library": null,
+          "id": "billing/apply_regional_fee"
+        }
+      ],
+      "local_tests": [
+        {
+          "id": "discounted_subtotal_basic",
+          "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(5, 2)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
+        },
+        {
+          "id": "total_basic",
+          "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(5, 2)).total() == rust_decimal::Decimal::new(9450, 2)"
+        }
+      ],
+      "source_file": "examples/service/units/billing/pricing_quote.unit.spec"
+    }
+  ],
+  "molecule_tests": [
+    {
+      "id": "billing/checkout_declined_discount_flow",
+      "intent": "Prove the declined-discount service flow stays aligned when guarded fees clamp negative values to zero.",
+      "covers": [
+        "billing/checkout_net_total_guarded_fee",
+        "billing/discount_strategy",
+        "billing/pricing_quote"
+      ],
+      "imports": [
+        "rust_decimal::Decimal",
+        "crate::billing::checkout_net_total_guarded_fee::checkout_net_total_guarded_fee",
+        "crate::billing::pricing_quote::PricingQuote"
+      ],
+      "source_file": "examples/service/units/billing/checkout_declined_discount_flow.test.spec"
+    },
+    {
+      "id": "billing/checkout_success_flow",
+      "intent": "End-to-end service checkout pricing for the approved membership discount and regional fee path.",
+      "covers": [
+        "billing/apply_membership_discount",
+        "billing/apply_regional_fee",
+        "billing/checkout_net_total",
+        "billing/pricing_quote"
+      ],
+      "imports": [
+        "rust_decimal::Decimal",
+        "crate::billing::apply_membership_discount::apply_membership_discount",
+        "crate::billing::apply_regional_fee::apply_regional_fee",
+        "crate::billing::checkout_net_total::checkout_net_total",
+        "crate::billing::pricing_quote::PricingQuote"
+      ],
+      "source_file": "examples/service/units/billing/checkout_success_flow.test.spec"
+    },
+    {
+      "id": "billing/discount_strategy_quote_flow",
+      "intent": "Prove that the service discount seam stays aligned with the quote and fee flow for supported discount strategies.",
+      "covers": [
+        "billing/discount_strategy",
+        "billing/pricing_quote",
+        "billing/apply_regional_fee"
+      ],
+      "imports": [
+        "rust_decimal::Decimal",
+        "crate::billing::apply_regional_fee::apply_regional_fee",
+        "crate::billing::pricing_quote::PricingQuote"
+      ],
+      "source_file": "examples/service/units/billing/discount_strategy_quote_flow.test.spec"
+    }
+  ],
+  "passports": [
+    {
+      "spec_version": "0.3.0",
+      "id": "billing/apply_membership_discount",
+      "intent": "Return the subtotal after applying the membership discount rate and clamping at zero.",
+      "contract": {
+        "inputs": [
+          {
+            "name": "subtotal",
+            "type": "Decimal"
+          },
+          {
+            "name": "rate",
+            "type": "Decimal"
+          }
+        ],
+        "returns": "Decimal",
+        "invariants": [
+          "output <= subtotal",
+          "output >= 0"
+        ]
+      },
+      "deps": [],
+      "local_tests": [
+        {
+          "id": "membership_discount_basic",
+          "expect": "apply_membership_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+        }
+      ],
+      "generated_at": "<normalized>",
+      "source_file": "<normalized>",
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "membership_discount_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "<normalized>",
+        "provenance": {
+          "git_commit_sha": "<normalized>"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527"
+      },
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "target_proofs": {
+        "rust": {
+          "evidence": {
+            "build_status": "pass",
+            "test_results": [
+              {
+                "id": "membership_discount_basic",
+                "status": "pass"
+              }
+            ],
+            "observed_at": "<normalized>",
+            "provenance": {
+              "git_commit_sha": "<normalized>"
+            }
+          },
+          "freshness_anchor": {
+            "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527"
+          },
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        }
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the subtotal after applying the membership discount rate and clamping at zero."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "2 authored invariant(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_membership_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "contract_hash": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb"
+    },
+    {
+      "spec_version": "0.3.0",
+      "id": "billing/apply_regional_fee",
+      "intent": "Return the discounted subtotal after applying the regional fee rate.",
+      "contract": {
+        "inputs": [
+          {
+            "name": "subtotal",
+            "type": "Decimal"
+          },
+          {
+            "name": "rate",
+            "type": "Decimal"
+          }
+        ],
+        "returns": "Decimal",
+        "invariants": [
+          "output >= subtotal"
+        ]
+      },
+      "deps": [],
+      "local_tests": [
+        {
+          "id": "regional_fee_basic",
+          "expect": "apply_regional_fee(Decimal::new(10000, 2), Decimal::new(5, 2)) == Decimal::new(10500, 2)"
+        }
+      ],
+      "generated_at": "<normalized>",
+      "source_file": "<normalized>",
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "regional_fee_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "<normalized>",
+        "provenance": {
+          "git_commit_sha": "<normalized>"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:90d784f0777d66d897a6b748605f8871b6b2b42855432ce35eb0163acc55c77f"
+      },
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "target_proofs": {
+        "rust": {
+          "evidence": {
+            "build_status": "pass",
+            "test_results": [
+              {
+                "id": "regional_fee_basic",
+                "status": "pass"
+              }
+            ],
+            "observed_at": "<normalized>",
+            "provenance": {
+              "git_commit_sha": "<normalized>"
+            }
+          },
+          "freshness_anchor": {
+            "authored_truth_digest": "sha256:90d784f0777d66d897a6b748605f8871b6b2b42855432ce35eb0163acc55c77f"
+          },
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        }
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the discounted subtotal after applying the regional fee rate."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_regional_fee with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "contract_hash": "sha256:dc83a813626c41ecdc8408876ebea10a76da1e39c512cdf0d986cac2fad246df"
+    },
+    {
+      "spec_version": "0.3.0",
+      "id": "billing/checkout_net_total",
+      "intent": "Return the net checkout total after discounting the subtotal and then applying the regional fee.",
+      "contract": {
+        "inputs": [
+          {
+            "name": "subtotal",
+            "type": "Decimal"
+          },
+          {
+            "name": "membership_rate",
+            "type": "Decimal"
+          },
+          {
+            "name": "regional_rate",
+            "type": "Decimal"
+          }
+        ],
+        "returns": "Decimal",
+        "invariants": [
+          "output >= 0"
+        ]
+      },
+      "deps": [
+        "billing/apply_membership_discount",
+        "billing/apply_regional_fee"
+      ],
+      "local_tests": [
+        {
+          "id": "checkout_net_total_basic",
+          "expect": "checkout_net_total(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(5, 2)) == Decimal::new(9450, 2)"
+        }
+      ],
+      "generated_at": "<normalized>",
+      "source_file": "<normalized>",
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "checkout_net_total_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "<normalized>",
+        "provenance": {
+          "git_commit_sha": "<normalized>"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:97edb97e2427faf25c10d6bda90d800a25d0aec1a7bc1e672ef4bf79f1f439e6"
+      },
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "target_proofs": {
+        "rust": {
+          "evidence": {
+            "build_status": "pass",
+            "test_results": [
+              {
+                "id": "checkout_net_total_basic",
+                "status": "pass"
+              }
+            ],
+            "observed_at": "<normalized>",
+            "provenance": {
+              "git_commit_sha": "<normalized>"
+            }
+          },
+          "freshness_anchor": {
+            "authored_truth_digest": "sha256:97edb97e2427faf25c10d6bda90d800a25d0aec1a7bc1e672ef4bf79f1f439e6"
+          },
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        }
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the net checkout total after discounting the subtotal and then applying the regional fee."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_net_total with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "contract_hash": "sha256:dce88e797aec53a663cd7d46bfbf44017feca6005a4ca77feec99fa8f9490c2d"
+    },
+    {
+      "spec_version": "0.3.0",
+      "id": "billing/checkout_net_total_guarded_fee",
+      "intent": "Return the net checkout total after discounting the subtotal and applying a nonnegative regional fee only.",
+      "contract": {
+        "inputs": [
+          {
+            "name": "subtotal",
+            "type": "Decimal"
+          },
+          {
+            "name": "membership_rate",
+            "type": "Decimal"
+          },
+          {
+            "name": "regional_rate",
+            "type": "Decimal"
+          }
+        ],
+        "returns": "Decimal",
+        "invariants": [
+          "output >= 0"
+        ]
+      },
+      "deps": [
+        "billing/apply_membership_discount",
+        "billing/apply_regional_fee"
+      ],
+      "local_tests": [
+        {
+          "id": "checkout_net_total_guarded_fee_clamps_negative_rates",
+          "expect": "checkout_net_total_guarded_fee(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(-5, 2)) == Decimal::new(9000, 2)"
+        }
+      ],
+      "generated_at": "<normalized>",
+      "source_file": "<normalized>",
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "checkout_net_total_guarded_fee_clamps_negative_rates",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "<normalized>",
+        "provenance": {
+          "git_commit_sha": "<normalized>"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:22eee55b36620beec113ed5f3a9388342a51a3020bd728d242b8ea1d1c18318f"
+      },
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "target_proofs": {
+        "rust": {
+          "evidence": {
+            "build_status": "pass",
+            "test_results": [
+              {
+                "id": "checkout_net_total_guarded_fee_clamps_negative_rates",
+                "status": "pass"
+              }
+            ],
+            "observed_at": "<normalized>",
+            "provenance": {
+              "git_commit_sha": "<normalized>"
+            }
+          },
+          "freshness_anchor": {
+            "authored_truth_digest": "sha256:22eee55b36620beec113ed5f3a9388342a51a3020bd728d242b8ea1d1c18318f"
+          },
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          }
+        }
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the net checkout total after discounting the subtotal and applying a nonnegative regional fee only."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_net_total_guarded_fee with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "contract_hash": "sha256:dce88e797aec53a663cd7d46bfbf44017feca6005a4ca77feec99fa8f9490c2d"
+    },
+    {
+      "spec_version": "0.3.0",
+      "id": "billing/discount_strategy",
+      "kind": "sum",
+      "intent": "Represent mutually exclusive membership discount strategies for a service checkout flow.",
+      "sum": {
+        "variants": {
+          "declined": {},
+          "percentage": {
+            "fields": {
+              "rate": {
+                "type": "rust_decimal::Decimal"
+              }
+            }
+          },
+          "fixed_credit": {
+            "fields": {
+              "amount": {
+                "type": "rust_decimal::Decimal"
+              }
+            }
+          }
+        }
+      },
+      "methods": [
+        {
+          "id": "discount_amount",
+          "intent": {
+            "why": "Return the discount amount to subtract from the subtotal."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "inputs": {
+              "subtotal": "rust_decimal::Decimal"
+            },
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    match self {\n        Self::Declined => rust_decimal::Decimal::ZERO,\n        Self::Percentage { rate } => subtotal * *rate,\n        Self::FixedCredit { amount } => (*amount).min(subtotal),\n    }\n}\n"
+            }
+          }
+        },
+        {
+          "id": "discounted_subtotal",
+          "intent": {
+            "why": "Return the subtotal after applying the selected discount strategy."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "inputs": {
+              "subtotal": "rust_decimal::Decimal"
+            },
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    subtotal - self.discount_amount(subtotal)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "declined_example_holds",
+          "intent": {
+            "why": "Support direct atom proof for the canonical declined-discount example."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "bool",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    let policy = Self::Declined;\n    policy.discount_amount(rust_decimal::Decimal::new(10000, 2))\n        == rust_decimal::Decimal::ZERO\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))\n            == rust_decimal::Decimal::new(10000, 2)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "percentage_example_holds",
+          "intent": {
+            "why": "Support direct atom proof for the canonical percentage discount example."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "bool",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    let policy = Self::Percentage {\n        rate: rust_decimal::Decimal::new(10, 2),\n    };\n    policy.discount_amount(rust_decimal::Decimal::new(10000, 2))\n        == rust_decimal::Decimal::new(1000, 2)\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(10000, 2))\n            == rust_decimal::Decimal::new(9000, 2)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "fixed_credit_capped_behavior_holds",
+          "intent": {
+            "why": "Support direct atom proof for capped fixed-credit behavior."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "bool",
+            "invariants": []
+          },
+          "deps": [],
+          "lowering": {
+            "rust": {
+              "body": "{\n    let policy = Self::FixedCredit {\n        amount: rust_decimal::Decimal::new(2000, 2),\n    };\n    policy.discount_amount(rust_decimal::Decimal::new(1500, 2))\n        == rust_decimal::Decimal::new(1500, 2)\n        && policy.discounted_subtotal(rust_decimal::Decimal::new(1500, 2))\n            == rust_decimal::Decimal::ZERO\n}\n"
+            }
+          }
+        }
+      ],
+      "backends": {
+        "rust": {
+          "derives": [
+            "Clone",
+            "Debug",
+            "PartialEq"
+          ]
+        }
+      },
+      "deps": [],
+      "local_tests": [
+        {
+          "id": "variant_declined",
+          "expect": "DiscountStrategy::Declined.declined_example_holds()"
+        },
+        {
+          "id": "variant_percentage",
+          "expect": "DiscountStrategy::Declined.percentage_example_holds()"
+        },
+        {
+          "id": "behavior_fixed_credit_capped",
+          "expect": "DiscountStrategy::Declined.fixed_credit_capped_behavior_holds()"
+        }
+      ],
+      "generated_at": "<normalized>",
+      "source_file": "<normalized>",
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "variant_declined",
+            "status": "pass"
+          },
+          {
+            "id": "variant_percentage",
+            "status": "pass"
+          },
+          {
+            "id": "behavior_fixed_credit_capped",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "<normalized>",
+        "provenance": {
+          "git_commit_sha": "<normalized>"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+        "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e"
+      },
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      },
+      "target_proofs": {
+        "rust": {
+          "evidence": {
+            "build_status": "pass",
+            "test_results": [
+              {
+                "id": "variant_declined",
+                "status": "pass"
+              },
+              {
+                "id": "variant_percentage",
+                "status": "pass"
+              },
+              {
+                "id": "behavior_fixed_credit_capped",
+                "status": "pass"
+              }
+            ],
+            "observed_at": "<normalized>",
+            "provenance": {
+              "git_commit_sha": "<normalized>"
+            }
+          },
+          "freshness_anchor": {
+            "authored_truth_digest": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80",
+            "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e"
+          },
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "backend_execution_digest": "sha256:c02a7324f2d3cfba643e1e2e46163396f6f68b0f288d702131e5836efd4f693e",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "fresh"
+          }
+        }
+      },
+      "markers": [
+        {
+          "id": "backend_rust_derives",
+          "path": "backends.rust.derives"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discount_amount.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discounted_subtotal.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.declined_example_holds.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.percentage_example_holds.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.fixed_credit_capped_behavior_holds.lowering.rust.body"
+        }
+      ],
+      "escape_hatch_gate": {
+        "status": "closed",
+        "required_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "present_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "missing_surfaces": []
+      },
+      "contract_hash": "sha256:99a6cfc0710ad87e6365540843a00643943ef2d8c66d0c54d6795a4439196d80"
+    },
+    {
+      "spec_version": "0.3.0",
+      "id": "billing/pricing_quote",
+      "kind": "data",
+      "intent": "Quote a service checkout total from subtotal plus membership discount and regional fee rates.",
+      "data": {
+        "fields": {
+          "subtotal": {
+            "type": "rust_decimal::Decimal"
+          },
+          "membership_rate": {
+            "type": "rust_decimal::Decimal"
+          },
+          "regional_rate": {
+            "type": "rust_decimal::Decimal"
+          }
+        }
+      },
+      "constructors": [
+        {
+          "id": "new",
+          "intent": {
+            "why": "Create a quote from explicit subtotal and rates."
+          },
+          "contract": {
+            "inputs": {
+              "subtotal": "rust_decimal::Decimal",
+              "membership_rate": "rust_decimal::Decimal",
+              "regional_rate": "rust_decimal::Decimal"
+            },
+            "invariants": []
+          },
+          "initializes": {
+            "subtotal": "subtotal",
+            "membership_rate": "membership_rate",
+            "regional_rate": "regional_rate"
+          }
+        }
+      ],
+      "methods": [
+        {
+          "id": "discounted_subtotal",
+          "intent": {
+            "why": "Return the subtotal after the membership discount and before the regional fee."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [
+            "billing/apply_membership_discount"
+          ],
+          "lowering": {
+            "rust": {
+              "body": "{\n    apply_membership_discount(self.subtotal, self.membership_rate)\n}\n"
+            }
+          }
+        },
+        {
+          "id": "total",
+          "intent": {
+            "why": "Return the final checkout total after the membership discount and regional fee."
+          },
+          "receiver": "shared_ref",
+          "contract": {
+            "returns": "rust_decimal::Decimal",
+            "invariants": []
+          },
+          "deps": [
+            "billing/apply_regional_fee"
+          ],
+          "lowering": {
+            "rust": {
+              "body": "{\n    apply_regional_fee(self.discounted_subtotal(), self.regional_rate)\n}\n"
+            }
+          }
+        }
+      ],
+      "backends": {
+        "rust": {
+          "derives": [
+            "Clone",
+            "Debug",
+            "PartialEq"
+          ]
+        }
+      },
+      "deps": [
+        "billing/apply_membership_discount",
+        "billing/apply_regional_fee"
+      ],
+      "local_tests": [
+        {
+          "id": "discounted_subtotal_basic",
+          "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(5, 2)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
+        },
+        {
+          "id": "total_basic",
+          "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(5, 2)).total() == rust_decimal::Decimal::new(9450, 2)"
+        }
+      ],
+      "generated_at": "<normalized>",
+      "source_file": "<normalized>",
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "discounted_subtotal_basic",
+            "status": "pass"
+          },
+          {
+            "id": "total_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "<normalized>",
+        "provenance": {
+          "git_commit_sha": "<normalized>"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+        "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f"
+      },
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      },
+      "target_proofs": {
+        "rust": {
+          "evidence": {
+            "build_status": "pass",
+            "test_results": [
+              {
+                "id": "discounted_subtotal_basic",
+                "status": "pass"
+              },
+              {
+                "id": "total_basic",
+                "status": "pass"
+              }
+            ],
+            "observed_at": "<normalized>",
+            "provenance": {
+              "git_commit_sha": "<normalized>"
+            }
+          },
+          "freshness_anchor": {
+            "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+            "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f"
+          },
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "fresh"
+          }
+        }
+      },
+      "markers": [
+        {
+          "id": "backend_rust_derives",
+          "path": "backends.rust.derives"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.discounted_subtotal.lowering.rust.body"
+        },
+        {
+          "id": "method_lowering_rust_body",
+          "path": "methods.total.lowering.rust.body"
+        }
+      ],
+      "escape_hatch_gate": {
+        "status": "closed",
+        "required_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "present_surfaces": [
+          "atom",
+          "molecule"
+        ],
+        "missing_surfaces": []
+      },
+      "contract_hash": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2"
+    }
+  ],
+  "graph": {
+    "edges": [
+      {
+        "kind": "dep",
+        "from": {
+          "library": null,
+          "id": "billing/checkout_net_total"
+        },
+        "to": {
+          "library": null,
+          "id": "billing/apply_membership_discount"
+        }
+      },
+      {
+        "kind": "dep",
+        "from": {
+          "library": null,
+          "id": "billing/checkout_net_total"
+        },
+        "to": {
+          "library": null,
+          "id": "billing/apply_regional_fee"
+        }
+      },
+      {
+        "kind": "dep",
+        "from": {
+          "library": null,
+          "id": "billing/checkout_net_total_guarded_fee"
+        },
+        "to": {
+          "library": null,
+          "id": "billing/apply_membership_discount"
+        }
+      },
+      {
+        "kind": "dep",
+        "from": {
+          "library": null,
+          "id": "billing/checkout_net_total_guarded_fee"
+        },
+        "to": {
+          "library": null,
+          "id": "billing/apply_regional_fee"
+        }
+      },
+      {
+        "kind": "dep",
+        "from": {
+          "library": null,
+          "id": "billing/pricing_quote"
+        },
+        "to": {
+          "library": null,
+          "id": "billing/apply_membership_discount"
+        }
+      },
+      {
+        "kind": "dep",
+        "from": {
+          "library": null,
+          "id": "billing/pricing_quote"
+        },
+        "to": {
+          "library": null,
+          "id": "billing/apply_regional_fee"
+        }
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_declined_discount_flow",
+        "unit": "billing/checkout_net_total_guarded_fee"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_declined_discount_flow",
+        "unit": "billing/discount_strategy"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_declined_discount_flow",
+        "unit": "billing/pricing_quote"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_success_flow",
+        "unit": "billing/apply_membership_discount"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_success_flow",
+        "unit": "billing/apply_regional_fee"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_success_flow",
+        "unit": "billing/checkout_net_total"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/checkout_success_flow",
+        "unit": "billing/pricing_quote"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/discount_strategy_quote_flow",
+        "unit": "billing/apply_regional_fee"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/discount_strategy_quote_flow",
+        "unit": "billing/discount_strategy"
+      },
+      {
+        "kind": "covers",
+        "test": "billing/discount_strategy_quote_flow",
+        "unit": "billing/pricing_quote"
+      }
+    ]
+  },
+  "benchmarks": [
+    {
+      "benchmark_id": "BENCH-SERVICE",
+      "kind": "positive",
+      "lifecycle": "active",
+      "required_for_v1": true,
+      "path_scope": "full",
+      "accounting_status": "valid",
+      "benchmark_status": "passing",
+      "gate_status": "satisfied",
+      "readability_review_status": "current",
+      "readability_verdict": {
+        "decision": "approved",
+        "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
+      },
+      "label_digest": "<normalized>",
+      "projection_digest": "<normalized>",
+      "summary": {
+        "total_cases": 6,
+        "supported_cases": 6,
+        "supported_valid_cases": 6,
+        "positive_credit_cases": 6,
+        "case_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 6
+        },
+        "required_molecule_total": 3,
+        "required_molecule_status_counts": {
+          "invalid": 0,
+          "failing": 0,
+          "stale": 0,
+          "incomplete": 0,
+          "untested": 0,
+          "valid": 3
+        }
+      },
+      "required_molecule_proofs": [
+        {
+          "molecule_id": "billing/checkout_declined_discount_flow",
+          "status": "valid",
+          "proof_ref": "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json"
+        },
+        {
+          "molecule_id": "billing/checkout_success_flow",
+          "status": "valid",
+          "proof_ref": "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+        },
+        {
+          "molecule_id": "billing/discount_strategy_quote_flow",
+          "status": "valid",
+          "proof_ref": "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "billing/apply_membership_discount",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/apply_membership_discount",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/apply_membership_discount.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/apply_regional_fee",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/apply_regional_fee",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/apply_regional_fee.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/checkout_net_total",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/checkout_net_total",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/checkout_net_total.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/checkout_net_total_guarded_fee",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/checkout_net_total_guarded_fee",
+          "classification": "supported",
+          "status": "valid",
+          "semantic_support_status": "supported",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/checkout_net_total_guarded_fee.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/discount_strategy",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/discount_strategy",
+          "classification": "supported",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/discount_strategy.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        },
+        {
+          "case_id": "billing/pricing_quote",
+          "carrier_kind": "unit",
+          "carrier_id": "billing/pricing_quote",
+          "classification": "supported",
+          "status": "valid",
+          "proof_refs": {
+            "passport": "examples/service/units/billing/pricing_quote.spec.passport.json",
+            "covering_molecule_evidence": [
+              "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json",
+              "examples/service/units/billing/checkout_success_flow.test.evidence.json",
+              "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
+            ]
+          },
+          "counts_as_supported_positive": true
+        }
+      ],
+      "readability_generated_files": [
+        "examples/service/src/generated/billing/apply_membership_discount.rs",
+        "examples/service/src/generated/billing/apply_regional_fee.rs",
+        "examples/service/src/generated/billing/checkout_net_total.rs",
+        "examples/service/src/generated/billing/checkout_net_total_guarded_fee.rs",
+        "examples/service/src/generated/billing/discount_strategy.rs",
+        "examples/service/src/generated/billing/mod.rs",
+        "examples/service/src/generated/billing/molecule_tests.rs",
+        "examples/service/src/generated/billing/pricing_quote.rs",
+        "examples/service/src/generated/mod.rs"
+      ]
+    }
+  ],
+  "warnings": []
+}

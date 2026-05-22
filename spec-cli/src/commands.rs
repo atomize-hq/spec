@@ -3482,22 +3482,19 @@ fn resolve_plan_library_root(
 }
 
 fn resolve_project_root(context: &WorkspaceContext, crate_root: &Path) -> PathBuf {
-    if let Some(repo_root) = &context.repo_root {
+    if let Some(repo_root) = &context.repo_root
+        && crate_root.starts_with(repo_root)
+    {
         return repo_root.clone();
     }
 
-    if let Some(workspace_root) = &context.workspace_root {
-        return common_ancestor_path(workspace_root, crate_root)
-            .unwrap_or_else(|| workspace_root.clone());
+    if let Some(workspace_root) = &context.workspace_root
+        && crate_root.starts_with(workspace_root)
+    {
+        return workspace_root.clone();
     }
 
     crate_root.to_path_buf()
-}
-
-fn common_ancestor_path(left: &Path, right: &Path) -> Option<PathBuf> {
-    left.ancestors()
-        .find(|candidate| right.starts_with(candidate))
-        .map(Path::to_path_buf)
 }
 
 fn canonicalize_existing_dir(path: &Path) -> Result<PathBuf> {
@@ -6425,6 +6422,13 @@ mod tests {
         for entry in fs::read_dir(src).unwrap() {
             let entry = entry.unwrap();
             let entry_path = entry.path();
+            let file_name = entry.file_name();
+            if file_name
+                .to_str()
+                .is_some_and(|name| matches!(name, "target" | ".git"))
+            {
+                continue;
+            }
             let dst_path = dst.join(entry.file_name());
 
             if entry.file_type().unwrap().is_dir() {

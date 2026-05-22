@@ -1,0 +1,199 @@
+{
+  "spec_version": "0.3.0",
+  "id": "billing/pricing_quote",
+  "kind": "data",
+  "intent": "Quote a service checkout total from subtotal plus membership discount and regional fee rates.",
+  "data": {
+    "fields": {
+      "subtotal": {
+        "type": "rust_decimal::Decimal"
+      },
+      "membership_rate": {
+        "type": "rust_decimal::Decimal"
+      },
+      "regional_rate": {
+        "type": "rust_decimal::Decimal"
+      }
+    }
+  },
+  "constructors": [
+    {
+      "id": "new",
+      "intent": {
+        "why": "Create a quote from explicit subtotal and rates."
+      },
+      "contract": {
+        "inputs": {
+          "subtotal": "rust_decimal::Decimal",
+          "membership_rate": "rust_decimal::Decimal",
+          "regional_rate": "rust_decimal::Decimal"
+        },
+        "invariants": []
+      },
+      "initializes": {
+        "subtotal": "subtotal",
+        "membership_rate": "membership_rate",
+        "regional_rate": "regional_rate"
+      }
+    }
+  ],
+  "methods": [
+    {
+      "id": "discounted_subtotal",
+      "intent": {
+        "why": "Return the subtotal after the membership discount and before the regional fee."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [
+        "billing/apply_membership_discount"
+      ],
+      "lowering": {
+        "rust": {
+          "body": "{\n    apply_membership_discount(self.subtotal, self.membership_rate)\n}\n"
+        }
+      }
+    },
+    {
+      "id": "total",
+      "intent": {
+        "why": "Return the final checkout total after the membership discount and regional fee."
+      },
+      "receiver": "shared_ref",
+      "contract": {
+        "returns": "rust_decimal::Decimal",
+        "invariants": []
+      },
+      "deps": [
+        "billing/apply_regional_fee"
+      ],
+      "lowering": {
+        "rust": {
+          "body": "{\n    apply_regional_fee(self.discounted_subtotal(), self.regional_rate)\n}\n"
+        }
+      }
+    }
+  ],
+  "backends": {
+    "rust": {
+      "derives": [
+        "Clone",
+        "Debug",
+        "PartialEq"
+      ]
+    }
+  },
+  "deps": [
+    "billing/apply_membership_discount",
+    "billing/apply_regional_fee"
+  ],
+  "local_tests": [
+    {
+      "id": "discounted_subtotal_basic",
+      "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(5, 2)).discounted_subtotal() == rust_decimal::Decimal::new(9000, 2)"
+    },
+    {
+      "id": "total_basic",
+      "expect": "PricingQuote::new(rust_decimal::Decimal::new(10000, 2), rust_decimal::Decimal::new(10, 2), rust_decimal::Decimal::new(5, 2)).total() == rust_decimal::Decimal::new(9450, 2)"
+    }
+  ],
+  "generated_at": "2026-05-21T16:55:23Z",
+  "source_file": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a/examples/service/units/billing/pricing_quote.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "discounted_subtotal_basic",
+        "status": "pass"
+      },
+      {
+        "id": "total_basic",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-21T16:55:18Z",
+    "provenance": {
+      "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+    "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+    "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "fresh"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "discounted_subtotal_basic",
+            "status": "pass"
+          },
+          {
+            "id": "total_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-21T16:55:18Z",
+        "provenance": {
+          "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+        "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2",
+        "backend_execution_digest": "sha256:055cc5bff0fee7d3cf7677dadb95219290ea4e38429003aa7605457338a7352f",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "fresh"
+      }
+    }
+  },
+  "markers": [
+    {
+      "id": "backend_rust_derives",
+      "path": "backends.rust.derives"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.discounted_subtotal.lowering.rust.body"
+    },
+    {
+      "id": "method_lowering_rust_body",
+      "path": "methods.total.lowering.rust.body"
+    }
+  ],
+  "escape_hatch_gate": {
+    "status": "closed",
+    "required_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "present_surfaces": [
+      "atom",
+      "molecule"
+    ],
+    "missing_surfaces": []
+  },
+  "semantic_review": {
+    "verdict": "under_specified",
+    "compatibility_key": "unsupported.data.v1",
+    "reason_codes": [
+      "unsupported_surface"
+    ],
+    "summary": "this 'data' surface is not evaluated by the semantic reviewer for this unit",
+    "evaluator_scope": "unsupported_surface"
+  },
+  "contract_hash": "sha256:f7520b9a8a675ed8bf9b6cd969d7940d95d43224ee3caf9b67b4c278ab5e3ec2"
+}

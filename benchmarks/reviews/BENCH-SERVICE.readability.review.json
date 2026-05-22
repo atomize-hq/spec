@@ -1,0 +1,19 @@
+{
+  "benchmark_id": "BENCH-SERVICE",
+  "projection_digest": "sha256:23b445f912ce8bc23a2430495cf57a8b8f866fe1be56ff2976667e26e742edda",
+  "readability_generated_files": [
+    "examples/service/src/generated/billing/apply_membership_discount.rs",
+    "examples/service/src/generated/billing/apply_regional_fee.rs",
+    "examples/service/src/generated/billing/checkout_net_total.rs",
+    "examples/service/src/generated/billing/checkout_net_total_guarded_fee.rs",
+    "examples/service/src/generated/billing/discount_strategy.rs",
+    "examples/service/src/generated/billing/mod.rs",
+    "examples/service/src/generated/billing/molecule_tests.rs",
+    "examples/service/src/generated/billing/pricing_quote.rs",
+    "examples/service/src/generated/mod.rs"
+  ],
+  "verdict": {
+    "decision": "approved",
+    "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
+  }
+}

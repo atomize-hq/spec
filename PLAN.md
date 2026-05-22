@@ -7,7 +7,7 @@ Implementation readiness: **ready for implementation**
 Plan scope: **turn `BENCH-SERVICE` from a reserved benchmark into the active service-shaped proof workload required by `M67`, without widening `M66` support rows, reopening `M68` mechanics, or admitting async/IO, generics, traits, lifetimes, or framework-heavy authored surfaces**
 Base branch: **main**
 Working branch: **`codex/i6-service-benchmark-activation`**
-Validated at commit: **`3185b49`**
+Validated on branch: **`codex/i6-service-benchmark-activation`**
 Last rewritten: **2026-05-21**
 
 Supersedes:
@@ -21,7 +21,7 @@ Locked authority inputs:
 - `M66`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-213928.md`
 - `M67`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-220646.md`
 - `M68`: `/home/azureuser/.gstack/projects/atomize-hq-spec/spensermcconnell-feat-m60-plus-design-20260517-225503.md`
-- live repo truth run on `main` at `3185b49`:
+- live repo truth run on branch `codex/i6-service-benchmark-activation` at the then-current `HEAD`:
   - `cargo run -p spec-cli -- status . --format json`
   - `git rev-parse --short HEAD`
   - `git branch --show-current`
@@ -44,80 +44,67 @@ Primary repo surfaces:
 - `spec-core/src/benchmark.rs`
 - `spec-cli/src/commands.rs`
 - `spec-cli/tests/cli.rs`
+- `spec-cli/tests/rust_v1_closure.rs`
 - `spec-cli/tests/rust_v1_service.rs`
 - `spec-cli/tests/fixtures/benchmarks/**`
 
 ## Executive Summary
 
-I5 shipped the supported-core closure wall.
+I5 closed the supported-core benchmark wall.
 
-The live repo now has:
+The remaining Rust V1 proof gap is narrower now than it was when `I5` was first
+drafted: the repo already proves the positive narrow-core benchmark
+(`BENCH-ECOM`) and the companion-negative wall (`BENCH-CROSSLIB`), while
+`BENCH-SERVICE` still exists only as a reserved placeholder with zero cases and
+no readability review.
 
-- `BENCH-ECOM` passing as the active positive narrow-core benchmark
-- `BENCH-CROSSLIB` passing as the active companion-negative wall
-- `BENCH-SERVICE` still present only as a reserved, zero-case, zero-review gate
+I6 closes exactly that gap and nothing else.
 
-That means the only open Rust V1 proof gap left in the M65-M68 stack is the one
-that `M67` named explicitly: the repo still lacks a real service-shaped positive
-benchmark.
-
-I6 closes exactly that gap.
-
-It does so by activating `BENCH-SERVICE`, authoring one real single-library
-service workload under `examples/service/`, proving both happy-path and
-business-failure-path flows inside the already shipped supported narrow core,
-and refreshing the read-side benchmark truth until the repo can honestly say
-that the current Rust V1 claim is backed by both example-domain proof and a
-service-shaped proof workload.
+This plan activates `BENCH-SERVICE` as one real single-library benchmark rooted
+at `examples/service/units`, backed by six supported positive cases, three
+required molecule proofs, a current snapshot, a current readability review, and
+a dedicated regression wall. When I6 is complete, the repo can truthfully claim
+that the current Rust V1 narrow-core contract is proven by both an example-domain
+workload and a service-shaped workload.
 
 ## Current Validated Truth
 
-Observed on `main` at `3185b49`:
+Observed on branch `codex/i6-service-benchmark-activation` at the then-current
+`HEAD` on 2026-05-21:
 
-- `cargo run -p spec-cli -- status . --format json` reports
-  `schema_version: 4` and `scope_authority: "inventory_only"`
-- `BENCH-ECOM` currently reports:
-  - `lifecycle: "active"`
-  - `benchmark_status: "passing"`
-  - `gate_status: "satisfied"`
-  - `readability_review_status: "current"`
-  - `supported_valid_cases: 7`
-  - `required_molecule_total: 3`
-- `BENCH-CROSSLIB` currently reports:
-  - `lifecycle: "active"`
-  - `benchmark_status: "passing"`
-  - `gate_status: "not_applicable"`
-  - `positive_credit_cases: 0`
-  - `case_status_counts.valid: 4`
-- `BENCH-SERVICE` currently reports:
-  - `lifecycle: "reserved"`
-  - `accounting_status: "reserved_missing_cases"`
-  - `benchmark_status: "reserved"`
-  - `gate_status: "reserved"`
-  - `readability_review_status: "missing"`
-  - `total_cases: 0`
-  - `required_molecule_total: 0`
-- `benchmarks/labels.json` already declares the future service root as:
+- `cargo run -p spec-cli -- status . --format json` reports:
+  - `schema_version: 4`
+  - `scope_authority: "inventory_only"`
+  - `BENCH-ECOM` is `active`, `passing`, and `readability_review_status:
+    "current"`
+  - `BENCH-CROSSLIB` is `active`, `passing`, and `positive_credit_cases: 0`
+  - `BENCH-SERVICE` is `reserved`, `reserved_missing_cases`, and has
+    `total_cases: 0`
+- `cargo run -p spec-cli -- status . --format json` currently exits non-zero
+  because repo-root inventory includes intentionally non-green fixture surfaces.
+  For I6, repo-root status remains a diagnostic read surface; acceptance must
+  assert its JSON fields, not require a zero exit code.
+- `benchmarks/labels.json` already declares the future service benchmark root:
   - `root: "examples/service/units"`
   - `generated_root: "examples/service/src/generated"`
   - `readability_scope: "supported_closure"`
   - `cases: []`
-- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json` already exists, but only
-  as the reserved-state artifact
-- there is currently no `examples/service/` directory in the repo
-- service-shaped billing vocabulary already exists, but only inside test
-  fixtures:
-  - `billing/apply_membership_discount`
-  - `billing/apply_regional_fee`
-  - `billing/checkout_net_total`
-- `docs/rust_v1_contract_stack.md` still teaches the ladder only through I4, so
-  the ownership map is usable today but the in-repo milestone ladder needs I6
-  closeout cleanup
+- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json` already exists, but only in
+  reserved form
+- `benchmarks/reviews/` contains `BENCH-ECOM.readability.review.json`, but
+  there is no `BENCH-SERVICE.readability.review.json`
+- `examples/service/` does not exist yet
+- the closest already-shipped service-shape building blocks are:
+  - seam examples under `examples/ecommerce/units/pricing/`
+  - benchmark fixtures under `spec-cli/tests/fixtures/benchmarks/`
+  - closure regression patterns in `spec-cli/tests/rust_v1_closure.rs`
+- service-shaped billing vocabulary already exists in fixture form under
+  `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/**`
+- `docs/rust_v1_contract_stack.md` still teaches the ladder only through `I4`,
+  so the implementation ladder needs a closeout update after the benchmark lands
 
-That means the mechanics are already present.
-
-The missing piece is one deliberate, benchmark-labeled, service-shaped authored
-workload with current proof, current readability review, and stable regression
+That means the benchmark system is already capable of carrying the claim. The
+missing work is the benchmark payload, proof, review artifact, and regression
 coverage.
 
 ## Step 0: Scope Challenge
@@ -147,64 +134,67 @@ I6 does not need:
 - cross-library service proof
 - async or IO semantics
 - new semantic-family promotion
-- trait, lifetime, or macro-heavy authored support
+- trait, lifetime, macro, or framework-heavy authored support
 
-It needs one truthful service benchmark and the read-side regression wall that
-keeps it honest.
+It needs one truthful service benchmark and the regression wall that keeps it
+honest.
 
 Scope is accepted as-is.
 
 ### Failure-path definition for I6
 
-`M67` requires a service-shaped failure-path workflow.
+`M67` requires a service-shaped failure-path workflow. For I6, that means a
+business-path unhappy flow that stays inside the already-supported narrow core.
 
-For I6, that means a business-path unhappy flow that stays inside the current
-supported narrow core, such as:
+Allowed examples:
 
-- a declined or absent discount path represented through the plain sum seam
-- a guarded fee path that clamps invalid business input into the supported
+- a declined or absent discount path expressed through the supported plain sum
+  seam
+- a guarded-fee path that clamps invalid business input into the supported
   non-negative surface
 
-It does **not** mean:
+Disallowed examples:
 
 - network failure
 - database failure
 - async cancellation
-- exception-style service orchestration
+- retry or fallback orchestration
+- framework-managed request lifecycles
 
-Those remain outside `M66` narrow-core support and outside I6 scope.
+Those remain outside `M66` and outside I6.
 
 ### Complexity check
 
 Expected write scope:
 
-- `examples/service/**` example scaffold and source specs
+- `examples/service/**`
 - `benchmarks/labels.json`
 - `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`
 - `benchmarks/reviews/BENCH-SERVICE.readability.review.json`
 - `spec-cli/tests/rust_v1_service.rs`
 - `spec-cli/tests/fixtures/benchmarks/**`
-- targeted `spec-core` / `spec-cli` updates only if the active service benchmark
-  exposes a truthful-projection gap
+- targeted `spec-core/src/benchmark.rs` or `spec-cli/src/commands.rs` only if
+  activation exposes a truthful projection gap
 - `README.md`, `docs/rust_v1_contract_stack.md`, `TODOS.md`, and
   `CHANGELOG.md` during closeout
 
-If implementation starts redesigning benchmark projection, widening support
-rows, or re-arguing M66/M67/M68, stop. That is different scope.
+If implementation starts redesigning projection, widening support rows, or
+re-arguing `M66`/`M67`/`M68`, stop. That is different scope.
 
 ## What Already Exists
 
 | Sub-problem | Existing owner | I6 action |
 | --- | --- | --- |
-| positive benchmark mechanics | `benchmarks/labels.json`, `spec-core/src/benchmark.rs`, `spec-cli/src/commands.rs` | reuse and activate `BENCH-SERVICE` |
+| positive benchmark mechanics | `benchmarks/labels.json`, `spec-core/src/benchmark.rs`, `spec-cli/src/commands.rs` | reuse unchanged unless service activation exposes a real truth bug |
 | benchmark-root truth surfaces | `spec status`, `spec export`, `spec benchmark snapshot` | preserve contract, add service-root coverage |
-| supported-core example proof | `BENCH-ECOM` | reuse as the pattern for happy-path benchmark wiring |
-| companion-negative wall | `BENCH-CROSSLIB` | preserve unchanged, assert no regression |
-| readability review mechanics | `benchmarks/reviews/BENCH-ECOM.readability.review.json` | reuse the same digest/file-set rule for `BENCH-SERVICE` |
-| seed billing function vocabulary | `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/**` | promote the positive shapes into `examples/service/units/billing/**` |
-| plain seam examples | `examples/ecommerce/units/pricing/discount_strategy.unit.spec`, `examples/ecommerce/units/pricing/pricing_quote.unit.spec` | adapt the same supported seam shape into the service domain |
-| I5 closure regression wall | `spec-cli/tests/rust_v1_closure.rs` | preserve for ECOM/CROSSLIB, add separate service benchmark suite |
-| repo-root inventory semantics | I3.5/I4 fixture wall | preserve unchanged while `BENCH-SERVICE` goes active |
+| positive narrow-core proof shape | `BENCH-ECOM` | reuse as the primary pattern for labels, required molecules, readability, and snapshot assertions |
+| companion-negative wall | `BENCH-CROSSLIB` | preserve unchanged and assert non-regression |
+| readability review mechanics | `benchmarks/reviews/BENCH-ECOM.readability.review.json` | reuse the same digest and generated-file-set contract for `BENCH-SERVICE` |
+| benchmark fixture pattern | `spec-cli/tests/fixtures/benchmarks/**` | add service-specific fixtures alongside the existing benchmark fixture family |
+| benchmark regression pattern | `spec-cli/tests/rust_v1_closure.rs` | preserve this suite and add a dedicated `rust_v1_service` suite rather than overloading closure tests |
+| service billing vocabulary | `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/**` | promote only the supported positive shapes into `examples/service/units/billing/**` |
+| supported seam patterns | `examples/ecommerce/units/pricing/discount_strategy.unit.spec`, `examples/ecommerce/units/pricing/pricing_quote.unit.spec`, and their molecule tests | adapt the same supported seam shape into the service domain |
+| repo-root inventory semantics | current repo-root `status . --format json` behavior | preserve as diagnostic-only inventory with benchmark visibility, not as a proof-success command |
 
 ## Frozen Decisions
 
@@ -231,11 +221,11 @@ These are locked. I6 implements them and does not reopen them.
 
 4. **I6 uses only already-supported families and seam kinds.**
    - supported function families already shipped in the repo are allowed
-   - plain `kind:data` and `kind:sum` seams are allowed
-   - unsupported-function or unsupported-seam cases stay test-fixture-only,
-     not positive benchmark cases
+   - supported seam examples already shipped in ecommerce are allowed
+   - unsupported-function or unsupported-seam cases stay fixture-only, not
+     positive benchmark cases
 
-5. **The initial positive service roster is fixed in this plan.**
+5. **The positive service roster is fixed in this plan.**
    - `billing/apply_membership_discount`
    - `billing/apply_regional_fee`
    - `billing/checkout_net_total`
@@ -243,41 +233,44 @@ These are locked. I6 implements them and does not reopen them.
    - `billing/discount_strategy`
    - `billing/pricing_quote`
 
-6. **The initial required molecule roster is fixed in this plan.**
+6. **The required molecule roster is fixed in this plan.**
    - `billing/checkout_success_flow`
    - `billing/checkout_declined_discount_flow`
    - `billing/discount_strategy_quote_flow`
 
-7. **`BENCH-SERVICE` continues to use the M68 writer/reader wall.**
-   - source specs remain authored truth
-   - passports and molecule evidence remain proof writers
-   - benchmark labels remain benchmark-accounting truth
-   - readability review remains human-authored observation truth
-   - `status`, `export`, and `benchmark snapshot` remain read-side projections
+7. **Source specs remain the only authored truth for service behavior.**
+   - edit `.unit.spec` and `.test.spec` files by hand
+   - never hand-edit generated Rust, passports, molecule evidence, or snapshots
+   - refresh generated Rust with `spec build`
+   - refresh passports and molecule evidence with `spec test`
+   - refresh benchmark snapshot with `spec benchmark snapshot`
 
-8. **A service benchmark that requires widened support is a failed benchmark, not a widened contract.**
-   - if any proposed positive service case cannot stay inside the current
-     supported rows and interactions, replace the case with another in-family
-     service case
-   - do not widen M66 to rescue the benchmark
+8. **`BENCH-SERVICE` keeps the existing writer/reader contract.**
+   - source specs are authored truth
+   - passports and molecule evidence are proof writers
+   - benchmark labels are benchmark-accounting truth
+   - readability review is human-authored observation truth
+   - `status`, `export`, and `benchmark snapshot` are read-side projections
 
-9. **`BENCH-ECOM` and `BENCH-CROSSLIB` stay green and truthful throughout I6.**
-   - the service landing may refresh shared fixtures only where the benchmark
-     roster legitimately changes
-   - it may not regress the already-shipped benchmark wall
+9. **A service case that needs widened support is a failed case, not a widened contract.**
+   - if any proposed positive case cannot stay inside current supported rows and
+     interactions, replace the case
+   - do not widen `M66` to rescue the benchmark
 
-10. **Minimal diff still wins.**
-    - prefer promoting the existing billing fixture vocabulary plus adapting the
-      shipped seam patterns
+10. **`BENCH-ECOM` and `BENCH-CROSSLIB` stay green and truthful throughout I6.**
+    - the service landing may refresh shared fixtures only where the benchmark
+      roster legitimately changes
+    - it may not regress the already-shipped benchmark wall
+
+11. **Minimal diff still wins.**
+    - prefer promoting existing billing fixture vocabulary plus adapting shipped
+      seam patterns
     - only touch projection code when the active service benchmark exposes a
       real truth gap
 
-11. **I6 executes on a dedicated non-`main` branch.**
-    - implementation starts from `main` at `3185b49` or its direct descendant
-    - implementation work happens on
-      `codex/i6-service-benchmark-activation`
-    - do not land incremental service-benchmark edits directly on `main`
-    - refresh validation truth on the working branch before declaring I6 done
+12. **Implementation finishes on the current dedicated branch.**
+    - work continues on `codex/i6-service-benchmark-activation`
+    - refresh validation truth on that branch before declaring I6 done
 
 ## Intended Service Workload
 
@@ -301,22 +294,22 @@ Concrete authored intent for each positive case:
 
 - `billing/apply_membership_discount`
   - promoted from the M19 billing fixture pack
-  - monotone-down nonnegative leaf
+  - supported arithmetic leaf, monotone-down nonnegative
 - `billing/apply_regional_fee`
   - promoted from the M19 billing fixture pack
-  - monotone-up leaf
+  - supported arithmetic leaf, monotone-up
 - `billing/checkout_net_total`
   - promoted from the M19 billing fixture pack
-  - wrapper pipeline over discount then fee
+  - supported wrapper pipeline over discount then fee
 - `billing/checkout_net_total_guarded_fee`
   - new guarded wrapper over the same leaf pair
   - uses the already-shipped normalized-required-arg shape to clamp
     `regional_rate` at zero
 - `billing/discount_strategy`
-  - new plain `kind: sum` seam adapted from the shipped ecommerce shape
+  - new plain `kind:sum` seam adapted from the ecommerce pattern
   - variants: `none`, `percentage { rate }`, `fixed_amount { amount }`
 - `billing/pricing_quote`
-  - new plain `kind: data` seam adapted from the shipped ecommerce shape
+  - new plain `kind:data` seam adapted from the ecommerce pattern
   - fields: `subtotal`, `membership_rate`, `regional_rate`
   - methods expose discounted subtotal and final net total
 
@@ -326,9 +319,9 @@ Concrete molecule obligations:
   - proves the happy-path multi-unit business flow
 - `billing/checkout_declined_discount_flow`
   - proves the unhappy-path service flow using supported business semantics
-  - this is where "failure path" is made concrete for I6
+  - this is where "failure path" becomes concrete for I6
 - `billing/discount_strategy_quote_flow`
-  - proves supported seam usage and seam-to-business coherence
+  - proves seam usage and seam-to-business coherence
 
 ## I6 Service Closure Matrix
 
@@ -339,7 +332,7 @@ Concrete molecule obligations:
 | supported function rows | `billing/apply_membership_discount`, `billing/apply_regional_fee`, `billing/checkout_net_total`, `billing/checkout_net_total_guarded_fee` | fresh passports + benchmark case projections |
 | supported seam rows | `billing/discount_strategy`, `billing/pricing_quote` | fresh passports + seam-focused molecule proof |
 | supported seam/business interaction | `billing/discount_strategy_quote_flow` | required molecule proof + read-side projection |
-| plain boundary pressure | `billing/pricing_quote` generated files and method lowering | readability file-set review + generated Rust inspection |
+| generated readability pressure | `examples/service/src/generated/**` | readability review + generated Rust inspection |
 | truthful read-side projection | `BENCH-SERVICE` benchmark-root `status`, `export`, and snapshot | full-scope projections only; partial scopes remain zero-credit |
 | benchmark-scoped readability | `benchmarks/reviews/BENCH-SERVICE.readability.review.json` | current digest + current generated-file set |
 | preserved prior closure | `BENCH-ECOM`, `BENCH-CROSSLIB` | regression suite + repo-root inventory projection |
@@ -379,6 +372,26 @@ Concrete molecule obligations:
     Repo-root status remains inventory_only even after BENCH-SERVICE activates.
 ```
 
+## Authoring and Proof Contract
+
+I6 must follow the repo's spec workflow rather than mutating artifacts directly.
+
+Implementation rules:
+
+- edit `.unit.spec` and `.test.spec` files, not generated Rust or proof artifacts
+- use `cargo run -p spec-cli -- validate <unit-or-root> --format json` as the
+  first machine-readable failure surface when a spec is invalid
+- use `cargo run -p spec-cli -- build examples/service/units --output examples/service/src/generated`
+  to regenerate the shared output tree
+- use `cargo run -p spec-cli -- test <path>` to refresh the exact passport or
+  molecule evidence that changed
+- treat `status` as projection and inventory; treat `test` as proof-writer
+- author the readability review only after the generated file set and projection
+  digest are final
+
+This removes the only dangerous ambiguity in the implementation: which files are
+authored truth versus derived truth.
+
 ## Target Outcome
 
 I6 is done only when all of these are true at the same time:
@@ -388,7 +401,7 @@ I6 is done only when all of these are true at the same time:
    three required service molecules from this plan.
 3. `examples/service/units` exists as a real single-library authored workload.
 4. `cargo run -p spec-cli -- status examples/service/units --format json`
-   reports:
+   exits successfully and reports:
    - `benchmark_id: "BENCH-SERVICE"`
    - `lifecycle: "active"`
    - `accounting_status: "valid"`
@@ -406,20 +419,21 @@ I6 is done only when all of these are true at the same time:
 7. `BENCH-ECOM` still passes with current readability truth.
 8. `BENCH-CROSSLIB` still passes with zero positive credit.
 9. repo-root `status . --format json` still reports `scope_authority:
-   "inventory_only"` while showing all three benchmarks.
+   "inventory_only"` and includes all three benchmarks, regardless of whether
+   unrelated inventory rows keep the overall command non-green.
 10. closeout docs teach the same story the benchmark wall now proves.
 
 ## Implementation Contract
 
-Implementation is four phases. Phases 1-3 land the service benchmark. Phase 4
-is the final closeout pass after the service wall is stable.
+Implementation is four phases. Phases 1-3 land the benchmark truth. Phase 4 is
+the closeout pass after the service wall is stable.
 
 ### Phase 1: Service scaffold and benchmark activation
 
 Objective:
 
-- create the real service example tree and flip `BENCH-SERVICE` from reserved to
-  active with the exact roster frozen above
+- create the real service example tree and flip `BENCH-SERVICE` from reserved
+  to active with the exact roster frozen above
 
 Primary write scope:
 
@@ -445,11 +459,13 @@ Hard rules:
 - no `[libraries]` graph in the service example
 - no `examples/shared-spec` dependency
 - no extra positive service cases in I6
+- do not author the readability review yet
 
-Done when:
+Exit criteria:
 
 - `examples/service/units` loads as a real benchmark root
 - `BENCH-SERVICE` is active on purpose rather than reserved by placeholder
+- the label roster matches this plan exactly
 
 ### Phase 2: Service proof wall
 
@@ -482,10 +498,11 @@ Hard rules:
 - if a seam shape no longer fits current support truth, adapt it to the shipped
   ecommerce seam pattern instead of widening the contract
 
-Done when:
+Exit criteria:
 
 - `status examples/service/units --format json` can truthfully pass except for
   readability review if Phase 3 has not run yet
+- `examples/service/src/generated/**` is final enough for readability review
 
 ### Phase 3: Service benchmark projection, snapshot, readability, and regressions
 
@@ -513,7 +530,7 @@ Required changes:
   - service benchmark-root `export`
   - service benchmark snapshot
   - repo-root inventory showing active `BENCH-SERVICE`
-- add regressions that:
+- add regressions that prove:
   - active `BENCH-SERVICE` becomes non-passing if any required molecule is
     missing, stale, or failing
   - active `BENCH-SERVICE` becomes non-current when the readability digest or
@@ -528,7 +545,7 @@ Hard rules:
 - projection code changes are allowed only to fix truthful active-benchmark
   behavior
 
-Done when:
+Exit criteria:
 
 - the service benchmark is active, current, snapshot-backed, and regression
   protected
@@ -552,14 +569,14 @@ Required changes:
 - update `README.md` benchmark roster so `BENCH-SERVICE` is no longer described
   as reserved-only
 - update `docs/rust_v1_contract_stack.md` so the implementation ladder and repo
-  note reflect shipped I5 closure and active I6 service proof work
-- update `TODOS.md` to retire the stale post-M68 closure placeholder and leave
+  note reflect shipped `I5` closure and active `I6` service proof work
+- update `TODOS.md` to retire stale post-`M68` closure placeholders and leave
   only true follow-on oceans
 - record the active service benchmark landing in `CHANGELOG.md`
 - if the benchmark wall truly closes the final narrow-core proof gate, say that
   explicitly in docs; if not, do not overstate it
 
-Done when:
+Exit criteria:
 
 - docs, labels, snapshots, reviews, and CLI truth all teach the same story
 
@@ -567,22 +584,24 @@ Done when:
 
 Synthesized from the plan's locked decisions and risk surfaces.
 
-- [ ] **T1 (P1, human: ~2h / CC: ~20min)** — service example scaffold — create
+- [ ] **T1 (P1, human: ~2h / CC: ~20min)** — service scaffold — create
       `examples/service/` as a single-library benchmark root
   - Surfaced by: Phase 1 — `BENCH-SERVICE` cannot activate without a real root
   - Files: `examples/service/**`, `benchmarks/labels.json`
   - Verify: `cargo run -p spec-cli -- status examples/service/units --format json`
 
-- [ ] **T2 (P1, human: ~2h / CC: ~20min)** — service billing function roster —
-      promote the billing leaf and wrapper cases from the M19 fixture pack
-  - Surfaced by: Intended Service Workload — seed shapes already exist
+- [ ] **T2 (P1, human: ~2h / CC: ~20min)** — service function roster — promote
+      the billing leaf and wrapper cases from the M19 fixture pack
+  - Surfaced by: Intended Service Workload — supported billing shapes already
+    exist and should be reused rather than re-invented
   - Files: `examples/service/units/billing/*.unit.spec`
   - Verify: `cargo run -p spec-cli -- test examples/service/units/billing/apply_membership_discount.unit.spec`
 
 - [ ] **T3 (P1, human: ~2h / CC: ~20min)** — service seam roster — author the
       plain `discount_strategy` and `pricing_quote` seams inside the service
       root
-  - Surfaced by: I6 Service Closure Matrix — service proof must include seam usage
+  - Surfaced by: I6 Service Closure Matrix — service proof must include seam
+    usage, not functions only
   - Files: `examples/service/units/billing/discount_strategy.unit.spec`,
     `examples/service/units/billing/pricing_quote.unit.spec`
   - Verify: `cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy.unit.spec`
@@ -617,14 +636,14 @@ Synthesized from the plan's locked decisions and risk surfaces.
 
 - [ ] **T8 (P2, human: ~45min / CC: ~10min)** — docs closeout — update the repo
       narrative to reflect active service proof
-  - Surfaced by: Phase 4 — current docs still teach the reserved gate story
+  - Surfaced by: Phase 4 — current docs still teach the pre-I5 ladder
   - Files: `README.md`, `docs/rust_v1_contract_stack.md`, `TODOS.md`,
     `CHANGELOG.md`
   - Verify: manual doc consistency pass against live CLI output
 
 ## Acceptance Commands
 
-Service build and proof refresh:
+Phase-2 proof refresh:
 
 ```bash
 cargo run -p spec-cli -- build examples/service/units --output examples/service/src/generated
@@ -657,8 +676,12 @@ cargo test -p spec-cli rust_v1_closure
 cargo run -p spec-cli -- status . --format json
 ```
 
-The last command remains part of acceptance because I6 must preserve repo-root
-inventory semantics while activating the service benchmark.
+Acceptance notes:
+
+- the benchmark-root commands above must exit successfully when I6 is complete
+- the final repo-root `status . --format json` command is diagnostic; it must
+  preserve `scope_authority: "inventory_only"` and show all three benchmarks,
+  but it is not required to become a zero-exit proof command for this workspace
 
 ## Test Strategy
 
@@ -703,6 +726,7 @@ USER FLOW COVERAGE
 [+] Maintainer service-proof flow
     |
     +- author service specs
+    +- validate failing specs with `spec validate --format json`
     +- build service generated Rust
     +- refresh unit passports
     +- refresh molecule evidence
@@ -757,12 +781,13 @@ Preferred write shape:
 | unhappy-path flow is implemented as fallback or unsupported trickery | failure-path proof becomes dishonest | explicit unhappy-path molecule proof plus benchmark projection checks | yes |
 | service readability review exists but is stale | maintainers think service code was reviewed when read-side truth disagrees | current-vs-stale review regression | yes |
 | service partial scope emits positive credit | read-side anti-laundering rule regresses | namespace and single-file zero-credit regressions | yes |
+| repo-root acceptance wrongly expects zero exit | implementation appears blocked even when contract is preserved | acceptance notes must treat repo-root status as diagnostic inventory | yes |
 | ECOM or CROSSLIB regresses while BENCH-SERVICE activates | I6 breaks shipped proof walls | non-regression suite across all three benchmarks | yes |
 | contract-stack doc stays out of sync after I6 lands | repo authority becomes confusing again | closeout doc pass | no |
 
 ## Performance / Complexity Guardrails
 
-I6 should not introduce a meaningful runtime cost increase.
+I6 should not introduce a meaningful runtime or maintenance cost increase.
 
 Guardrails:
 
@@ -781,48 +806,51 @@ admission story, it is solving the wrong problem.
 
 ## Worktree Parallelization Strategy
 
-I6 has parallelization opportunities, but they must stay bounded so that labels,
-snapshots, and docs do not churn against each other.
+I6 has real parallelization opportunities, but they have to be sequenced so the
+benchmark roster freezes before tests, snapshots, and docs start depending on
+it.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| service scaffold plus positive source specs | `examples/service/`, `benchmarks/labels.json` | — |
-| service proof artifacts and generated Rust | `examples/service/units/`, `examples/service/src/generated/` | service scaffold plus positive source specs |
-| service regression suite and benchmark fixtures | `spec-cli/tests/`, `spec-cli/tests/fixtures/benchmarks/` | service scaffold plus positive source specs |
-| projection/core truth fixes if needed | `spec-core/`, `spec-cli/src/` | service scaffold plus positive source specs |
-| snapshot, readability review, and docs closeout | `benchmarks/snapshots/`, `benchmarks/reviews/`, `README.md`, `docs/`, `TODOS.md`, `CHANGELOG.md` | proof artifacts, regression suite, and any projection/core fixes |
+| service scaffold and benchmark activation | `examples/service/`, `benchmarks/` | — |
+| service proof refresh | `examples/service/`, `examples/service/src/generated/` | service scaffold and benchmark activation |
+| service regression suite | `spec-cli/tests/`, `spec-cli/tests/fixtures/benchmarks/` | service scaffold and benchmark activation |
+| projection/core fixes if needed | `spec-core/`, `spec-cli/src/` | service scaffold and benchmark activation |
+| snapshot, readability, and docs closeout | `benchmarks/snapshots/`, `benchmarks/reviews/`, `docs/`, repo root docs | service proof refresh, service regression suite, and any projection/core fixes |
 
 ### Parallel lanes
 
-Lane A: service scaffold plus positive source specs
+Lane A: service scaffold and benchmark activation -> service proof refresh
+(sequential, shared `examples/service/`)
 
-Lane B: service regression suite and benchmark fixture scaffolding
+Lane B: service regression suite (independent after Lane A freezes the roster)
 
-Lane C: projection/core truth fixes, but only if activation exposes a real read-side bug
+Lane C: projection/core fixes only if activation exposes a real truth bug
+(independent from Lane B, but dependent on Lane A)
 
-Lane D: snapshot, readability review, and docs closeout
+Lane D: snapshot, readability, and docs closeout (sequential after A/B/C merge)
 
 ### Execution order
 
-1. Launch Lane A first.
-2. Once the service roster is frozen in `benchmarks/labels.json`, launch Lane B.
-3. Launch Lane C only if Lane A or B discovers a real projection-truth bug.
+1. Launch Lane A first and freeze the benchmark roster.
+2. Once Lane A has frozen `BENCH-SERVICE`, launch Lane B in parallel.
+3. Launch Lane C only if Lane A or Lane B exposes a real read-side truth bug.
 4. Merge A, B, and C.
 5. Launch Lane D after that merge, not before.
 
 ### Conflict flags
 
 - `benchmarks/labels.json` belongs to Lane A only.
-- `examples/service/units/**` belongs to Lane A only.
-- `spec-cli/tests/fixtures/benchmarks/**` is the highest-probability merge
-  conflict between Lanes B and D; D should refresh only after B is merged.
+- `examples/service/**` belongs to Lane A only.
+- `spec-cli/tests/fixtures/benchmarks/**` belongs to Lane B until fixture shape
+  stabilizes; Lane D should not touch it in parallel.
 - `benchmarks/snapshots/BENCH-SERVICE.snapshot.json` and
   `benchmarks/reviews/BENCH-SERVICE.readability.review.json` belong to Lane D
   only.
-- if Lane B needs a label change, queue it for post-merge integration instead
-  of editing `benchmarks/labels.json` in parallel.
+- if Lane B discovers it needs a label change, queue that change for post-merge
+  integration instead of editing `benchmarks/labels.json` in parallel.
 
 ## What Success Looks Like
 
@@ -854,12 +882,13 @@ After I6:
 ## Completion Summary
 
 - Step 0: Scope challenge accepted as service benchmark activation only
-- Architecture review: one active service wall now defined beside the shipped
-  ECOM and CROSSLIB walls
-- Code quality review: exact service roster, molecule roster, and write scope
-  now frozen
-- Test review: eight mandatory regression groups identified
-- Failure modes: six critical benchmark-truth risks named and assigned
-- Parallelization: three implementation lanes plus one sequential closeout lane
-- Lake Score: 5/5, because the honest complete version is still cheaper than
-  another milestone of reserved-state storytelling
+- Architecture review structure: one active service wall defined beside the
+  shipped ECOM and CROSSLIB walls
+- Code quality structure: authored truth, proof writers, and read-side surfaces
+  are now separated explicitly
+- Test review structure: coverage diagram, mandatory regressions, failure modes,
+  and acceptance semantics are all specified
+- Parallelization: 4 lanes total, 2 conditional/parallel lanes, 2 sequential
+  dependency stages
+- Unresolved decisions: none; if new ambiguity appears during implementation,
+  the implementation is out of plan and should stop for a scope check

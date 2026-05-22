@@ -1,0 +1,109 @@
+{
+  "spec_version": "0.3.0",
+  "id": "billing/apply_membership_discount",
+  "intent": "Return the subtotal after applying the membership discount rate and clamping at zero.",
+  "contract": {
+    "inputs": [
+      {
+        "name": "subtotal",
+        "type": "Decimal"
+      },
+      {
+        "name": "rate",
+        "type": "Decimal"
+      }
+    ],
+    "returns": "Decimal",
+    "invariants": [
+      "output <= subtotal",
+      "output >= 0"
+    ]
+  },
+  "deps": [],
+  "local_tests": [
+    {
+      "id": "membership_discount_basic",
+      "expect": "apply_membership_discount(Decimal::new(10000, 2), Decimal::new(10, 2)) == Decimal::new(9000, 2)"
+    }
+  ],
+  "generated_at": "2026-05-21T16:55:18Z",
+  "source_file": "/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a/examples/service/units/billing/apply_membership_discount.unit.spec",
+  "evidence": {
+    "build_status": "pass",
+    "test_results": [
+      {
+        "id": "membership_discount_basic",
+        "status": "pass"
+      }
+    ],
+    "observed_at": "2026-05-21T16:55:06Z",
+    "provenance": {
+      "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+    }
+  },
+  "freshness_anchor": {
+    "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527"
+  },
+  "freshness": {
+    "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527",
+    "authored_truth_status": "fresh",
+    "backend_execution_status": "unknown"
+  },
+  "target_proofs": {
+    "rust": {
+      "evidence": {
+        "build_status": "pass",
+        "test_results": [
+          {
+            "id": "membership_discount_basic",
+            "status": "pass"
+          }
+        ],
+        "observed_at": "2026-05-21T16:55:06Z",
+        "provenance": {
+          "git_commit_sha": "9a1907038331fe80ada99eaa074733dc1324c714"
+        }
+      },
+      "freshness_anchor": {
+        "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527"
+      },
+      "freshness": {
+        "authored_truth_digest": "sha256:2f83328f963c87c4d92fc7481f77b9e29ac141ce9e085dd4680fce4d7bae2527",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      }
+    }
+  },
+  "semantic_review": {
+    "verdict": "aligned",
+    "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+    "support_status": "supported",
+    "summary": "authored semantics and executable lowering agree on the supported function surface",
+    "authored_surfaces": [
+      {
+        "path": "intent.why",
+        "summary": "Return the subtotal after applying the membership discount rate and clamping at zero."
+      },
+      {
+        "path": "contract.inputs",
+        "summary": "2 authored input(s)"
+      },
+      {
+        "path": "contract.returns",
+        "summary": "returns Decimal"
+      },
+      {
+        "path": "contract.invariants",
+        "summary": "2 authored invariant(s)"
+      }
+    ],
+    "executable_surfaces": [
+      {
+        "path": "body.rust",
+        "summary": "projects to Rust function apply_membership_discount with 2 input(s)"
+      }
+    ],
+    "evaluator_scope": "supported_function_surface"
+  },
+  "contract_hash": "sha256:db054521de1e3c8932c887222c355c42c43a4e1d1abfd2f25ff9aa72e3b28bbb"
+}

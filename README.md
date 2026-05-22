@@ -52,11 +52,13 @@ spec generate examples/ecommerce/units
 
 Rust V1 benchmark mechanics are repo-root read surfaces, not authored spec truth. The authored benchmark registry lives in `benchmarks/labels.json`; readability review anchors live in `benchmarks/reviews/*.readability.review.json`; and `spec benchmark snapshot <benchmark-id>` writes derived snapshots under `benchmarks/snapshots/`.
 
-The trusted proof wall after I3.5 is:
+The benchmark-root proof wall after I6 is:
 
 ```bash
 cargo run -p spec-cli -- status examples/ecommerce/units --format json
 cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/service/units
 ```
 
 Repo-root surfaces remain available, but they have a narrower contract:
@@ -68,7 +70,7 @@ The seeded roster is:
 
 - `BENCH-ECOM`: active positive benchmark rooted at `examples/ecommerce/units`
 - `BENCH-CROSSLIB`: active companion-negative benchmark rooted at `examples/crosslib-app/units`
-- `BENCH-SERVICE`: reserved positive benchmark that stays machine-visible without an `examples/service/units` tree
+- `BENCH-SERVICE`: active positive benchmark rooted at `examples/service/units`
 
 Path scope is intentional:
 
