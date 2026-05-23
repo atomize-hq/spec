@@ -216,4 +216,4 @@
 
 - [x] **I7: Rust V1 scope-decision closure** — Completed main (2026-05-22). The repo now freezes one explicit pre-I8 story: bounded generics defer to `V1.1`, Rust V1 stays synchronous-only so async/IO also defer to `V1.1`, `BENCH-CROSSLIB` remains the companion negative-proof wall, and the final I8 wall stays the existing five-command proof run.
 
-- [ ] **I8: Rust V1 final proof run** — Rerun the frozen `BENCH-ECOM` plus `BENCH-SERVICE` proof wall, preserve the repo-root inventory-only status contract, and confirm the ratified docs plus benchmark roster still match the bounded Rust V1 claim without widening scope.
+- [x] **I8: Rust V1 final proof run** — Completed main (2026-05-23). The frozen five-command wall still holds on the live branch: `BENCH-ECOM` and `BENCH-SERVICE` both reran as passing positive proof walls with current readability state, repo-root `status . --format json` remained the expected `inventory_only` non-green inventory surface with exit code `1`, and the bounded Rust V1 claim stayed narrow without widening scope.
