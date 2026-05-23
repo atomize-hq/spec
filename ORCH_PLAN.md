@@ -1,11 +1,12 @@
 # I7 Orchestration Plan
 
-Status: **authoritative execution runbook**  
+Status: **authoritative execution runbook and closeout record**  
 Milestone: **I7 Rust V1 scope-decision closure**  
 Plan authority: **[`PLAN.md`](./PLAN.md)**  
 Contract-stack authority: **[`docs/rust_v1_contract_stack.md`](./docs/rust_v1_contract_stack.md)**  
 Frozen command-wall authority: **`.runs/i3_5_authority_alignment/authority-plan.snapshot.md` and `.runs/i3_5_authority_alignment/phase2-freeze.json`**  
 Primary workspace: **`/home/azureuser/__Active_Code/atomize-hq/spec`**  
+Frozen basis commit: **`9bec150c596148f5bd03f048d154c59f137bb0cf`**  
 Last rewritten: **2026-05-22**
 
 ## Summary
@@ -30,6 +31,14 @@ I7 is complete only when the repo can answer, without inference:
 - what Rust V1 includes
 - what Rust V1 defers to `V1.1`
 - what exact wall I8 must prove
+
+## Frozen Outcome
+
+- bounded generics defer to `V1.1`
+- Rust V1 remains synchronous-only, so async/IO also defer to `V1.1`
+- `BENCH-CROSSLIB` remains the active companion-negative wall
+- Lane D is absent because no new bounded Rust V1 slice was admitted
+- I8 inherits the existing five-command validation wall unchanged
 
 ## Milestone Posture
 

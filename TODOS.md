@@ -211,3 +211,9 @@
 - [x] **M68: Rust V1 benchmark mechanics landing** — Completed main (2026-05-18). The repo now ships `benchmarks/labels.json`, a shared benchmark projection core, additive schema-version-4 `benchmarks[]` in `spec status` / `spec export`, `spec benchmark snapshot <id>`, seeded readability review anchoring for `BENCH-ECOM`, reserved `BENCH-SERVICE` visibility, committed snapshot artifacts, and repo-facing CLI fixtures/docs for the full-versus-partial benchmark contract.
 
 - [x] **M69: supported-core closure after mechanics-only landing** — Completed main (2026-05-21). `BENCH-SERVICE` is now an active single-library benchmark rooted at `examples/service/units`, ships the frozen six-unit / three-molecule roster with fresh proof, keeps benchmark accounting read-only over specs/passports/evidence, and still does not widen the Rust V1 support vocabulary beyond the existing supported-core closure.
+
+## Post-I7 scope closure
+
+- [x] **I7: Rust V1 scope-decision closure** — Completed main (2026-05-22). The repo now freezes one explicit pre-I8 story: bounded generics defer to `V1.1`, Rust V1 stays synchronous-only so async/IO also defer to `V1.1`, `BENCH-CROSSLIB` remains the companion negative-proof wall, and the final I8 wall stays the existing five-command proof run.
+
+- [ ] **I8: Rust V1 final proof run** — Rerun the frozen `BENCH-ECOM` plus `BENCH-SERVICE` proof wall, preserve the repo-root inventory-only status contract, and confirm the ratified docs plus benchmark roster still match the bounded Rust V1 claim without widening scope.

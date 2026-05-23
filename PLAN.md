@@ -1,9 +1,9 @@
 # I7: Rust V1 Scope-Decision Closure Plan
 
-Status: **authoritative implementation plan**
+Status: **authoritative implementation plan and closeout record**
 Iteration: **I7**
 Milestone family: **Rust V1 scope closure and contract ratification**
-Implementation readiness: **ready for implementation**
+Implementation readiness: **implemented**
 Plan scope: **turn the post-I6 ambiguity into checked-in repo truth by resolving bounded-generics and async/IO admission for honest Rust V1, ratifying the final pre-proof contract line, and freezing I8 as the final proof-run milestone**
 Base branch: **main**
 Working branch: **`codex/i7-v1-scope-closure`**
@@ -69,6 +69,16 @@ without inference:
 The default posture is narrow and honest. I7 does not widen Rust support unless
 one bounded slice passes an explicit admission bar and names its proof burden.
 Otherwise it defers to `V1.1` in checked-in authority.
+
+## Frozen I7 Outcome
+
+I7 closed with explicit scope deferral rather than a new admitted Rust slice:
+
+- bounded generics defer to `V1.1`
+- Rust V1 remains synchronous-only, so async/IO also defer to `V1.1`
+- `BENCH-CROSSLIB` remains the active companion-negative wall
+- Lane D does not exist because no new bounded slice was admitted
+- I8 inherits the existing five-command proof wall unchanged
 
 ## Scope Challenge
 
@@ -404,35 +414,35 @@ for that slice before closing the milestone.
 
 These are the minimum build-actionable tasks required to execute I7 cleanly.
 
-- [ ] **T1 (P1, human: ~30m / CC: ~5m)** — basis freeze — record the current
+- [x] **T1 (P1, human: ~30m / CC: ~5m)** — basis freeze — record the current
   post-I6 benchmark walls, deferred rows, and command-wall semantics in a cited
   basis packet.
   - Verify: basis packet exists and later packets cite it instead of restating
     memory.
-- [ ] **T2 (P1, human: ~45m / CC: ~10m)** — bounded generics — produce one
+- [x] **T2 (P1, human: ~45m / CC: ~10m)** — bounded generics — produce one
   bounded-generics packet that recommends either bounded admission or explicit
   `V1.1` deferral.
   - Verify: packet includes rationale, boundary, proof burden, and rejected
     broader expansions.
-- [ ] **T3 (P1, human: ~45m / CC: ~10m)** — async/IO — produce one async/IO
+- [x] **T3 (P1, human: ~45m / CC: ~10m)** — async/IO — produce one async/IO
   packet that recommends either bounded admission or explicit synchronous-only
   `V1.1` deferral.
   - Verify: packet includes rationale, boundary, proof burden, and rejected
     broader expansions.
-- [ ] **T4 (P1, human: ~30m / CC: ~10m)** — decision freeze — convert the two
+- [x] **T4 (P1, human: ~30m / CC: ~10m)** — decision freeze — convert the two
   packets into one frozen milestone posture before any authority docs are
   rewritten.
   - Verify: decision-freeze record names one outcome for bounded generics and
     one outcome for async/IO.
-- [ ] **T5 (P1, human: ~45m / CC: ~15m)** — contract ratification — update
+- [x] **T5 (P1, human: ~45m / CC: ~15m)** — contract ratification — update
   `PLAN.md`, `ORCH_PLAN.md`, `docs/rust_v1_contract_stack.md`, and repo-facing
   closeout docs so they all teach the same final pre-I8 story.
   - Verify: no checked-in doc still teaches I6 as current or leaves the V1 line
     to inference.
-- [ ] **T6 (P1, human: ~30m / CC: ~10m)** — I8 handoff freeze — enumerate the
+- [x] **T6 (P1, human: ~30m / CC: ~10m)** — I8 handoff freeze — enumerate the
   final proof walls, authoritative commands, and deferred `V1.1` list.
   - Verify: I8 can be described as a proof run rather than a discovery phase.
-- [ ] **T7 (P1, human: ~15m / CC: ~5m)** — closeout validation — rerun the
+- [x] **T7 (P1, human: ~15m / CC: ~5m)** — closeout validation — rerun the
   proof-authoritative commands and add any conditional proof commands required
   by an admitted slice.
   - Verify: validation wall is current and matches the ratified claim.

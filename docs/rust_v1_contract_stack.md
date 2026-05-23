@@ -190,14 +190,13 @@ Goal:
 
 Frozen outcomes:
 
-- the repo explicitly states whether bounded generics join Rust V1 in a bounded
-  slice or defer to `V1.1`
-- the repo explicitly states whether Rust V1 stays synchronous-only or admits a
-  bounded async/IO edge
+- bounded generics explicitly defer to `V1.1`
+- Rust V1 explicitly stays synchronous-only, so async/IO defer to `V1.1`
+- `BENCH-CROSSLIB` remains the active companion negative-proof wall
 - the post-I6 ladder stops implying a planning vacuum after the service
   benchmark landed
 - `I8` is defined as the final proof-run milestone instead of an inferred
-  follow-on
+  follow-on, and its wall stays the existing five-command proof wall
 
 Primary outcome:
 
@@ -216,6 +215,12 @@ Frozen outcomes:
 - one plain-English Rust V1 claim can be published honestly
 - the positive and companion-negative benchmark walls still match the ratified
   claim
+- the proof wall remains:
+  - `cargo run -p spec-cli -- status examples/ecommerce/units --format json`
+  - `cargo run -p spec-cli -- export examples/ecommerce/units`
+  - `cargo run -p spec-cli -- status examples/service/units --format json`
+  - `cargo run -p spec-cli -- export examples/service/units`
+  - `cargo run -p spec-cli -- status . --format json`
 - deferred `V1.1` surfaces are named explicitly instead of remaining ambient
   pressure
 
