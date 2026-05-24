@@ -32,7 +32,7 @@
       "expect": "calculate_total_guarded_tax(Decimal::new(10000, 2), Decimal::new(10, 2), Decimal::new(725, 4)) == Decimal::new(96525, 3)"
     }
   ],
-  "generated_at": "2026-05-21T23:49:29Z",
+  "generated_at": "2026-05-24T02:18:26Z",
   "source_file": "examples/ecommerce/units/pricing/calculate_total_guarded_tax.unit.spec",
   "evidence": {
     "build_status": "pass",
