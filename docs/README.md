@@ -22,6 +22,8 @@ and durable decisions aligned.
   Repo entry point. What `spec` is, the first command loop, and the day-1 vocabulary.
 - [`core_mechanisms_guide_v0.1.md`](./core_mechanisms_guide_v0.1.md)
   The mental model doc. Use this when you need to separate authored truth, proof, semantic review, families, and benchmarks.
+- [`kind_coverage_map_v0.1.md`](./kind_coverage_map_v0.1.md)
+  The progress-map doc. Use this when you need to know which kinds and per-kind categories are shipped, deferred, or still unnamed.
 - [`examples/ecommerce/README.md`](../examples/ecommerce/README.md)
   The canonical concrete walkthrough. Use it when you want one real example root to run and inspect.
 - [`AGENTS.md`](../AGENTS.md)
