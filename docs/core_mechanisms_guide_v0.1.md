@@ -22,6 +22,76 @@ These systems are related, but they are not the same thing. The goal of this
 guide is to make the boundaries memorable so repo docs can point back here
 instead of re-explaining the whole stack from scratch every time.
 
+## Who This Is For
+
+This guide is for a builder or engineer who is new to `spec` and needs the
+repo mental model quickly enough to make or review a real change.
+
+It is especially aimed at people doing one of these jobs:
+
+- author or fix a `*.unit.spec`
+- explain why `status`, `export`, or a passport says what it says
+- figure out whether a behavior is core support, backend support, proof,
+  semantic review, or benchmark policy
+
+## What You Should Be Able To Do After Reading This
+
+After this guide, you should be able to:
+
+- identify whether a unit question is about kind, backend, proof, semantic
+  review, family, or benchmark claim
+- run the first proof loop on a concrete unit without guessing which command
+  matters
+- know where proof is stored and which commands refresh it
+- know when corpus, promotion, and benchmark docs matter, and when they do not
+
+## If You Changed A Spec File
+
+If you just changed a `*.unit.spec` or `.test.spec`, start here instead of
+trying to load the whole architecture into your head first:
+
+```bash
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/apply_tax.unit.spec --format json
+cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+```
+
+What each command answers:
+
+- `validate`: is the authored source legal `spec` input?
+- `build`: can the backend lower and compile it?
+- `test`: did it prove, and did it refresh passport plus semantic-review truth?
+- `status`: what health state does the repo project right now?
+
+Artifacts to watch:
+
+- generated Rust: `examples/ecommerce/src/generated/`
+- unit proof record: `*.spec.passport.json`
+- molecule proof record: `*.test.evidence.json`
+
+If you changed an interaction across units, also run the relevant `.test.spec`
+molecule test. For the canonical seam flow, that is:
+
+```bash
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
+```
+
+## Running Example
+
+Keep `pricing/apply_tax` in your head while reading this doc. It is the clean
+function example for the current system:
+
+- `kind:function`
+- lowers on Rust, and in the bounded lane on TypeScript
+- proves through unit-local atom tests
+- can be semantically reviewed into
+  `function.arithmetic_leaf.monotone_up.v1`
+
+When seam behavior matters, contrast it with `pricing/pricing_quote`, which is
+a `kind:data` seam that can be valid and benchmark-positive without semantic
+review understanding it as a function family.
+
 ## Short Version
 
 If you feel lost, ask these questions in order:
@@ -36,6 +106,18 @@ If you feel lost, ask these questions in order:
    promote?
 
 That is the main stack.
+
+## What You Can Ignore On Day 1
+
+If your job is just to author or fix a unit, you can ignore corpus,
+recommendation, promotion, and benchmark details until the validate/build/test
+loop is green.
+
+Come back to those layers when you are:
+
+- changing semantic-review capability
+- deciding whether a new family should be promoted
+- making or auditing a public product claim such as Rust V1
 
 ## The Two Layers
 
@@ -260,6 +342,10 @@ Examples:
 These are read-side analysis outputs. They do not define repo truth; they
 interpret it.
 
+Most contributors can ignore this section on day 1. It matters when you are
+working on family promotion, recommendation honesty, or corpus-program
+decisions.
+
 ### Benchmarks
 
 Benchmarks answer:
@@ -276,6 +362,10 @@ For Rust V1, they back claims like:
 
 Benchmarks read existing proof inputs such as passports and molecule evidence.
 They do not mint those proofs themselves.
+
+Most contributors should only care about benchmarks when they are asking what
+the repo can publicly claim today, not when they are just trying to prove a
+local fix.
 
 ## What "Supported" Actually Means
 
@@ -354,18 +444,62 @@ count toward a public product claim.
 
 ## A Simple Flow
 
-When a new authored unit enters the repo, the clean mental flow is:
+Here is the first successful loop for the running example. This is the fastest
+way to connect the concepts in this guide to something real.
 
-1. Author the unit in `*.unit.spec`.
-2. Validate it as legal `spec` source.
-3. Lower and execute it on the backend lane being used.
-4. Record atom and molecule proof into passports and evidence files.
-5. If it is a function, semantic review may classify it into a supported family
-   or mark it unsupported.
-6. If the unit is part of a benchmark roster, benchmark accounting may count it
-   toward a public claim.
-7. Separately, checked-in units may feed corpus analysis that suggests future
-   family-promotion work.
+1. Start with authored truth.
+   The source of truth is
+   `examples/ecommerce/units/pricing/apply_tax.unit.spec`.
+
+2. Validate the authored unit:
+
+   ```bash
+   cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/apply_tax.unit.spec --format json
+   ```
+
+   If this fails, you still have a source-shape problem. Nothing about backend
+   lowering, proof, semantic review, or benchmarks matters yet.
+
+3. Build the example root:
+
+   ```bash
+   cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
+   ```
+
+   If this fails, the authored source may be valid, but the backend-lowering or
+   compile lane is not.
+
+4. Refresh proof:
+
+   ```bash
+   cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec
+   ```
+
+   This rewrites
+   `examples/ecommerce/units/pricing/apply_tax.spec.passport.json`.
+   If you also changed cross-unit behavior, run the matching `.test.spec` file
+   and refresh the corresponding `*.test.evidence.json`.
+
+5. Project current health:
+
+   ```bash
+   cargo run -p spec-cli -- status examples/ecommerce/units --format json
+   ```
+
+   Now you are looking at read-side truth. `status` tells you whether the unit
+   is `valid`, `stale`, `failing`, `incomplete`, or `untested`; it does not
+   create proof on its own.
+
+6. Ask the semantic-review question only after proof exists.
+   If the unit is a supported `kind:function` shape, `spec test` may refresh
+   semantic-review truth inside the passport. For `pricing/apply_tax`, that can
+   include the family
+   `function.arithmetic_leaf.monotone_up.v1`.
+
+7. Ask the benchmark question last.
+   Benchmark accounting is about whether a proved case counts toward a bounded
+   public claim such as Rust V1. It is not the same question as whether the
+   unit is valid, compiled, or semantically understood.
 
 That is one flow with several distinct readers, not one monolithic support
 engine.
@@ -407,3 +541,17 @@ This document does not try to:
 
 Its job is narrower: keep the mental model clean enough that the deeper docs
 stay readable.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/autoplan` | Scope and strategy | 1 | CLEAR | The guide direction was right, but it needed a much faster newcomer path and a clearer day-1 versus advanced-systems boundary. |
+| Codex Review | `codex exec` | Independent second opinion | 1 | ISSUES_FOUND | Outside review agreed the taxonomy was strong but said the doc still did not get a first-time reader to one successful repo action fast enough. |
+| Eng Review | `/autoplan` | Commands and artifact pathing | 1 | CLEAR | Added a concrete validate/build/test/status loop, explicit artifact locations, and a running example that ties the concepts to live repo surfaces. |
+| Design Review | `/autoplan` | UI and visual UX gaps | 0 | — | No UI scope in this document review. |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 1 | CLEAR | Time to first useful outcome improved from conceptual-only to a five-minute guided loop with commands, expected artifacts, and clear "ignore this for now" boundaries. |
+
+**CODEX:** Independent review said the guide named the system well but front-loaded maintainers' concepts before showing a first successful action.
+**UNRESOLVED:** The broader README and docs tree still need a follow-on cleanup so this guide becomes the stable anchor instead of one strong page inside an overloaded docs set.
+**VERDICT:** CEO + ENG + DX CLEARED for this revision. Good mental-model anchor, now with a usable newcomer path.
