@@ -24,6 +24,8 @@ and durable decisions aligned.
   The mental model doc. Use this when you need to separate authored truth, proof, semantic review, families, and benchmarks.
 - [`kind_coverage_map_v0.1.md`](./kind_coverage_map_v0.1.md)
   The progress-map doc. Use this when you need to know which kinds and per-kind categories are shipped, deferred, or still unnamed.
+- [`function_category_matrix_v0.1.md`](./function_category_matrix_v0.1.md)
+  The detailed `kind:function` matrix. Use this when you need per-category truth for families, TypeScript, proof, and benchmark role.
 - [`examples/ecommerce/README.md`](../examples/ecommerce/README.md)
   The canonical concrete walkthrough. Use it when you want one real example root to run and inspect.
 - [`AGENTS.md`](../AGENTS.md)
