@@ -1,116 +1,182 @@
 # ecommerce example
 
-This example shows a small pricing domain authored as `.unit.spec` files, plus molecule tests, a checked-in plan artifact, and the canonical migration wedge for `pricing/discount_strategy`.
-The canonical in-repo copy also ships tracked molecule evidence for the pricing molecule tests so the benchmark-root proof wall stays truthful on a fresh clone:
+This is the canonical single-library `spec` example in the repo.
+
+If the root [`README.md`](../../README.md) tells you what `spec` is, this doc
+shows you one truthful place to touch it. Use this example when you want to:
+
+- run the first real validate/build/test/status loop
+- inspect both `kind:function` and seam behavior in one library
+- see where generated Rust, passports, and molecule evidence actually land
+- compare a migrated seam against the pre-`spec` raw Rust baseline
+
+For the broader mental model, read
+[`docs/core_mechanisms_guide_v0.1.md`](../../docs/core_mechanisms_guide_v0.1.md)
+next to this file, not instead of it.
+
+## Fastest First Run
+
+From the repo root:
 
 ```bash
+cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/apply_tax.unit.spec --format json
+cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/apply_tax.unit.spec
+cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce/units --format json
 ```
 
-## M13 migration wedge
+What changes when you run that loop:
 
-`pricing/discount_strategy` exists in two forms on purpose:
+- generated Rust under `examples/ecommerce/src/generated/`
+- unit proof in `examples/ecommerce/units/**/*.spec.passport.json`
+- molecule proof in `examples/ecommerce/units/**/*.test.evidence.json`
 
-- Raw Rust baseline: `src/raw_baseline/pricing/discount_strategy.rs`
-- Migrated seam: `units/pricing/discount_strategy.unit.spec`
+If you have `spec` installed locally, the shorter example-root form is:
 
-Both implement the same pricing job: choose one discount strategy, compute `discount_amount(subtotal)`, and expose `discounted_subtotal(subtotal)`. The hand-written enum shows the pre-`spec` baseline implementation of that branching behavior. The `kind: sum` seam shows the authored version that `spec build` lowers into generated Rust.
+```bash
+cd examples/ecommerce
+spec build units
+spec test units/pricing/apply_tax.unit.spec
+spec test units/pricing/discount_strategy_checkout_flow.test.spec
+spec status units --format json
+```
 
-The `units/pricing/discount_strategy_checkout_flow.test.spec` molecule test covers the `pricing/discount_strategy` `sum` seam together with the existing `pricing/pricing_quote` `data` seam and `pricing/apply_tax` function unit so the example proves a mixed-kind checkout flow, not just enum syntax.
+## What This Example Demonstrates
 
-The `pricing/pricing_quote` seam remains in place as a sibling example.
+### 1. The canonical pricing function trio
 
-## M20 semantic review boundary
+These are the cleanest current `kind:function` examples:
 
-The pricing trio demonstrates the bounded `kind:function` semantic-review families currently proved with unseen examples and stricter wrapper-flow checks:
+- `pricing/apply_discount`
+- `pricing/apply_tax`
+- `pricing/calculate_total`
+
+They are useful because they sit inside the shipped bounded semantic-review
+vocabulary:
 
 - `pricing/apply_discount` proves `function.arithmetic_leaf.monotone_down_nonnegative.v1`
 - `pricing/apply_tax` proves `function.arithmetic_leaf.monotone_up.v1`
 - `pricing/calculate_total` proves `function.wrapper.pipeline.v1`
 
-This is still a bounded support story, not generic function understanding, and M20 adds no new supported family. Unsupported near-miss wrappers stay keyed as `unsupported.function.v1`, additive-only, and health-neutral.
+That is a narrow support story on purpose. It is not generic function
+understanding.
 
-M20 also makes unsupported-function truth explicit. The public fields are exactly `semantic_review.support_status`, `semantic_review.unsupported_reason_codes`, and `semantic_review.rewrite_hints`. New supported reviews write `support_status: supported`; unsupported function reviews write `support_status: unsupported`. Consumers should branch on `semantic_review.support_status == "unsupported"` rather than infer unsupported state from `verdict` or `evaluator_scope`, though legacy reviews without `support_status` still fall back to `evaluator_scope` plus `unsupported.*.v1` inference.
+### 2. A `kind:data` seam
 
-Only `spec test` refreshes semantic-review truth. `spec build`, `spec generate`, `spec status`, and `spec export` project stored truth only. Fresh unsupported function proof is preserved on read-side surfaces such as `spec status` and `spec export`; stale unsupported function proof is dropped there while the unit's freshness/stale health still reports normally.
+`pricing/pricing_quote.unit.spec` is the clean seam example.
 
-## Locked adversarial score table
+It keeps shared data semantics, constructors, and methods in one authored unit,
+then lowers into generated Rust. It is the easiest place to see how seam
+support differs from function-family support.
 
-Recorded calibration scores for the migration wedge candidates:
+### 3. A `kind:sum` seam with a raw baseline comparison
 
-- `pricing/discount_strategy`: `19`
-- `pricing/pricing_quote`: `16`
-- `pricing/discount_plus_tax`: `14`
+`pricing/discount_strategy.unit.spec` is the canonical sum-seam migration
+wedge.
 
-Canonical wedge remains `pricing/discount_strategy`.
+It exists side by side with the handwritten baseline at:
 
-## Build / verify
+- `src/raw_baseline/pricing/discount_strategy.rs`
 
-This crate expects generated Rust to exist at `src/generated/` (gitignored).
+The matching molecule proof,
+`pricing/discount_strategy_checkout_flow.test.spec`, checks that the generated
+sum seam still agrees with the baseline behavior while composing with the
+current pricing flow.
 
-If you have `spec` installed, the quickest end-to-end loop from `examples/ecommerce/` is:
+### 4. Molecule tests as cross-unit proof
+
+This example ships three molecule tests:
+
+- `pricing/checkout_flow.test.spec`
+- `pricing/discount_plus_tax.test.spec`
+- `pricing/discount_strategy_checkout_flow.test.spec`
+
+Use them when the behavior crosses unit boundaries. If a test needs more than
+one unit import, it belongs here rather than in `local_tests`.
+
+### 5. A checked-in plan artifact
+
+The canonical example plan lives at:
+
+- `plans/refactors/checkout-tax-refactor.plan.spec`
+
+Use it when you want to inspect the current `.plan.spec` authoring shape
+without mixing plan concepts into the normal unit proof loop.
+
+## Command Authority In This Example
+
+The proof-authoritative example root is:
 
 ```bash
-spec build units
-spec test units/pricing/discount_strategy.unit.spec
-spec test units/pricing/discount_strategy_checkout_flow.test.spec
-spec status units --format json
-spec export units
-spec plan validate plans/refactors/checkout-tax-refactor.plan.spec --format json
-```
-
-From the repo root:
-
-```bash
-cargo run -p spec-cli -- validate examples/ecommerce/units/pricing/discount_strategy.unit.spec --format json
-cargo run -p spec-cli -- build examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy.unit.spec
-cargo run -p spec-cli -- test examples/ecommerce/units/pricing/discount_strategy_checkout_flow.test.spec
 cargo run -p spec-cli -- status examples/ecommerce/units --format json
 cargo run -p spec-cli -- export examples/ecommerce/units
 ```
 
-Repo-root status remains available for broad inventory:
+Repo-root status still exists:
 
 ```bash
 cargo run -p spec-cli -- status . --format json
 ```
 
-Treat that repo-root view as `inventory_only`, not as the proof-authoritative default. Repo-root export is intentionally unsupported for this workspace shape and should fail with `SPEC_UNSUPPORTED_SCOPE`.
+Treat that repo-root view as broad inventory only. It is useful for seeing many
+roots at once, but it is not the default green proof wall for this example.
 
-If you want the shorter generate/check/test loop instead:
+Repo-root export is intentionally unsupported for this workspace shape and
+should fail with `SPEC_UNSUPPORTED_SCOPE`.
 
-```bash
-cargo run -p spec-cli -- generate examples/ecommerce/units --output examples/ecommerce/src/generated
-cargo check --manifest-path examples/ecommerce/Cargo.toml
-cargo test --manifest-path examples/ecommerce/Cargo.toml
-```
+## Semantic Review Boundary
 
-Or, if you have `spec` installed, from `examples/ecommerce/`:
+Two rules matter here:
 
-```bash
-spec generate units --output src/generated
-cargo check
-cargo test
-```
+1. Only `spec test` refreshes semantic-review truth.
+2. Unsupported-function truth is explicit through:
+   - `semantic_review.support_status`
+   - `semantic_review.unsupported_reason_codes`
+   - `semantic_review.rewrite_hints`
 
-Files:
+That means `spec build`, `spec generate`, `spec status`, and `spec export` only
+project already-stored semantic-review truth. They do not create new truth.
+
+## Files Worth Reading
+
+Source specs:
 
 - `units/money/round.unit.spec`
 - `units/pricing/apply_discount.unit.spec`
 - `units/pricing/apply_tax.unit.spec`
 - `units/pricing/calculate_total.unit.spec`
-- `units/pricing/discount_strategy.unit.spec`
-- `units/pricing/discount_strategy_checkout_flow.test.spec`
+- `units/pricing/calculate_total_guarded_tax.unit.spec`
 - `units/pricing/pricing_quote.unit.spec`
+- `units/pricing/discount_strategy.unit.spec`
 - `units/pricing/checkout_flow.test.spec`
 - `units/pricing/discount_plus_tax.test.spec`
+- `units/pricing/discount_strategy_checkout_flow.test.spec`
 - `plans/refactors/checkout-tax-refactor.plan.spec`
+
+Raw baseline comparison:
+
 - `src/raw_baseline/pricing/discount_strategy.rs`
 - `src/raw_baseline/pricing/pricing_quote.rs`
 
-Derived artifacts such as `src/generated/`, `*.spec.passport.json`, and `*.test.evidence.json` are generated from those source specs and should not be hand-edited.
-The checked-in `pricing/*.test.evidence.json` files are the canonical generated outputs for this example. Refresh them by rerunning `spec test units --output src/generated` whenever the molecule specs or their covered unit contracts change, then commit the regenerated files.
-Single-file `spec test` runs use an isolated internal generated tree, so they do not rewrite this example's checked-out `src/generated/` directory.
+Generated and observed artifacts:
 
-The `Cargo.toml` and `src/main.rs` are intentionally minimal. They provide a project scaffold for generated output and the side-by-side raw-vs-migrated pricing seam examples.
+- `src/generated/`
+- `units/**/*.spec.passport.json`
+- `units/**/*.test.evidence.json`
+
+Do not hand-edit generated Rust or proof artifacts. Edit the source specs, then
+rerun the relevant `spec` command.
+
+## What To Ignore On Your First Pass
+
+If your only goal is to understand the example, ignore:
+
+- benchmark roster mechanics
+- milestone history
+- family-recommendation artifacts
+- broader repo-root inventory questions
+
+Run the first loop, inspect one unit, inspect one passport, inspect one
+molecule evidence file. That is enough to make the rest of the repo much less
+mysterious.

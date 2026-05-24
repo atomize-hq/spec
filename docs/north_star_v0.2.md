@@ -8,6 +8,23 @@
 > [`README.md`](../README.md), [`CHANGELOG.md`](../CHANGELOG.md), [`PLAN.md`](../PLAN.md), and
 > [`DECISIONS.md`](../DECISIONS.md).
 
+## Current Grounding
+
+This vision doc is still directionally right, but the shipped repo is narrower
+and more concrete than the full ambition below.
+
+Today's repo truth is:
+
+- Rust-first and proof-first
+- authored around `*.unit.spec`, `.test.spec`, and `.plan.spec`
+- currently centered on `kind:function`, `kind:data`, and `kind:sum`
+- explicit about atom and molecule proof today, not a broad "all test tiers are shipped" claim
+- intentionally narrow in semantic-review support and benchmark-backed product claims
+
+Read the rest of this document as the long-term destination. Read the root
+README and core mechanisms guide for what a contributor should actually do on a
+live checkout today.
+
 ## Purpose
 
 This document defines the long-term product vision for **spec**, a semantic-unit development system for authoring, validating, compiling, and evolving software as structured semantic records rather than as loosely related text files.

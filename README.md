@@ -166,13 +166,16 @@ hand-wavy ones.
 
 Read these in this order if you want the shortest path to fluency:
 
-1. [`docs/core_mechanisms_guide_v0.1.md`](docs/core_mechanisms_guide_v0.1.md)
+1. [`docs/README.md`](docs/README.md)
+   Use this if you want the categorized docs map and the "current authority
+   versus historical draft" split.
+2. [`docs/core_mechanisms_guide_v0.1.md`](docs/core_mechanisms_guide_v0.1.md)
    Start here for the repo mental model and the main vocabulary boundaries.
-2. [`examples/ecommerce/README.md`](examples/ecommerce/README.md)
+3. [`examples/ecommerce/README.md`](examples/ecommerce/README.md)
    Use this for the canonical end-to-end example and the concrete command loop.
-3. [`AGENTS.md`](AGENTS.md)
+4. [`AGENTS.md`](AGENTS.md)
    Use this if you are editing `.unit.spec` or `.test.spec` files and want the exact workflow.
-4. [`docs/rust_v1_contract_stack.md`](docs/rust_v1_contract_stack.md)
+5. [`docs/rust_v1_contract_stack.md`](docs/rust_v1_contract_stack.md)
    Use this if you need the benchmark-backed Rust V1 claim boundary and command-wall semantics.
 
 Project-state docs:

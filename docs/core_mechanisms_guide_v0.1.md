@@ -510,6 +510,7 @@ Use this map when you want the source of truth for a concept:
 
 | If you want to understand... | Start here |
 | --- | --- |
+| the docs tree itself and which docs are current authority | [`docs/README.md`](./README.md) |
 | the core authored model and workflow | [`README.md`](../README.md) |
 | semantic-family capability, corpus, and promotion | [`semantic_family_capability_corpus_guide_v0.1.md`](./semantic_family_capability_corpus_guide_v0.1.md) |
 | the current Rust V1 benchmark and claim boundary | [`rust_v1_contract_stack.md`](./rust_v1_contract_stack.md) |
