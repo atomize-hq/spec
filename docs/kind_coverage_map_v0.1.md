@@ -298,6 +298,121 @@ The next useful docs after this one would be:
 4. A future machine-readable registry
    So the repo can compute progress instead of reasoning from prose only.
 
+## How To Maintain This Map
+
+This map should change whenever repo truth changes in a way that affects:
+
+- top-level kinds
+- named categories inside a kind
+- support dimensions for an existing category
+- public claim-bearing status for a category
+
+### Update triggers
+
+Update this document when any of these happen:
+
+1. A new top-level kind is added or explicitly proposed in checked-in authority.
+2. A new per-kind category becomes repo-owned enough to name.
+3. A category moves between `Unnamed`, `Deferred`, `Bounded`, and `Shipped`.
+4. A backend lane expands or contracts for a category.
+5. Semantic review gains or loses honest understanding for a category.
+6. A benchmark or public product claim starts or stops depending on a category.
+7. A milestone freezes a new boundary such as `V1.1` deferrals or admissions.
+
+### Source-of-truth order
+
+When updating this map, trust sources in this order:
+
+1. `README.md`
+2. `docs/core_mechanisms_guide_v0.1.md`
+3. `PLAN.md`
+4. `DECISIONS.md`
+5. `docs/rust_v1_contract_stack.md`
+6. checked-in code and tests that prove a narrower or wider truth surface
+
+If a design draft says more than current authority docs or live code prove,
+prefer the narrower current truth.
+
+### The update procedure
+
+When you update the map, walk this checklist in order:
+
+1. Identify the change type:
+   - new kind
+   - new category inside a kind
+   - widened support dimension
+   - narrowed support dimension
+   - public-claim status change
+2. Identify the affected kind:
+   - `function`
+   - `data`
+   - `sum`
+   - or a newly owned top-level kind
+3. Identify whether the change is structural or interpretive:
+   - structural means authored/core shape changed
+   - interpretive means backend, proof, semantic review, or benchmark meaning changed
+4. Update the smallest correct row:
+   - the top-level kind inventory
+   - the kind's category table
+   - the kind's capability snapshot
+   - the cross-kind gaps or follow-on artifacts, if needed
+5. Add or adjust prose only after the table-level truth is correct.
+
+### Classification rules
+
+Use these rules to avoid map drift:
+
+- Do **not** add a new kind just because a new function surface appears.
+- Do **not** mark a category `Shipped` just because a draft doc names it.
+- Do **not** mark a category `Direct` in public role unless current benchmark or
+  claim surfaces actually depend on it.
+- Do **not** treat one example seam as a full category taxonomy for that kind.
+- Do **not** collapse helper-only support into the same role as direct
+  claim-bearing support.
+
+### When to name a new category
+
+A category is ready to be named in this map when at least one of these is true:
+
+- current authority docs name it explicitly
+- semantic review or routing code names it explicitly
+- benchmark or claim surfaces depend on it explicitly
+- the repo has frozen it as a deferred boundary that future work is expected to
+  cross honestly
+
+If none of those are true, leave the pressure as `Unnamed` rather than
+inventing a category too early.
+
+### When to split this map into a more detailed artifact
+
+This file should stay high-signal and cross-kind.
+
+Create or expand a deeper follow-on doc when:
+
+- one kind has more than a handful of meaningful categories
+- one kind needs per-category backend and proof detail
+- one kind needs a machine-readable registry or scoreboard
+- the maintenance burden of keeping detail here starts hiding the big picture
+
+That is why this doc points toward:
+
+- `docs/function_category_matrix_v0.1.md`
+- `docs/data_category_taxonomy_v0.1.md`
+- `docs/sum_category_taxonomy_v0.1.md`
+
+### Minimum review questions before merging an update
+
+Before landing a map change, ask:
+
+1. What changed in repo truth?
+2. Is this a new kind, a new category, or a support-dimension change?
+3. What evidence makes this true now?
+4. Is the change direct claim-bearing, helper-only, bounded, deferred, or still
+   unnamed?
+5. Did the update accidentally overstate support beyond current proof?
+
+If any answer is fuzzy, the map is probably being updated too early.
+
 ## Bottom Line
 
 The repo does have a map now, but only in fragments.
@@ -312,4 +427,3 @@ So the clearest current planning need is:
 
 > build the per-kind category maps to the point where the repo can measure
 > completion honestly, instead of talking about support in one overloaded way
-
