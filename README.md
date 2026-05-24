@@ -24,6 +24,7 @@
 - [`PLAN.md`](PLAN.md): active implementation roadmap, with shipped milestone context below the current contract
 - [`DECISIONS.md`](DECISIONS.md): project-level decisions that stay stable across releases
 - [`TODOS.md`](TODOS.md): backlog and follow-up inventory
+- [`docs/core_mechanisms_guide_v0.1.md`](docs/core_mechanisms_guide_v0.1.md): start here for the repo mental model; explains how kinds, backends, proof, semantic review, families, corpus, and benchmarks fit together
 - [`AGENTS.md`](AGENTS.md): agent workflow and machine-readable `spec` authoring loop
 - [`CLAUDE.md`](CLAUDE.md): lightweight routing rules for Claude/Codex sessions in this repo
 - [`docs/rust_v1_contract_stack.md`](docs/rust_v1_contract_stack.md): Rust V1 contract-stack index and the frozen I3.5 command wall
