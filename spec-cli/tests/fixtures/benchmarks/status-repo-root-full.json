@@ -959,7 +959,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
@@ -970,7 +970,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
@@ -981,7 +981,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         },
@@ -992,7 +992,7 @@
           "errors": [],
           "freshness": {
             "authored_truth_digest": "<normalized>",
-            "authored_truth_status": "unknown",
+            "authored_truth_status": "fresh",
             "backend_execution_status": "unknown"
           }
         }
@@ -1894,6 +1894,287 @@
         },
         {
           "id": "pricing/pricing_total_wrapper_unsupported_near_miss",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_b/companion_negative_missing_current_proof",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "invalid",
+          "errors": [
+            {
+              "unit": "pricing/apply_discount",
+              "code": "SPEC_DUPLICATE_ID",
+              "path": "<normalized>",
+              "id": "pricing/apply_discount",
+              "path2": "<normalized>"
+            }
+          ],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "invalid",
+          "errors": [
+            {
+              "unit": "pricing/apply_tax",
+              "code": "SPEC_DUPLICATE_ID",
+              "path": "<normalized>",
+              "id": "pricing/apply_tax",
+              "path2": "<normalized>"
+            }
+          ],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/base_nested_chain3",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "invalid",
+          "errors": [
+            {
+              "unit": "pricing/calculate_total",
+              "code": "SPEC_DUPLICATE_ID",
+              "path": "<normalized>",
+              "id": "pricing/calculate_total",
+              "path2": "<normalized>"
+            }
+          ],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "invalid",
+          "errors": [
+            {
+              "unit": "pricing/apply_discount",
+              "code": "SPEC_DUPLICATE_ID",
+              "path": "<normalized>",
+              "id": "pricing/apply_discount",
+              "path2": "<normalized>"
+            },
+            {
+              "unit": "pricing/apply_discount",
+              "code": "SPEC_LIBRARY_CRATE_ALIAS_MISSING",
+              "path": "<normalized>",
+              "value": "shared",
+              "path2": "<normalized>"
+            }
+          ],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Apply a discount while importing the shared round helper from a sibling spec library."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_discount with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "invalid",
+          "errors": [
+            {
+              "unit": "pricing/apply_tax",
+              "code": "SPEC_DUPLICATE_ID",
+              "path": "<normalized>",
+              "id": "pricing/apply_tax",
+              "path2": "<normalized>"
+            }
+          ],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "fresh",
+            "backend_execution_status": "unknown"
+          },
+          "semantic_review": {
+            "verdict": "aligned",
+            "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+            "support_status": "supported",
+            "summary": "authored semantics and executable lowering agree on the supported function surface",
+            "authored_surfaces": [
+              {
+                "path": "intent.why",
+                "summary": "Apply tax while importing the shared round helper from a sibling spec library."
+              },
+              {
+                "path": "contract.inputs",
+                "summary": "2 authored input(s)"
+              },
+              {
+                "path": "contract.returns",
+                "summary": "returns Decimal"
+              },
+              {
+                "path": "deps",
+                "summary": "1 declared dep(s)"
+              },
+              {
+                "path": "body.typescript",
+                "summary": "authored TypeScript body present"
+              }
+            ],
+            "executable_surfaces": [
+              {
+                "path": "body.rust",
+                "summary": "projects to Rust function apply_tax with 2 input(s)"
+              }
+            ],
+            "evaluator_scope": "supported_function_surface"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
+          "status": "invalid",
+          "errors": [
+            {
+              "unit": "pricing/calculate_total",
+              "code": "SPEC_DUPLICATE_ID",
+              "path": "<normalized>",
+              "id": "pricing/calculate_total",
+              "path2": "<normalized>"
+            }
+          ],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/checkout_nested_chain3",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        }
+      ],
+      "molecule_tests": []
+    },
+    {
+      "root": "spec-cli/tests/fixtures/benchmarks/rust_v1_closure/lane_b/companion_negative_missing_current_proof/shared-spec",
+      "units": [
+        {
+          "id": "money/round",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_discount",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/apply_tax",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/base_nested_chain3",
+          "status": "untested",
+          "reason": "no evidence",
+          "errors": [],
+          "freshness": {
+            "authored_truth_digest": "<normalized>",
+            "authored_truth_status": "unknown",
+            "backend_execution_status": "unknown"
+          }
+        },
+        {
+          "id": "pricing/calculate_total",
           "status": "untested",
           "reason": "no evidence",
           "errors": [],
@@ -3121,7 +3402,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -3132,7 +3413,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -3143,7 +3424,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -3154,7 +3435,7 @@
       "errors": [],
       "freshness": {
         "authored_truth_digest": "<normalized>",
-        "authored_truth_status": "unknown",
+        "authored_truth_status": "fresh",
         "backend_execution_status": "unknown"
       }
     },
@@ -3922,6 +4203,275 @@
       }
     },
     {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "invalid",
+      "errors": [
+        {
+          "unit": "pricing/apply_discount",
+          "code": "SPEC_DUPLICATE_ID",
+          "path": "<normalized>",
+          "id": "pricing/apply_discount",
+          "path2": "<normalized>"
+        }
+      ],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "invalid",
+      "errors": [
+        {
+          "unit": "pricing/apply_tax",
+          "code": "SPEC_DUPLICATE_ID",
+          "path": "<normalized>",
+          "id": "pricing/apply_tax",
+          "path2": "<normalized>"
+        }
+      ],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/base_nested_chain3",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "invalid",
+      "errors": [
+        {
+          "unit": "pricing/calculate_total",
+          "code": "SPEC_DUPLICATE_ID",
+          "path": "<normalized>",
+          "id": "pricing/calculate_total",
+          "path2": "<normalized>"
+        }
+      ],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "invalid",
+      "errors": [
+        {
+          "unit": "pricing/apply_discount",
+          "code": "SPEC_DUPLICATE_ID",
+          "path": "<normalized>",
+          "id": "pricing/apply_discount",
+          "path2": "<normalized>"
+        },
+        {
+          "unit": "pricing/apply_discount",
+          "code": "SPEC_LIBRARY_CRATE_ALIAS_MISSING",
+          "path": "<normalized>",
+          "value": "shared",
+          "path2": "<normalized>"
+        }
+      ],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Apply a discount while importing the shared round helper from a sibling spec library."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "invalid",
+      "errors": [
+        {
+          "unit": "pricing/apply_tax",
+          "code": "SPEC_DUPLICATE_ID",
+          "path": "<normalized>",
+          "id": "pricing/apply_tax",
+          "path2": "<normalized>"
+        }
+      ],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "fresh",
+        "backend_execution_status": "unknown"
+      },
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Apply tax while importing the shared round helper from a sibling spec library."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_tax with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "invalid",
+      "errors": [
+        {
+          "unit": "pricing/calculate_total",
+          "code": "SPEC_DUPLICATE_ID",
+          "path": "<normalized>",
+          "id": "pricing/calculate_total",
+          "path2": "<normalized>"
+        }
+      ],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/checkout_nested_chain3",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "money/round",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_discount",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/apply_tax",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/base_nested_chain3",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
+      "id": "pricing/calculate_total",
+      "status": "untested",
+      "reason": "no evidence",
+      "errors": [],
+      "freshness": {
+        "authored_truth_digest": "<normalized>",
+        "authored_truth_status": "unknown",
+        "backend_execution_status": "unknown"
+      }
+    },
+    {
       "id": "billing/apply_membership_discount",
       "status": "untested",
       "reason": "no evidence",
@@ -4491,8 +5041,8 @@
       "path_scope": "full",
       "accounting_status": "valid",
       "benchmark_status": "passing",
-      "gate_status": "satisfied",
-      "readability_review_status": "current",
+      "gate_status": "open",
+      "readability_review_status": "stale",
       "readability_verdict": {
         "decision": "approved",
         "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
@@ -4503,7 +5053,7 @@
         "total_cases": 6,
         "supported_cases": 6,
         "supported_valid_cases": 6,
-        "positive_credit_cases": 6,
+        "positive_credit_cases": 4,
         "case_status_counts": {
           "invalid": 0,
           "failing": 0,
@@ -4614,7 +5164,7 @@
               "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
             ]
           },
-          "counts_as_supported_positive": true
+          "counts_as_supported_positive": false
         },
         {
           "case_id": "billing/pricing_quote",
@@ -4630,7 +5180,7 @@
               "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
             ]
           },
-          "counts_as_supported_positive": true
+          "counts_as_supported_positive": false
         }
       ],
       "readability_generated_files": [

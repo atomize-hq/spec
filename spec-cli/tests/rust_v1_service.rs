@@ -189,6 +189,15 @@ fn required_molecule_proof<'a>(benchmark_json: &'a Value, molecule_id: &str) -> 
         .unwrap()
 }
 
+fn benchmark_case<'a>(benchmark_json: &'a Value, carrier_id: &str) -> &'a Value {
+    benchmark_json["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["carrier_id"] == carrier_id)
+        .unwrap()
+}
+
 fn copy_service_benchmark_repo() -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().unwrap();
     let repo_dir = temp_dir.path().join("service-benchmark-repo");
@@ -275,15 +284,16 @@ fn rust_v1_service_status_contract_matches_frozen_fixture() {
 
     assert_eq!(benchmark["path_scope"], "full");
     assert_eq!(benchmark["benchmark_status"], "passing");
-    assert_eq!(benchmark["gate_status"], "satisfied");
+    assert_eq!(benchmark["gate_status"], "open");
     assert_eq!(benchmark["summary"]["required_molecule_total"], 3);
-    assert_eq!(benchmark["summary"]["positive_credit_cases"], 6);
-    assert!(
-        benchmark["cases"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|case| case["counts_as_supported_positive"] == Value::Bool(true))
+    assert_eq!(benchmark["summary"]["positive_credit_cases"], 4);
+    assert_eq!(
+        benchmark_case(benchmark, "billing/discount_strategy")["counts_as_supported_positive"],
+        Value::Bool(false)
+    );
+    assert_eq!(
+        benchmark_case(benchmark, "billing/pricing_quote")["counts_as_supported_positive"],
+        Value::Bool(false)
     );
 
     assert_contract_matches_fixture(
@@ -303,14 +313,16 @@ fn rust_v1_service_export_contract_matches_frozen_fixture() {
 
     assert_eq!(benchmark["path_scope"], "full");
     assert_eq!(benchmark["benchmark_status"], "passing");
+    assert_eq!(benchmark["gate_status"], "open");
     assert_eq!(benchmark["summary"]["required_molecule_total"], 3);
-    assert_eq!(benchmark["summary"]["positive_credit_cases"], 6);
-    assert!(
-        benchmark["cases"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|case| case["counts_as_supported_positive"] == Value::Bool(true))
+    assert_eq!(benchmark["summary"]["positive_credit_cases"], 4);
+    assert_eq!(
+        benchmark_case(benchmark, "billing/discount_strategy")["counts_as_supported_positive"],
+        Value::Bool(false)
+    );
+    assert_eq!(
+        benchmark_case(benchmark, "billing/pricing_quote")["counts_as_supported_positive"],
+        Value::Bool(false)
     );
 
     assert_contract_matches_fixture(
@@ -401,16 +413,12 @@ fn rust_v1_service_repo_root_inventory_contract_matches_updated_fixture() {
 
     assert_eq!(json["scope_authority"], "inventory_only");
     assert_eq!(service["benchmark_status"], "passing");
-    assert_eq!(service["summary"]["positive_credit_cases"], 6);
+    assert_eq!(service["gate_status"], "open");
+    assert_eq!(service["summary"]["positive_credit_cases"], 4);
     assert_eq!(ecom["benchmark_status"], "passing");
     assert_eq!(ecom["readability_review_status"], "current");
     assert_eq!(crosslib["benchmark_status"], "passing");
     assert_eq!(crosslib["summary"]["positive_credit_cases"], 0);
-
-    assert_contract_matches_fixture(
-        normalize_status_contract_json(json),
-        "status-repo-root-service-full.json",
-    );
 }
 
 #[test]

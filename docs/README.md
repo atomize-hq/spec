@@ -26,6 +26,10 @@ and durable decisions aligned.
   The progress-map doc. Use this when you need to know which kinds and per-kind categories are shipped, deferred, or still unnamed.
 - [`function_category_matrix_v0.1.md`](./function_category_matrix_v0.1.md)
   The detailed `kind:function` matrix. Use this when you need per-category truth for families, TypeScript, proof, and benchmark role.
+- [`data_category_taxonomy_v0.1.md`](./data_category_taxonomy_v0.1.md)
+  The detailed `kind:data` taxonomy. Use this when you need the exact supported data descriptor, its benchmark role, and the remaining unnamed pressure inside seam categories.
+- [`sum_category_taxonomy_v0.1.md`](./sum_category_taxonomy_v0.1.md)
+  The detailed `kind:sum` taxonomy. Use this when you need the exact supported sum descriptor, its benchmark role, and the current split between canonical detector wording and the broader service sibling surface.
 - [`examples/ecommerce/README.md`](../examples/ecommerce/README.md)
   The canonical concrete walkthrough. Use it when you want one real example root to run and inspect.
 - [`AGENTS.md`](../AGENTS.md)

@@ -1015,7 +1015,7 @@
         }
       ],
       "generated_at": "<normalized>",
-      "source_file": "<normalized>",
+      "source_file": "examples/service/units/billing/discount_strategy.unit.spec",
       "evidence": {
         "build_status": "pass",
         "test_results": [

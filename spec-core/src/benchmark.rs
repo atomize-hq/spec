@@ -853,8 +853,10 @@ fn project_case(
         && matches!(accounting_status, BenchmarkAccountingStatus::Valid)
         && matches!(label.classification, BenchmarkClassification::Supported)
         && matches!(status, BenchmarkTruthStatus::Valid)
-        && semantic_support_status
-            .is_none_or(|support_status| support_status == SemanticSupportStatus::Supported);
+        && matches!(
+            semantic_support_status,
+            Some(SemanticSupportStatus::Supported)
+        );
 
     BenchmarkCaseProjection {
         case_id: label.case_id.clone(),

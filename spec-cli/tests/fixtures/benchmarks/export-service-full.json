@@ -1015,7 +1015,7 @@
         }
       ],
       "generated_at": "<normalized>",
-      "source_file": "<normalized>",
+      "source_file": "examples/service/units/billing/discount_strategy.unit.spec",
       "evidence": {
         "build_status": "pass",
         "test_results": [
@@ -1442,8 +1442,8 @@
       "path_scope": "full",
       "accounting_status": "valid",
       "benchmark_status": "passing",
-      "gate_status": "satisfied",
-      "readability_review_status": "current",
+      "gate_status": "open",
+      "readability_review_status": "stale",
       "readability_verdict": {
         "decision": "approved",
         "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
@@ -1454,7 +1454,7 @@
         "total_cases": 6,
         "supported_cases": 6,
         "supported_valid_cases": 6,
-        "positive_credit_cases": 6,
+        "positive_credit_cases": 4,
         "case_status_counts": {
           "invalid": 0,
           "failing": 0,
@@ -1565,7 +1565,7 @@
               "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
             ]
           },
-          "counts_as_supported_positive": true
+          "counts_as_supported_positive": false
         },
         {
           "case_id": "billing/pricing_quote",
@@ -1581,7 +1581,7 @@
               "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
             ]
           },
-          "counts_as_supported_positive": true
+          "counts_as_supported_positive": false
         }
       ],
       "readability_generated_files": [

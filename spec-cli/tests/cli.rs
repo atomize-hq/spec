@@ -15186,12 +15186,12 @@ fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
     .unwrap();
     assert_eq!(
         service_snapshot["projection"]["benchmark_status"],
-        "passing"
+        "incomplete"
     );
-    assert_eq!(service_snapshot["projection"]["gate_status"], "satisfied");
+    assert_eq!(service_snapshot["projection"]["gate_status"], "open");
     assert_eq!(
         service_snapshot["projection"]["readability_review_status"],
-        "current"
+        "stale"
     );
 }
 
