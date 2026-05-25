@@ -551,6 +551,20 @@ fn rewrite_json_field(path: &Path, field: &str, value: Value) {
     fs::write(path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
 }
 
+fn clear_passport_semantic_review_descriptor_id(passport_path: &Path) -> Value {
+    let mut passport = read_passport_json(passport_path);
+    passport["semantic_review"]
+        .as_object_mut()
+        .unwrap()
+        .remove("descriptor_id");
+    fs::write(
+        passport_path,
+        serde_json::to_string_pretty(&passport).unwrap(),
+    )
+    .unwrap();
+    read_passport_json(passport_path)["semantic_review"].clone()
+}
+
 fn write_status_project(project_dir: &Path) -> PathBuf {
     let units_dir = project_dir.join("units");
     let pricing_dir = units_dir.join("pricing");
@@ -15126,6 +15140,163 @@ fn export_benchmark_root_contract_matches_frozen_fixture() {
         normalize_export_contract_json(json),
         "export-ecommerce-full.json",
     );
+}
+
+#[test]
+fn benchmark_read_surfaces_do_not_backfill_missing_supported_seam_descriptor_ids() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+    let data_passport_path =
+        repo_dir.join("examples/ecommerce/units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path =
+        repo_dir.join("examples/ecommerce/units/pricing/discount_strategy.spec.passport.json");
+
+    let stored_data_review = clear_passport_semantic_review_descriptor_id(&data_passport_path);
+    let stored_sum_review = clear_passport_semantic_review_descriptor_id(&sum_passport_path);
+    assert_eq!(stored_data_review["descriptor_id"], Value::Null);
+    assert_eq!(stored_sum_review["descriptor_id"], Value::Null);
+
+    let status_output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce/units", "--format", "json"],
+    );
+    assert_output_success(
+        "benchmark-root status should not backfill missing seam descriptor ids",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let status_benchmark = status_json["benchmarks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|benchmark| benchmark["benchmark_id"] == "BENCH-ECOM")
+        .unwrap();
+    assert_eq!(status_benchmark["accounting_status"], "invalid");
+    assert_eq!(status_benchmark["benchmark_status"], "invalid");
+
+    for unit_id in ["pricing/pricing_quote", "pricing/discount_strategy"] {
+        let status_unit = status_units(&status_json)
+            .iter()
+            .find(|unit| unit["id"] == unit_id)
+            .unwrap();
+        assert_eq!(status_unit["semantic_review"]["descriptor_id"], Value::Null);
+        assert_eq!(
+            status_unit["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            status_unit["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+
+        let benchmark_case = status_benchmark["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["carrier_id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            benchmark_case["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            benchmark_case["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+        assert_eq!(
+            benchmark_case["counts_as_supported_positive"],
+            Value::Bool(false)
+        );
+    }
+
+    let export_output = run_in(&repo_dir, &["export", "examples/ecommerce/units"]);
+    assert_output_success(
+        "benchmark-root export should not backfill missing seam descriptor ids",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let export_benchmark = export_json["benchmarks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|benchmark| benchmark["benchmark_id"] == "BENCH-ECOM")
+        .unwrap();
+    assert_eq!(export_benchmark["accounting_status"], "invalid");
+    assert_eq!(export_benchmark["benchmark_status"], "invalid");
+
+    for unit_id in ["pricing/pricing_quote", "pricing/discount_strategy"] {
+        let projected_unit = export_json["projected_units"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|unit| unit["id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            projected_unit["semantic_review"]["descriptor_id"],
+            Value::Null
+        );
+        assert_eq!(
+            projected_unit["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            projected_unit["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+
+        let benchmark_case = export_benchmark["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["carrier_id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            benchmark_case["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            benchmark_case["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+        assert_eq!(
+            benchmark_case["counts_as_supported_positive"],
+            Value::Bool(false)
+        );
+    }
+
+    let snapshot_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-ECOM"]);
+    assert_output_success(
+        "benchmark snapshot should not backfill missing seam descriptor ids",
+        &snapshot_output,
+    );
+    let snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-ECOM.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    let snapshot_projection = &snapshot["projection"];
+    assert_eq!(snapshot_projection["accounting_status"], "invalid");
+    assert_eq!(snapshot_projection["benchmark_status"], "invalid");
+
+    for unit_id in ["pricing/pricing_quote", "pricing/discount_strategy"] {
+        let benchmark_case = snapshot_projection["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["carrier_id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            benchmark_case["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            benchmark_case["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+        assert_eq!(
+            benchmark_case["counts_as_supported_positive"],
+            Value::Bool(false)
+        );
+    }
 }
 
 #[test]

@@ -1758,6 +1758,117 @@ mod tests {
         spec
     }
 
+    fn make_supported_discount_strategy_sum_seam() -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "units/pricing/discount_strategy.unit.spec".to_string(),
+                id: "pricing/discount_strategy".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/discount_strategy".to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: "Represent discount strategies that cap fixed discounts at the subtotal."
+                        .to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            ("none".to_string(), AuthoredSumVariant::default()),
+                            (
+                                "percentage".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "rate".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                            (
+                                "fixed_amount".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "amount".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discount_amount".to_string(),
+                            intent: Intent {
+                                why: "Return the capped discount amount to subtract from the subtotal."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: Some(IndexMap::from([(
+                                    "subtotal".to_string(),
+                                    "Decimal".to_string(),
+                                )])),
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+            match self {
+                Self::None => Decimal::ZERO,
+                Self::Percentage { rate } => subtotal * *rate,
+                Self::FixedAmount { amount } => (*amount).min(subtotal),
+            }
+        }"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Return the subtotal after applying the selected discount strategy."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: Some(IndexMap::from([(
+                                    "subtotal".to_string(),
+                                    "Decimal".to_string(),
+                                )])),
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+            subtotal - self.discount_amount(subtotal)
+        }"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: None,
+                    ..UnitExtensions::default()
+                },
+            },
+        }
+    }
+
     fn make_discount_strategy_molecule_test() -> LoadedMoleculeTest {
         LoadedMoleculeTest {
             source: MoleculeTestSource {
@@ -2879,6 +2990,51 @@ mod tests {
 
         let rebuilt = build_passport_preserving_proof_state_with_context(
             &wrapper,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_keeps_missing_sum_seam_descriptor_id() {
+        let spec = make_supported_discount_strategy_sum_seam();
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let mut supported_review = evaluate_semantic_review(&spec).unwrap();
+        supported_review.descriptor_id = None;
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_keeps_missing_data_seam_descriptor_id() {
+        let spec = make_loaded_data_seam(
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
+        );
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let mut supported_review = evaluate_semantic_review(&spec).unwrap();
+        supported_review.descriptor_id = None;
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &spec,
             "2026-04-23T00:00:00Z",
             Some(&existing),
             existing.contract_hash.clone(),

@@ -727,7 +727,7 @@ pub fn project_semantic_review_with_context(
         surface @ (SupportedSurface::Function(_) | SupportedSurface::Seam(_)) => match mode {
             SemanticProjectionMode::Preserve => existing
                 .filter(|review| supported_surface_matches_existing_review(surface, review))
-                .map(|review| canonicalize_preserved_supported_review(spec, surface, review)),
+                .cloned(),
             SemanticProjectionMode::Refresh => {
                 evaluate_supported_semantic_review(spec, surface, context, &mut stack)
             }
@@ -741,18 +741,6 @@ pub fn project_semantic_review_with_context(
             }),
         },
     }
-}
-
-fn canonicalize_preserved_supported_review(
-    spec: &LoadedSpec,
-    surface: SupportedSurface,
-    review: &SemanticReview,
-) -> SemanticReview {
-    let mut review = review.clone();
-    if matches!(surface, SupportedSurface::Seam(_)) && review.descriptor_id.is_none() {
-        review.descriptor_id = seam_descriptor_id(spec);
-    }
-    review
 }
 
 pub fn semantic_health_effect(review: Option<&SemanticReview>) -> SemanticHealthEffect {
@@ -7119,7 +7107,7 @@ mod tests {
     }
 
     #[test]
-    fn project_semantic_review_preserve_restores_missing_seam_descriptor_id() {
+    fn project_semantic_review_preserve_keeps_missing_sum_seam_descriptor_id() {
         let spec = canonical_discount_strategy_sum_spec();
         let mut review = evaluate_semantic_review(&spec).unwrap();
         review.descriptor_id = None;
@@ -7128,12 +7116,20 @@ mod tests {
             project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
                 .unwrap();
 
-        assert_eq!(
-            preserved.descriptor_id,
-            Some("discount_strategy.ecommerce.v1".to_string())
-        );
-        assert_eq!(preserved.compatibility_key, review.compatibility_key);
-        assert_eq!(preserved.verdict, review.verdict);
+        assert_eq!(preserved, review);
+    }
+
+    #[test]
+    fn project_semantic_review_preserve_keeps_missing_data_seam_descriptor_id() {
+        let spec = canonical_pricing_quote_data_spec();
+        let mut review = evaluate_semantic_review(&spec).unwrap();
+        review.descriptor_id = None;
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
+                .unwrap();
+
+        assert_eq!(preserved, review);
     }
 
     #[test]
