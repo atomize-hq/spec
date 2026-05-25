@@ -1,656 +1,836 @@
-# I8: Rust V1 Final Proof Run Plan
+# Category Truth Registry and Consumer Qualification Plan
 
-Status: **authoritative implementation plan**
-Iteration: **I8**
-Milestone family: **Rust V1 final proof run**
-Implementation readiness: **ready to execute**
-Plan scope: **rerun the frozen Rust V1 proof wall, preserve repo-root inventory semantics, and close Rust V1 only if the live benchmark surfaces, deferred boundaries, and repo-facing docs still match the ratified narrow-core claim**
-Base branch: **main**
-Working branch: **`feat/i8-final-proof-run`**
-Validated at commit: **`5d849d4`**
-Last rewritten: **2026-05-23**
+Status: **authoritative implementation plan**  
+Implementation readiness: **ready to execute**  
+Plan scope: **land one explicit category-truth contract for seam-backed support claims across benchmark accounting, `spec status`, `spec export`, and snapshot/readability projections**  
+Base branch: **main**  
+Working branch: **`feat/i8-final-proof-run`**  
+Validated at commit: **`4c41fb3`**  
+Last rewritten: **2026-05-25**
 
 Supersedes:
 
-- the prior `I7: Rust V1 Scope-Decision Closure Plan`
+- the prior `I8: Rust V1 Final Proof Run Plan`
 
-Locked authority inputs:
+Primary authority inputs:
 
-- contract-stack index: `docs/rust_v1_contract_stack.md`
-- I7 decision freeze: `.runs/i7/decision-freeze.json`
-- I7 handoff packet: `.runs/i7/i8-handoff.json`
-- benchmark roster: `benchmarks/labels.json`
-- live repo truth on `feat/i8-final-proof-run` at `5d849d4`:
-  - `cargo run -p spec-cli -- status examples/ecommerce/units --format json`
-  - `cargo run -p spec-cli -- export examples/ecommerce/units`
-  - `cargo run -p spec-cli -- status examples/service/units --format json`
-  - `cargo run -p spec-cli -- export examples/service/units`
-  - `cargo run -p spec-cli -- status . --format json`
-
-Historical context, not authority:
-
-- `README.md`
-- `DECISIONS.md`
-- `CHANGELOG.md`
-- `TODOS.md`
-- `ORCH_PLAN.md`
-
-Primary repo surfaces for I8 closeout:
-
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `docs/rust_v1_contract_stack.md`
-- `README.md`
-- `DECISIONS.md`
-- `CHANGELOG.md`
-- `TODOS.md`
-- `benchmarks/labels.json`
-- `benchmarks/snapshots/*.snapshot.json`
-- `benchmarks/reviews/*.readability.review.json`
-- `.runs/i8/**`
+- design anchor: `docs/category_truth_contract_v0.1.md`
+- backlog anchor: `TODOS.md` under `Post-I8 truth-contract follow-up`
+- current benchmark registry: `benchmarks/labels.json`
+- current producer and consumer code:
+  - `spec-core/src/semantic_review.rs`
+  - `spec-core/src/benchmark.rs`
+  - `spec-core/src/export.rs`
+  - `spec-core/src/passport.rs`
+  - `spec-cli/src/commands.rs`
+- current contract suites and read-side fixtures:
+  - `spec-cli/tests/rust_v1_service.rs`
+  - `spec-cli/tests/rust_v1_closure.rs`
+  - `spec-cli/tests/m14_regressions.rs`
+  - `spec-cli/tests/cli.rs`
+  - `spec-cli/tests/fixtures/benchmarks/*.json`
+  - `benchmarks/snapshots/*.snapshot.json`
+  - `benchmarks/reviews/*.readability.review.json`
 
 ## Executive Summary
 
-I7 already made the product decisions. Rust V1 stays narrow. Rust V1 stays
-synchronous-only. Bounded generics and async or IO-owned boundaries stay
-deferred to `V1.1`. `BENCH-CROSSLIB` stays visible as companion negative proof
-and never counts as positive supported credit.
+The repo already projects semantic-review truth and already computes benchmark,
+status, export, and snapshot surfaces. The bug class is not missing data. The
+bug class is consumer drift: a read-side surface can still over-credit a seam
+category from partial truth such as compatibility key alone, support status
+alone, or benchmark label alone.
 
-That means I8 is not another scope milestone. I8 is the final proof run over
-the already-ratified claim. The job is to prove that the live repo still tells
-the same story through the same five-command wall, then freeze the evidence and
-close Rust V1 without widening scope by prose drift, benchmark drift, or
-repo-root misinterpretation.
+This wedge fixes that by introducing one producer-owned registry plus one
+shared qualification function in `spec-core`, then wiring every current
+seam-category consumer to that contract. After this lands, no current consumer
+may claim supported category truth or award positive supported benchmark credit
+unless qualification returns an explicit supported result.
 
-I8 is complete only when the repo can say this sentence honestly, with checked
-evidence:
+The most visible product change is intentional: `BENCH-SERVICE` must stop
+projecting a full-scope `passing` result when its supported-labeled seam cases
+are not producer-qualified as supported.
 
-> Rust V1 is the current narrow-core `spec` surface: synchronous supported
-> function families plus plain data and sum seams, proven by BENCH-ECOM and
-> BENCH-SERVICE, with BENCH-CROSSLIB preserved as companion negative proof.
+## Success Sentence
 
-## Frozen I8 Contract
+When this plan is complete, the repo can say this sentence honestly:
 
-These are inherited from I7 and are not open for reinterpretation in I8:
+> Every current seam-category consumer in `spec` uses one shared,
+> producer-owned qualification contract. Benchmark labels, health state, and
+> compatibility-key folklore can no longer widen supported category claims or
+> positive benchmark credit on their own.
 
-- the active ladder is `I7 -> I8`, not `I7 -> I8 -> I9`
-- the Rust V1 claim stays narrow, synchronous, and benchmark-backed
-- deferred `V1.1` surfaces are exactly:
-  - bounded generics
-  - async flows, runtime adapters, and IO-owned boundaries
-- `BENCH-ECOM` and `BENCH-SERVICE` are the only positive proof walls required
-  for the V1 claim
-- `BENCH-CROSSLIB` remains the active companion negative proof wall
-- the authoritative I8 proof wall is exactly five commands:
-  - `cargo run -p spec-cli -- status examples/ecommerce/units --format json`
-  - `cargo run -p spec-cli -- export examples/ecommerce/units`
-  - `cargo run -p spec-cli -- status examples/service/units --format json`
-  - `cargo run -p spec-cli -- export examples/service/units`
-  - `cargo run -p spec-cli -- status . --format json`
-- no new slice-specific proof commands are admitted in I8
-- repo-root `export .` remains unsupported for this workspace shape and is not
-  part of the I8 wall
-- repo-root `status . --format json` remains a broad inventory surface with
-  `scope_authority: inventory_only`; it is not a green ship gate
+## Frozen Decisions
 
-## Current Validated Truth
+These are not open during implementation:
 
-Observed live on `feat/i8-final-proof-run` at commit `5d849d4` on 2026-05-23:
+- the authoritative category registry lives in Rust code under `spec-core`, not
+  in a new checked-in JSON registry
+- first-scope registry coverage is exactly four rows:
+  - `sum.discount_strategy.v1`
+  - `data.pricing_quote.v1`
+  - `unsupported.sum.v1`
+  - `unsupported.data.v1`
+- producer truth outranks benchmark labels
+- the current service seam mismatch remains visible in this wedge; it is not
+  rescued into supported truth
+- category qualification is projected read-side truth only and is **not**
+  persisted into on-disk passports
+- snapshot and readability surfaces consume the same benchmark qualification
+  result; readability freshness is not repurposed as an accounting signal
+- benchmark labels schema stays at `1`; this wedge changes consumer
+  projections, not the label-file format
+- `spec status --format json` and `spec export` are published machine surfaces,
+  so their schema versions must bump when `category_qualification` is added
+- unsupported terminal categories qualify as `unsupported_qualified` without a
+  descriptor-id check; descriptor approval is required only for supported rows
+- do not ship an unused extra failure vocabulary; only add reason codes the
+  first landing actually emits
 
-- `status examples/ecommerce/units --format json` passes with:
-  - `BENCH-ECOM`
-  - `benchmark_status: passing`
-  - `gate_status: satisfied`
-  - `readability_review_status: current`
-- `export examples/ecommerce/units` passes with:
-  - `schema_version: 4`
-  - `provenance.git_commit_sha: 5d849d4f60676c259793d0592b7c1af07431d9a2`
-  - full `BENCH-ECOM` projection, including required molecule proofs and
-    readability-generated file inventory
-- `status examples/service/units --format json` passes with:
-  - `BENCH-SERVICE`
-  - `benchmark_status: passing`
-  - `gate_status: satisfied`
-  - `readability_review_status: current`
-- `export examples/service/units` passes with:
-  - `schema_version: 4`
-  - `provenance.git_commit_sha: 5d849d4f60676c259793d0592b7c1af07431d9a2`
-  - full `BENCH-SERVICE` projection, including required molecule proofs and
-    readability-generated file inventory
-- `status . --format json` exits `1`, which is still correct for I8 because:
-  - `scope_authority` is `inventory_only`
-  - `BENCH-CROSSLIB` remains visible with `benchmark_status: passing` and
-    `gate_status: not_applicable`
-  - `BENCH-ECOM` and `BENCH-SERVICE` still project as `passing`
-  - intentionally non-green roots still exist in the broad inventory surface,
-    including fixtures, semantic-family packets, and unsupported or untested
-    diagnostic roots that are outside the positive proof wall
+## Problem Statement
 
-This is the behavior I8 must preserve unless a real truth bug is found.
+The failure class is any path where a consumer infers category-backed support
+or positive benchmark value without explicit qualification.
+
+Current repo reality already shows the gap:
+
+- `benchmarks/labels.json` marks `billing/discount_strategy` and
+  `billing/pricing_quote` as `classification: supported`
+- producer-owned semantic review routes those units to `unsupported.sum.v1` and
+  `unsupported.data.v1`
+- current benchmark logic correctly sets
+  `counts_as_supported_positive = false` for those cases
+- but the enclosing full `BENCH-SERVICE` benchmark still projects
+  `benchmark_status = passing`
+
+That last line is too optimistic. The case-level truth is already saying
+"this supported claim is not actually producer-qualified." The benchmark-level
+truth must stop pretending that full supported closure still passed.
 
 ## Scope Challenge
 
-### Premise correction
+### What already exists
 
-I8 is not "final Rust work." I8 is:
+| Sub-problem | Existing owner | Reuse decision |
+| --- | --- | --- |
+| producer-owned compatibility routing | `spec-core/src/semantic_review.rs` | reuse; do not build a second routing system |
+| benchmark projection and accounting skeleton | `spec-core/src/benchmark.rs` | reuse; tighten through qualification rather than rewrite |
+| status JSON projection | `spec-cli/src/commands.rs` | reuse; add qualification beside existing semantic review |
+| export bundle construction | `spec-core/src/export.rs` | reuse; add additive projected truth rather than new export command |
+| projected passport truth assembly | `spec-core/src/passport.rs` | reuse for semantic-review projection only; do not persist category qualification |
+| benchmark truth collection from current proof surfaces | duplicated in `spec-cli/src/commands.rs` benchmark and snapshot paths | collapse to one shared helper instead of editing multiple truth carriers independently |
+| frozen service/ecommerce benchmark contract suites | `spec-cli/tests/rust_v1_service.rs`, `spec-cli/tests/rust_v1_closure.rs` | keep and update expectations |
+| read-side fixtures and snapshots | `spec-cli/tests/fixtures/benchmarks/*.json`, `benchmarks/snapshots/*.snapshot.json` | refresh, do not replace with new artifact families |
 
-```text
-prove that the already-ratified Rust V1 claim still holds on the live repo,
-with the same benchmark roster, the same deferred boundaries, and the same
-five-command wall
-```
+### Minimum complete change set
 
-If the work expands beyond that sentence, the milestone escaped.
+The smallest honest implementation is:
 
-### What existing code already solves the problem
+1. add a shared registry and qualification module
+2. extend seam semantic review with producer-owned `descriptor_id`
+3. thread one shared `CategoryQualification` object through benchmark, status,
+   export, and snapshot surfaces
+4. invalidate full-scope supported benchmark claims when a supported-labeled
+   case is not producer-qualified
+5. refresh tests, fixtures, and snapshots so every read-side surface says the
+   same thing
 
-The repo already ships everything I8 needs:
-
-- the benchmark roster and roles are already encoded in `benchmarks/labels.json`
-- benchmark-aware `status` and `export` already project full truth at schema
-  version `4`
-- readability anchors already exist for the two positive walls
-- I7 already froze the scope decision and wrote the I8 handoff packet
-- repo-facing docs already describe the narrow-core story
-
-I8 should reuse those surfaces exactly. It should not invent parallel proof
-machinery, new labels, or a new source of authority.
-
-### Minimum change set
-
-If the frozen wall still passes, the minimum complete I8 diff is:
-
-1. create `.runs/i8/` and freeze the run inputs
-2. rerun the five-command wall and archive raw outputs
-3. compare those outputs against the frozen claim and checked-in docs
-4. patch only real authority drift
-5. write the closeout packet
-
-Code changes are conditional only. If a proof-wall command fails or a read-side
-surface contradicts the ratified claim, fix only the direct blocker. Do not
-turn one failing command into a mechanics redesign.
+Anything smaller leaves at least one current consumer free to infer support
+from partial truth.
 
 ### Complexity check
 
-This milestone should stay boring:
+This wedge touches one new module, five existing code modules, and several
+fixture suites. That is larger than a one-file patch, but it is still the
+right-sized diff because the bug class is cross-consumer by definition. A
+benchmark-only fix would leave status/export drift alive.
 
-- no new CLI commands
-- no new benchmark kinds
-- no new support rows
-- no new example or service roots
-- no new proof writers
-- no new artifact classes beyond the bounded `.runs/i8/` closeout records
+### Search check
 
-If the work grows into benchmark schema edits, support-boundary changes, or a
-new post-I8 planning milestone, stop. That is not I8.
+This is internal contract consolidation work, not a framework or infrastructure
+selection problem. The right move is reuse, not novelty:
 
-### Completeness rule
+- **[Layer 1]** reuse the existing semantic-review, benchmark, status, export,
+  and passport projection surfaces
+- **[Layer 3]** add one repo-local contract where no shared contract exists yet
 
-The complete version is cheap here, so take it:
+No new infrastructure, registry service, or persistence layer belongs in this
+plan.
 
-- rerun all five commands, not fragments
-- inspect benchmark projections, not just exit codes
-- archive raw outputs, not just summaries
-- compare docs against live truth, not against memory
-- close only after the repo-facing story and the command wall say the same thing
+### TODOS cross-reference
 
-The shortcut version would be "the commands seem fine, ship it." I8 should not
-use that shortcut.
+This plan is the executable version of the active backlog item already recorded
+in `TODOS.md` under `Post-I8 truth-contract follow-up`. It should land the
+implementation wedge, not create a second overlapping TODO.
+
+### Completeness check
+
+This plan should ship the complete version now. With the existing producer and
+consumer surfaces already in place, the marginal cost of also updating status,
+export, and snapshot projections is small compared with the cost of letting
+multiple read-side honesty bugs survive.
 
 ### Distribution check
 
-I8 introduces no new distributable artifact. The release surface remains the
-existing CLI and checked-in repo authority. Distribution work is unchanged and
-out of scope.
+This plan introduces no new distributable artifact. Existing CLI build and
+release pipelines remain the distribution path. No release automation work is
+needed for this wedge.
 
-## What Already Exists
+## NOT In Scope
 
-| Sub-problem | Existing owner | I8 action |
-| --- | --- | --- |
-| milestone ladder and scope boundary | `docs/rust_v1_contract_stack.md`, `.runs/i7/i8-handoff.json` | reuse exactly; do not infer `I9` |
-| supported-vs-deferred Rust claim | `DECISIONS.md`, `.runs/i7/decision-freeze.json` | quote and verify, not reinterpret |
-| benchmark role split | `benchmarks/labels.json`, I7 handoff | preserve two positive walls plus one companion negative wall |
-| benchmark/readability mechanics | `status`/`export` schema v4, committed readability reviews, snapshot surfaces | verify read-side truth still matches the frozen mechanics |
-| positive proof walls | `examples/ecommerce/units`, `examples/service/units` | rerun unchanged |
-| companion-negative visibility | `examples/crosslib-app/units`, repo-root `status`, `BENCH-CROSSLIB` labels | verify still visible and still zero-credit |
-| repo-root scope semantics | `.runs/i3_5_authority_alignment/**`, current CLI behavior | preserve `inventory_only`; do not try to make repo-root globally green |
-| scope-closure packet trail | `.runs/i7/**` | treat as frozen inputs, then append I8 evidence separately under `.runs/i8/**` |
+This wedge does **not** do any of the following:
 
-## Final Rust V1 Claim
+- widen semantic-review routing so service seam descriptors become supported
+- change the four first-scope category ids
+- relabel `BENCH-SERVICE` cases in `benchmarks/labels.json`
+- add a checked-in external registry file for non-Rust consumers
+- persist `category_qualification` into `.spec.passport.json`
+- redesign function-family support, benchmark kinds, or benchmark registry shape
+- rewrite status health semantics outside the additive qualification field
 
-This is the exact plain-English line I8 is closing:
+## Architecture
 
-> Rust V1 is the current narrow-core `spec` surface: synchronous supported
-> function families plus plain data and sum seams, proven by BENCH-ECOM and
-> BENCH-SERVICE, with BENCH-CROSSLIB preserved as companion negative proof.
-
-Derived consequences:
-
-- supported:
-  - synchronous supported function families
-  - plain pipeline and wrapper composition inside the shipped supported
-    families
-  - plain data seams
-  - plain sum seams
-  - truthful proof surfaces over those supported rows
-- deferred to `V1.1`:
-  - bounded generics
-  - async flows, runtime adapters, and IO-owned boundaries
-- visible but non-crediting:
-  - companion negative proof in `BENCH-CROSSLIB`
-
-## Artifact Map
-
-The I8 run root is intentionally small and deterministic:
-
-- `.runs/i8/preflight.json`
-- `.runs/i8/evidence/ecommerce.status.json`
-- `.runs/i8/evidence/ecommerce.export.json`
-- `.runs/i8/evidence/service.status.json`
-- `.runs/i8/evidence/service.export.json`
-- `.runs/i8/evidence/workspace.status.json`
-- `.runs/i8/authority-drift.md`
-- `.runs/i8/closeout.json`
-
-Artifact contract:
-
-- raw command output files are canonical evidence
-- summaries may cite raw outputs but do not replace them
-- checked-in authority docs remain the public story
-- `.runs/i8/**` is the private closeout packet that proves how that story was
-  revalidated
-
-## Architecture And Execution Graph
-
-I8 is a verification-and-ratification run, not a product expansion:
+### Current vs target authority flow
 
 ```text
-I7 decision freeze
-      |
-      v
-live benchmark roster + live CLI truth
-      |
-      v
-I8 preflight freeze (.runs/i8/)
-      |
-      +---------------------+----------------------+
-      |                     |                      |
-      v                     v                      v
-BENCH-ECOM rerun      BENCH-SERVICE rerun   workspace inventory rerun
-      |                     |                      |
-      +---------------------+----------+-----------+
-                                     |
-                                     v
-                        authority drift comparison
-                                     |
-                     +---------------+---------------+
-                     |                               |
-                     v                               v
-              no drift or doc drift only      truth blocker found
-                     |                               |
-                     v                               v
-              final closeout packet        direct blocker repair only
-                     |                               |
-                     +---------------+---------------+
-                                     |
-                                     v
-                      truthful Rust V1 done-state claim
+CURRENT
+semantic_review
+  -> compatibility_key + support_status
+  -> benchmark/status/export each decide what that "means"
+  -> benchmark label can still overstate supported closure
+
+TARGET
+semantic_review
+  -> compatibility_key + support_status + descriptor_id
+  -> category_truth registry lookup
+  -> qualify_category_claim(...)
+  -> benchmark/status/export/snapshot all consume the same result
+  -> no consumer-local widening
 ```
 
-Critical dependency rule:
-
-- proof reruns may happen before doc edits
-- doc edits may not happen until proof outputs are captured and interpreted
-- blocker repair exists only if a live command or live projection contradicts
-  the frozen claim
-- closeout happens only after proof truth and repo-facing prose agree
-
-## Work Phases
-
-| Phase | Goal | Primary outputs | Exit criteria |
-| --- | --- | --- | --- |
-| 1. Preflight freeze | create a reproducible I8 run root and freeze the inputs | `.runs/i8/preflight.json` | every later step cites frozen inputs and fixed output paths |
-| 2. Positive proof rerun | rerun both positive benchmark walls unchanged | ecommerce and service raw status/export outputs | both positive walls still pass with satisfied gates and current readability |
-| 3. Broad inventory confirmation | rerun repo-root inventory and confirm companion-negative visibility | workspace raw status output and inventory interpretation | `scope_authority: inventory_only` is preserved and `BENCH-CROSSLIB` remains zero-credit |
-| 4. Authority drift ratification | compare live outputs against checked-in authority surfaces | `.runs/i8/authority-drift.md`, doc diff only if needed | all repo-facing authority surfaces teach one identical I8 story |
-| 5. Conditional blocker repair | repair only a direct truth blocker if one exists | bounded code or doc diff plus rerun evidence | failing truth surface is fixed without widening support or commands |
-| 6. Final closeout | freeze the final evidence packet and milestone verdict | `.runs/i8/closeout.json`, release-note updates if needed | Rust V1 can be stated honestly with no extra caveats |
-
-### Phase detail
-
-#### Phase 1. Preflight freeze
-
-Create `.runs/i8/` and write `preflight.json` with:
-
-- branch
-- commit
-- timestamp
-- authority inputs
-- the exact five-command wall
-- expected evidence output file paths
-- the frozen plain-English Rust V1 claim
-
-No interpretation happens here. This phase freezes the basis only.
-
-#### Phase 2. Positive proof rerun
-
-Run these four commands against the live branch and archive raw stdout:
-
-- `cargo run -p spec-cli -- status examples/ecommerce/units --format json`
-- `cargo run -p spec-cli -- export examples/ecommerce/units`
-- `cargo run -p spec-cli -- status examples/service/units --format json`
-- `cargo run -p spec-cli -- export examples/service/units`
-
-Required interpretation:
-
-- both benchmarks must remain `passing`
-- both gates must remain `satisfied`
-- both readability reviews must remain `current`
-- both exports must remain `schema_version: 4`
-- both exports must still project the same positive benchmark role and required
-  molecule roster
-
-#### Phase 3. Broad inventory confirmation
-
-Run:
-
-- `cargo run -p spec-cli -- status . --format json`
-
-Expected outcome:
-
-- non-zero exit code is allowed and expected
-- `scope_authority` must be `inventory_only`
-- `BENCH-CROSSLIB` must remain visible as active companion negative proof
-- `BENCH-CROSSLIB` must keep `positive_credit_cases: 0`
-- `BENCH-ECOM` and `BENCH-SERVICE` must still project as passing inside the
-  broad surface
-
-This phase exists to prevent a false green and to prevent a false red.
-
-#### Phase 4. Authority drift ratification
-
-Compare live outputs against:
-
-- `PLAN.md`
-- `ORCH_PLAN.md`
-- `docs/rust_v1_contract_stack.md`
-- `README.md`
-- `DECISIONS.md`
-- `CHANGELOG.md`
-- `TODOS.md`
-
-Allowed outcomes:
-
-- no drift: record that all surfaces already agree
-- doc drift only: patch only the prose that drifted
-
-Disallowed outcome:
-
-- reinterpreting the live output so stale prose can stay unchanged
-
-#### Phase 5. Conditional blocker repair
-
-This phase exists only if a live truth surface disagrees with the frozen claim.
-
-Repair policy:
-
-- fix the direct blocker only
-- rerun the affected command immediately
-- rerun the full five-command wall before closeout
-- stop and escalate if the repair would require:
-  - new proof commands
-  - new support rows
-  - benchmark schema redesign
-  - widening a deferred `V1.1` surface into Rust V1
-
-#### Phase 6. Final closeout
-
-Write `.runs/i8/closeout.json` with:
-
-- the final Rust V1 claim
-- deferred `V1.1` surfaces
-- the five-command verdicts
-- raw evidence file references
-- any doc files changed for drift repair
-- final closeout status: `done` or `blocked`
-
-## Proof And Coverage Diagram
-
-This is the exact I8 proof surface. Every row must be observed and archived.
+### Architecture diagram
 
 ```text
-PROOF COMMANDS                                            CLAIM SURFACE
-[PASS] cargo run -p spec-cli -- status examples/ecommerce/units --format json
-  -> BENCH-ECOM positive wall
-  -> benchmark_status: passing
-  -> gate_status: satisfied
-  -> readability_review_status: current
-  -> archive: .runs/i8/evidence/ecommerce.status.json
-
-[PASS] cargo run -p spec-cli -- export examples/ecommerce/units
-  -> schema_version: 4 full projection
-  -> BENCH-ECOM roster, molecule proofs, readability files visible
-  -> archive: .runs/i8/evidence/ecommerce.export.json
-
-[PASS] cargo run -p spec-cli -- status examples/service/units --format json
-  -> BENCH-SERVICE positive wall
-  -> benchmark_status: passing
-  -> gate_status: satisfied
-  -> readability_review_status: current
-  -> archive: .runs/i8/evidence/service.status.json
-
-[PASS] cargo run -p spec-cli -- export examples/service/units
-  -> schema_version: 4 full projection
-  -> BENCH-SERVICE roster, molecule proofs, readability files visible
-  -> archive: .runs/i8/evidence/service.export.json
-
-[EXPECTED EXIT 1] cargo run -p spec-cli -- status . --format json
-  -> scope_authority: inventory_only
-  -> BENCH-CROSSLIB visible as companion_negative_proof
-  -> positive_credit_cases: 0 for BENCH-CROSSLIB
-  -> BENCH-ECOM and BENCH-SERVICE still passing in broad projection
-  -> archive: .runs/i8/evidence/workspace.status.json
-
-COVERAGE: 5/5 commands
-CLAIM PATHS: 5/5 covered
-GAPS: 0 command-surface gaps
+spec-core/src/semantic_review.rs
+  ├── projects compatibility_key
+  ├── projects support_status
+  └── projects descriptor_id
+              │
+              v
+spec-core/src/category_truth.rs
+  ├── CategoryTruthRegistry
+  └── qualify_category_claim(...)
+              │
+      ┌───────┼─────────────────────────────┐
+      │       │                             │
+      v       v                             v
+benchmark.rs  commands.rs(status JSON)      export.rs(projected_units)
+      │       │                             │
+      └──────────────> snapshot/readability surfaces
 ```
 
-Interpretation guard:
+### Shared contract additions
 
-- a green I8 does not mean repo-root `status .` exits `0`
-- a green I8 does mean the two positive walls pass, the broad inventory surface
-  still tells the truth, and the checked-in docs match that reality
+Add `spec-core/src/category_truth.rs` and export it from `spec-core/src/lib.rs`.
 
-## Acceptance Checklist
+This module owns:
 
-I8 closes only when all of these are true at the same time:
+- `CategoryTruthRegistry`
+- `CategoryTruthRow`
+- `CategoryKind`
+- `ContractSupportStatus`
+- `AliasSiblingPolicy`
+- `DescriptorSet`
+- `PositiveCreditPolicy`
+- `ConsumerKind`
+- `CategoryQualification`
+- `ClaimStatus`
+- `PositiveCreditEligibility`
+- `QualificationReasonCode`
+- `qualify_category_claim(...)`
 
-- the plain-English Rust V1 claim in this file still matches:
-  - `.runs/i7/decision-freeze.json`
-  - `.runs/i7/i8-handoff.json`
-  - `DECISIONS.md`
-  - `docs/rust_v1_contract_stack.md`
-- `BENCH-ECOM` remains `passing` with `gate_status: satisfied`
-- `BENCH-SERVICE` remains `passing` with `gate_status: satisfied`
-- both positive benchmark exports still emit `schema_version: 4`
-- `BENCH-CROSSLIB` remains visible in repo-root inventory and still counts as
-  zero positive supported credit
-- repo-root `status . --format json` still reports `scope_authority:
-  inventory_only`
-- no new proof commands were added to make the claim work
-- no deferred `V1.1` surface was silently promoted
-- no checked-in doc implies a new post-I8 discovery milestone
-- `.runs/i8/closeout.json` records the exact final verdict and raw command refs
+The implementation should stay explicit. Do not introduce a second layer of
+builder types or indirection unless the code proves it is necessary.
+
+### Exact semantic-review change
+
+`SemanticReview` gains one additive field:
+
+```rust
+pub struct SemanticReview {
+    ...
+    pub descriptor_id: Option<String>,
+}
+```
+
+Rules:
+
+- only producer-owned semantic-review logic may populate `descriptor_id`
+- no benchmark, status, export, or snapshot path may synthesize or rewrite it
+- canonical ecommerce seam descriptors project:
+  - `discount_strategy.ecommerce.v1`
+  - `pricing_quote.ecommerce.v1`
+- current service seam siblings project their own service descriptor ids and
+  remain unqualified for supported rows
+- legacy stored semantic reviews without `descriptor_id` stay readable but must
+  fail supported qualification explicitly with `descriptor_id_missing`
+
+### Exact first-scope registry rows
+
+| Category | Kind | Contract support | Alias policy | Canonical descriptor | Approved siblings | Positive credit |
+| --- | --- | --- | --- | --- | --- | --- |
+| `sum.discount_strategy.v1` | `sum` | `supported` | `canonical_only` | `discount_strategy.ecommerce.v1` | none | eligible |
+| `data.pricing_quote.v1` | `data` | `supported` | `canonical_only` | `pricing_quote.ecommerce.v1` | none | eligible |
+| `unsupported.sum.v1` | `sum` | `unsupported` | `unsupported_terminal` | none | none | ineligible |
+| `unsupported.data.v1` | `data` | `unsupported` | `unsupported_terminal` | none | none | ineligible |
+
+### Qualification API contract
+
+Implement one shared function with this exact responsibility split:
+
+```rust
+pub fn qualify_category_claim(
+    consumer: ConsumerKind,
+    semantic_review: Option<&SemanticReview>,
+) -> CategoryQualification
+```
+
+The first landing should keep the function contract small. Do **not** add a
+separate consumer-context struct unless a real requirement appears during
+implementation.
+
+The function decides only category truth:
+
+- registry row lookup from `semantic_review.compatibility_key`
+- effective support-status match
+- descriptor approval for supported rows only
+- unsupported terminal qualification for unsupported rows
+- positive-credit eligibility
+
+It does **not** decide benchmark lifecycle, full-vs-partial path scope, or gate
+status. Those remain benchmark-local rules.
+
+### Stable qualification output
+
+Every consumer must reuse this shape:
+
+```rust
+pub struct CategoryQualification {
+    pub category_id: Option<String>,
+    pub descriptor_id: Option<String>,
+    pub claim_status: ClaimStatus,
+    pub positive_credit_eligibility: PositiveCreditEligibility,
+    pub reason_code: QualificationReasonCode,
+}
+```
+
+Required first-landing enums:
+
+- `ClaimStatus`
+  - `supported_qualified`
+  - `unsupported_qualified`
+  - `unqualified`
+- `PositiveCreditEligibility`
+  - `eligible`
+  - `ineligible`
+- `QualificationReasonCode`
+  - `qualified`
+  - `semantic_review_missing`
+  - `registry_row_missing`
+  - `descriptor_id_missing`
+  - `descriptor_not_approved`
+  - `support_status_mismatch`
+  - `positive_credit_disallowed`
+
+Rules that remove ambiguity:
+
+- supported rows require descriptor approval plus `effective_support_status() ==
+  Supported`
+- unsupported terminal rows require `effective_support_status() ==
+  Unsupported`; they do **not** require descriptor approval
+- `positive_credit_disallowed` is valid only for a claim that otherwise
+  resolves, but is ineligible for positive credit
+- `semantic_support_status` may remain visible as a compatibility/debug field,
+  but `category_qualification` is the only authoritative claim surface after
+  this wedge
+
+## Consumer Behavior Contract
+
+### Benchmark accounting
+
+`spec-core/src/benchmark.rs` is the first adoption point.
+
+Required behavior after the change:
+
+- `BenchmarkCaseTruth` stops carrying only
+  `semantic_support_status: Option<SemanticSupportStatus>`
+- replace that with `semantic_review: Option<SemanticReview>` so benchmark
+  projection receives the exact producer-owned input it needs instead of a new
+  bespoke mini-struct
+- `BenchmarkCaseProjection` gains `category_qualification`
+- `counts_as_supported_positive` requires all of:
+  - positive benchmark
+  - active lifecycle
+  - full path scope
+  - valid benchmark accounting
+  - `classification == supported`
+  - `status == valid`
+  - `category_qualification.claim_status == supported_qualified`
+  - `category_qualification.positive_credit_eligibility == eligible`
+- a supported-labeled case that fails qualification stays visible, but it makes
+  the full benchmark accounting invalid
+- partial benchmark scope becomes `partial_invalid` on the same mismatch, but
+  still does not invent full `benchmark_status` or `gate_status`
+- `readability_review_status` remains whatever the readability artifact already
+  says; qualification failure must not rewrite it
+
+This is the most important product decision in the plan:
+
+- `BENCH-SERVICE` full projection must stop saying `passing`
+- it must become:
+  - `accounting_status = invalid`
+  - `benchmark_status = invalid`
+  - `gate_status = open`
+  - unchanged readability freshness status
+
+### `spec status --format json`
+
+`spec-cli/src/commands.rs` must add `category_qualification` to each
+`JsonStatusEntry`.
+
+Rules:
+
+- keep current health semantics unchanged
+- keep current `semantic_review` projection unchanged except for additive
+  `descriptor_id`
+- add `category_qualification` beside `semantic_review`
+- never infer supported category truth from health or semantic-review presence
+  alone
+
+Schema change:
+
+- bump `STATUS_JSON_SCHEMA_VERSION` from `4` to `5`
+
+### `spec export`
+
+`spec-core/src/export.rs` must expose additive projected truth without writing
+`category_qualification` into on-disk passports.
+
+Exact plan:
+
+- keep exported `passports` as projected passport truth
+- add a new additive `projected_units` array to `ExportBundle`
+- define a dedicated read-side struct for it, for example:
+
+```rust
+pub struct ProjectedExportUnit {
+    pub id: String,
+    pub semantic_review: Option<SemanticReview>,
+    pub category_qualification: Option<CategoryQualification>,
+}
+```
+
+- each row must include:
+  - `id`
+  - `semantic_review`
+  - `category_qualification`
+
+That keeps export machine-readable, keeps qualification read-side only, and
+avoids mutating `.spec.passport.json` persistence semantics.
+
+Schema change:
+
+- bump `EXPORT_SCHEMA_VERSION` from `4` to `5`
+
+### Snapshot and readability parity
+
+Benchmark snapshot output already reuses benchmark projection. This wedge must
+keep that true.
+
+Rules:
+
+- benchmark snapshot output must serialize per-case `category_qualification`
+- full-scope invalid service seam claims must yield invalid full snapshots too
+- readability review freshness and verdict stay additive and unchanged by
+  qualification failure
+
+### Shared read-side plumbing rule
+
+`spec-cli/src/commands.rs` currently constructs benchmark root-case truth in
+multiple places. This wedge must collapse that duplication instead of letting
+benchmark and snapshot paths drift again.
+
+Implementation rule:
+
+- add one shared helper in `spec-cli/src/commands.rs` that derives read-side
+  unit truth from `project_passport_truth_with_context(...)`
+- status, benchmark, and snapshot paths should all consume that shared helper
+- do not hand-edit three independent call paths with slightly different
+  semantic-review extraction logic
+
+## File Blast Radius
+
+### New code
+
+- `spec-core/src/category_truth.rs`
+
+### Existing code that must change
+
+- `spec-core/src/lib.rs`
+- `spec-core/src/semantic_review.rs`
+- `spec-core/src/benchmark.rs`
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+- `spec-cli/src/commands.rs`
+
+### Tests and fixtures that must change
+
+- `spec-cli/tests/rust_v1_service.rs`
+- `spec-cli/tests/rust_v1_closure.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/fixtures/benchmarks/*.json`
+- `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
+- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`
+- `benchmarks/reviews/BENCH-ECOM.readability.review.json`
+- `benchmarks/reviews/BENCH-SERVICE.readability.review.json`
+
+## Implementation Phases
+
+### Phase 0: Preflight and current-truth lock
+
+Goals:
+
+- capture the current service mismatch behavior before changing it
+- verify which fixtures and tests lock the existing optimistic benchmark status
+
+Do:
+
+- run the current benchmark contract suites
+- note all current full-scope service expectations that will intentionally flip
+  from `passing` to `invalid`
+- capture the exact benchmark/status/export/snapshot fixture files that will
+  need rewrites
+
+Done when:
+
+- the planned expectation flips are explicit before code edits start
+
+### Phase 1: Add category truth substrate
+
+Files:
+
+- `spec-core/src/category_truth.rs`
+- `spec-core/src/lib.rs`
+- `spec-core/src/semantic_review.rs`
+
+Deliverables:
+
+- registry structs and enums
+- hard-coded first four rows
+- `qualify_category_claim(...)`
+- `SemanticReview.descriptor_id`
+- seam descriptor-id projection tests
+- qualification unit tests for:
+  - canonical ecommerce sum qualifies supported
+  - canonical ecommerce data qualifies supported
+  - service sum sibling does not qualify supported
+  - service data sibling does not qualify supported
+  - unsupported rows qualify only as unsupported
+  - missing semantic review fails explicitly
+  - missing descriptor id fails explicitly
+
+### Phase 2: Benchmark-core adoption
+
+Files:
+
+- `spec-core/src/benchmark.rs`
+- benchmark-focused tests in `spec-core` and `spec-cli/tests/rust_v1_service.rs`
+- benchmark JSON fixtures under `spec-cli/tests/fixtures/benchmarks/`
+
+Deliverables:
+
+- `BenchmarkCaseTruth` carries `semantic_review`
+- `BenchmarkCaseProjection` gains `category_qualification`
+- `counts_as_supported_positive` uses qualification
+- benchmark-wide full-scope invalidation on supported-label qualification
+  failure
+- service benchmark contract tests assert `invalid/open`
+- benchmark fixture expectations reflect:
+  - ecommerce remains passing
+  - service flips to invalid
+  - partial mismatch becomes `partial_invalid`
+
+### Phase 3: Export projection adoption
+
+Files:
+
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+
+Deliverables:
+
+- `ExportBundle.projected_units[]`
+- dedicated projected export row type
+- export projection reuses shared qualification
+- export schema bump `4 -> 5`
+- regression coverage that proves qualification stays read-side only and does
+  not persist into `.spec.passport.json`
+
+### Phase 4: CLI status and snapshot integration
+
+Files:
+
+- `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/m14_regressions.rs`
+- `benchmarks/snapshots/*.snapshot.json`
+- `benchmarks/reviews/*.readability.review.json`
+
+Deliverables:
+
+- one shared CLI helper for projected unit truth
+- `JsonStatusEntry.category_qualification`
+- status schema bump `4 -> 5`
+- snapshot command emits the same qualification truth as live benchmark output
+- service snapshot flips to invalid full benchmark status
+- readability freshness remains unchanged by accounting invalidation
+
+### Phase 5: Final verification sweep
+
+Goals:
+
+- prove all current consumers agree
+- prove no consumer-local widening remains
+
+Done when:
+
+- benchmark, status, export, and snapshot surfaces tell the same category truth
+- all targeted suites pass
+- the repo no longer has a full-scope supported benchmark that is invalid at
+  the case level but still claims overall `passing`
+
+## Test Diagram
+
+```text
+CODE PATHS
+[+] spec-core/src/semantic_review.rs
+  ├── canonical ecommerce sum -> supported key + descriptor_id
+  ├── canonical ecommerce data -> supported key + descriptor_id
+  ├── service sum sibling -> unsupported key + service descriptor_id
+  └── service data sibling -> unsupported key + service descriptor_id
+
+[+] spec-core/src/category_truth.rs
+  ├── registry lookup -> supported canonical row
+  ├── registry lookup -> unsupported terminal row
+  ├── supported-row descriptor approval passes
+  ├── supported-row descriptor approval fails
+  ├── unsupported terminal row skips descriptor approval
+  ├── missing semantic review -> unqualified
+  └── missing descriptor_id -> unqualified
+
+[+] spec-core/src/benchmark.rs
+  ├── supported + qualified -> positive credit
+  ├── supported label + unsupported qualification -> no credit
+  ├── full benchmark with disqualified supported case -> accounting invalid
+  └── partial benchmark with disqualified supported case -> partial_invalid
+
+[+] spec-cli/src/commands.rs / spec-core/src/export.rs
+  ├── status emits semantic_review + category_qualification
+  ├── export emits projected_units + category_qualification
+  └── snapshot emits same benchmark qualification as live projection
+
+CONSUMER FLOWS
+[+] BENCH-ECOM full benchmark
+  ├── canonical seam cases remain supported_qualified
+  └── benchmark stays passing
+
+[+] BENCH-SERVICE full benchmark
+  ├── service seam cases stay visible
+  ├── supported label remains visible
+  ├── category_qualification fails explicitly
+  └── benchmark flips to invalid/open
+
+[+] spec status / export / snapshot readers
+  └── can distinguish supported_qualified vs unsupported_qualified vs unqualified
+```
+
+## Required Test Coverage
+
+Add or update tests for these exact behaviors:
+
+- semantic-review descriptor-id projection for canonical supported seams
+- semantic-review descriptor-id projection for current service seam siblings
+- qualification lookup for all four first-scope rows
+- unsupported terminal rows qualify without descriptor approval
+- benchmark case projection includes `category_qualification`
+- full `BENCH-SERVICE` flips from `passing` to `invalid`
+- full `BENCH-ECOM` remains `passing`
+- partial benchmark projections use `partial_invalid` without inventing full
+  benchmark fields
+- status JSON schema version bumps and includes `category_qualification`
+- export schema version bumps and includes
+  `projected_units[].category_qualification`
+- benchmark snapshots serialize the same case qualification as live output
+- legacy persisted semantic review without `descriptor_id` fails qualification
+  explicitly
+- `.spec.passport.json` outputs do **not** persist `category_qualification`
+
+## Failure Modes Registry
+
+| Codepath | Production failure | Test coverage required | User-visible effect | Priority |
+| --- | --- | --- | --- | --- |
+| registry lookup | missing row causes implicit support fallback | unit test on unknown key -> `registry_row_missing` | downstream consumer silently lies unless blocked | P1 |
+| descriptor identity | legacy or missing `descriptor_id` gets treated as supported | regression test -> `descriptor_id_missing` | benchmark/status/export over-credit seam support | P1 |
+| unsupported terminal routing | unsupported rows incorrectly require a descriptor and become generic unqualified noise | unit test on `unsupported.sum.v1` and `unsupported.data.v1` | readers cannot distinguish unsupported-qualified truth from missing truth | P1 |
+| benchmark invalidation | disqualified supported case still leaves full benchmark `passing` | service benchmark contract tests | maintainer believes supported closure is green when it is not | P1 |
+| status/export drift | status and export emit different reason codes or claim states | paired fixture assertions in `cli.rs` and `m14_regressions.rs` | downstream tools disagree about the same unit | P1 |
+| readability coupling | qualification failure rewrites readability freshness | snapshot tests | readers lose freshness signal and cannot separate style from truth | P2 |
+| passport persistence leak | category qualification gets written into `.spec.passport.json` | export/passport regression | on-disk proof state becomes polluted with read-side claims | P2 |
+
+Critical gap definition for this wedge:
+
+- any path that can still emit supported positive credit or a supported category
+  claim without `CategoryQualification == supported_qualified`
 
 ## Worktree Parallelization Strategy
-
-I8 has three verification steps but only two should run in parallel. The two
-positive walls are independent and cheap to split. The repo-root inventory run
-is broader, heavier, and easier to misread before the positive walls are
-confirmed, so keep it as a parent-owned follow-up step.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| preflight freeze | `.runs/i8/` | — |
-| BENCH-ECOM proof rerun | `examples/ecommerce/`, `benchmarks/`, `.runs/i8/evidence/` | preflight freeze |
-| BENCH-SERVICE proof rerun | `examples/service/`, `benchmarks/`, `.runs/i8/evidence/` | preflight freeze |
-| broad inventory confirmation | repo root inventory surfaces, `examples/crosslib-app/`, `semantic-families/`, `benchmarks/`, `.runs/i8/evidence/` | BENCH-ECOM proof rerun, BENCH-SERVICE proof rerun |
-| authority drift ratification | `PLAN.md`, `ORCH_PLAN.md`, `docs/`, `README.md`, `DECISIONS.md`, `CHANGELOG.md`, `TODOS.md` | broad inventory confirmation |
-| conditional blocker repair | only the exact modules implicated by a failing command | whichever verification step found the blocker |
-| final closeout | `.runs/i8/`, release-note surfaces if changed | authority drift ratification, conditional blocker repair if needed |
+| A. Category substrate | `spec-core/src/category_truth.rs`, `spec-core/src/lib.rs`, `spec-core/src/semantic_review.rs` | — |
+| B. Benchmark core adoption | `spec-core/src/benchmark.rs`, benchmark-focused tests, benchmark fixtures | A |
+| C. Export projection adoption | `spec-core/src/export.rs`, `spec-core/src/passport.rs`, export-focused tests | A |
+| D. CLI status and snapshot integration | `spec-cli/src/commands.rs`, `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs`, snapshots/reviews | B, C |
 
 ### Parallel lanes
 
-- `Lane A`: BENCH-ECOM proof rerun
-  - sequential within lane
-  - owns only `.runs/i8/evidence/ecommerce.*`
-- `Lane B`: BENCH-SERVICE proof rerun
-  - sequential within lane
-  - owns only `.runs/i8/evidence/service.*`
-- `Lane C`: broad inventory confirmation
-  - parent-owned
-  - must wait for Lane A and Lane B
-  - owns only `.runs/i8/evidence/workspace.status.json`
-- `Lane D`: authority drift ratification
-  - parent-owned
-  - must wait for Lane C
-  - owns checked-in authority docs only
-- `Lane E`: conditional blocker repair
-  - exists only if a real truth blocker is found
-  - must stay bounded to the direct failing surface
+- Lane A: Step A
+- Lane B: Step B after A lands
+- Lane C: Step C after A lands
+- Lane D: Step D after B and C land
 
 ### Execution order
 
-1. Parent creates `.runs/i8/` and freezes inputs.
-2. Launch `Lane A` and `Lane B` in parallel worktrees.
-3. Parent compares the two positive proof outputs against the frozen claim.
-4. Parent runs `Lane C` in the main checkout.
-5. Parent launches `Lane D` only after the inventory interpretation is settled.
-6. Parent launches `Lane E` only if a real blocker must be repaired.
-7. Parent writes the final I8 closeout packet.
+1. Launch Lane A first. It owns the substrate and must land before anything
+   else can qualify claims.
+2. After A merges, launch Lanes B and C in parallel worktrees.
+3. Merge B and C.
+4. Run Lane D last to integrate shared `commands.rs` changes, refresh snapshots,
+   and freeze final fixtures.
 
 ### Conflict flags
 
-- `Lane A` and `Lane B` must not write the same evidence files.
-- `Lane A` and `Lane B` may still contend on Cargo package or build locks if
-  they share the same local cache. That is acceptable, but it means parallel
-  worktrees improve operator separation more than raw wall-clock time.
-- `Lane C` must not start before both positive walls are understood. Otherwise
-  repo-root inventory can be misread in the absence of benchmark context.
-- `Lane D` must not ratify docs before the workspace inventory semantics are
-  confirmed.
-- `Lane E` must not turn a narrow truth repair into a mechanics rewrite. If a
-  proposed fix touches benchmark schema, proof writers, or support boundaries,
-  stop and escalate.
+- Lanes B and D both affect benchmark-facing projection behavior, but only D
+  should touch the final shared CLI truth helper
+- Lanes C and D both affect read-side contract surfaces
+- Do **not** run B and D in parallel
+- Do **not** run C and D in parallel
+- Keep `commands.rs` ownership in Lane D to minimize merge conflict risk
 
-## Failure Modes
-
-| Failure mode | Consequence | Guard in this plan |
-| --- | --- | --- |
-| repo-root `status .` exit `1` is misread as I8 failure | a truthful broad inventory surface blocks the release for the wrong reason | require `scope_authority: inventory_only` and benchmark interpretation, not exit-code-only reasoning |
-| `BENCH-CROSSLIB` starts counting as positive credit | the V1 claim widens by read-surface drift | require zero positive credit and preserve companion-negative classification |
-| positive `status` passes but `export` drifts | downstream machine consumers see a different truth than human readers | require both `status` and `export` for each positive benchmark |
-| readability anchors go stale while benchmark status stays green | the plan overstates the reviewability of emitted Rust | require `readability_review_status: current` for both positive walls |
-| docs still imply I7 is current or imply I9 exists | milestone ownership becomes ambiguous again | compare every repo-facing authority surface after live reruns, not before |
-| a blocker fix adds new proof commands or support rows | I8 quietly becomes another scope milestone | hard-stop any repair that changes the five-command wall or deferred boundaries |
-| broad inventory roots are trimmed to force green | the repo loses honest visibility into deferred and fixture surfaces | preserve repo-root inventory behavior exactly |
-
-Critical gap test:
-
-- if either positive benchmark loses `passing` or `satisfied`, I8 is not done
-- if any authority doc still needs caveats not present in the frozen claim, I8
-  is not done
-- if the only way to "pass" is to reinterpret `inventory_only` as proof, I8 is
-  not done
-
-## Performance And Operational Review
-
-I8 should not introduce any new runtime or infrastructure cost. The only
-meaningful operational concerns are:
-
-- repo-root `status` is a heavier scan than benchmark-root commands, so do not
-  treat it as a cheap loop
-- raw command outputs must be captured once per closeout run so later doc review
-  does not depend on rerunning the wall from memory
-- parallelization is helpful only for the two positive walls; forcing more
-  concurrency buys little and increases interpretation risk
-- concurrent Cargo invocations may wait on package or build locks; that is not
-  a blocker, but it means the parent should prefer clarity of ownership over
-  chasing marginal runtime wins
-- no new caching, queueing, proof-writer parallelism, or benchmark-registry
-  work is justified here
-
-Boring-by-default rule:
-
-- if the wall passes, ship the closeout with evidence
-- if the wall fails, repair the narrow blocker only
+If worktree staffing is unavailable, run the same order sequentially.
 
 ## Implementation Tasks
 
-- [ ] **T1 (P1, human: ~15m / CC: ~5m)** — preflight freeze — create `.runs/i8/`
-  and record the frozen inputs, branch, commit, plain-English claim, exact
-  five-command wall, and bounded artifact map.
-  - Verify: `.runs/i8/preflight.json` names the same authority inputs and evidence paths listed in this plan.
-- [ ] **T2 (P1, human: ~15m / CC: ~5m)** — BENCH-ECOM proof rerun — rerun the
-  ecommerce `status` and `export` commands and archive raw outputs to
-  `.runs/i8/evidence/ecommerce.*`.
-  - Verify: `BENCH-ECOM` stays `passing/satisfied/current` and the export remains `schema_version: 4`.
-- [ ] **T3 (P1, human: ~15m / CC: ~5m)** — BENCH-SERVICE proof rerun — rerun the
-  service `status` and `export` commands and archive raw outputs to
-  `.runs/i8/evidence/service.*`.
-  - Verify: `BENCH-SERVICE` stays `passing/satisfied/current` and the export remains `schema_version: 4`.
-- [ ] **T4 (P1, human: ~10m / CC: ~5m)** — broad inventory confirmation — rerun
-  repo-root `status . --format json`, archive it, and confirm the expected
-  `inventory_only` interpretation plus companion-negative visibility.
-  - Verify: `BENCH-CROSSLIB` remains visible with zero positive credit and repo-root `status` remains non-green by design.
-- [ ] **T5 (P1, human: ~30m / CC: ~10m)** — authority drift ratification —
-  compare the live outputs against `PLAN.md`, `ORCH_PLAN.md`,
-  `docs/rust_v1_contract_stack.md`, `README.md`, `DECISIONS.md`, `CHANGELOG.md`,
-  and `TODOS.md`, then patch only real drift.
-  - Verify: every checked-in authority surface teaches the same I8 story with no implied `I9`.
-- [ ] **T6 (P1, human: ~20m / CC: ~10m)** — final closeout packet — write
-  `.runs/i8/closeout.json` with the final claim, deferred surfaces, command
-  verdicts, doc-drift summary, and references to raw evidence files.
-  - Verify: a future maintainer can reconstruct the exact I8 decision from `.runs/i8/` without relying on conversation context.
-- [ ] **T7 (P1, human: ~variable / CC: ~variable)** — conditional blocker repair
-  — if any proof command or authority surface contradicts the frozen claim, fix
-  the direct blocker only and rerun the affected command plus the final
-  five-command wall.
-  - Verify: no repair widens support, changes benchmark roles, or adds new proof commands.
+Synthesized from the architecture, test, and failure-mode requirements above.
 
-## NOT in scope
+- [ ] **T1 (P1, human: ~2h / CC: ~15min)** — category substrate — add
+  `spec-core/src/category_truth.rs` with the first-scope registry rows,
+  qualification enums, and `qualify_category_claim(...)`
+  - Files: `spec-core/src/category_truth.rs`, `spec-core/src/lib.rs`
+  - Verify: `cargo test -p spec-core category_truth`
+- [ ] **T2 (P1, human: ~1.5h / CC: ~10min)** — semantic-review producer truth —
+  extend seam semantic-review projection with producer-owned `descriptor_id`
+  and lock it with unit tests
+  - Files: `spec-core/src/semantic_review.rs`
+  - Verify: `cargo test -p spec-core semantic_review`
+- [ ] **T3 (P1, human: ~2h / CC: ~15min)** — benchmark qualification —
+  thread `semantic_review` into benchmark case truth, add
+  `category_qualification`, and make positive credit plus full benchmark
+  validity depend on qualification
+  - Files: `spec-core/src/benchmark.rs`
+  - Verify: `cargo test -p spec-core benchmark`
+- [ ] **T4 (P1, human: ~1h / CC: ~10min)** — benchmark contract refresh —
+  update `BENCH-SERVICE` tests and fixtures to assert
+  `accounting_status = invalid`, `benchmark_status = invalid`,
+  `gate_status = open`
+  - Files: `spec-cli/tests/rust_v1_service.rs`,
+    `spec-cli/tests/rust_v1_closure.rs`,
+    `spec-cli/tests/fixtures/benchmarks/*.json`
+  - Verify: `cargo test -p spec-cli rust_v1_service rust_v1_closure`
+- [ ] **T5 (P1, human: ~1.5h / CC: ~10min)** — export contract —
+  add `projected_units[]`, surface shared qualification there, and bump export
+  schema version to `5`
+  - Files: `spec-core/src/export.rs`, `spec-core/src/passport.rs`
+  - Verify: `cargo test -p spec-core export`
+- [ ] **T6 (P1, human: ~2h / CC: ~15min)** — CLI read-side integration —
+  add one shared projected-truth helper, surface `category_qualification` in
+  status JSON, and keep snapshots aligned with live benchmark output
+  - Files: `spec-cli/src/commands.rs`, `spec-cli/tests/cli.rs`,
+    `spec-cli/tests/m14_regressions.rs`
+  - Verify: `cargo test -p spec-cli cli m14_regressions`
+- [ ] **T7 (P2, human: ~45min / CC: ~5min)** — snapshot and readability freeze —
+  refresh benchmark snapshots and readability fixtures so live and frozen
+  projections stay in sync without rewriting readability freshness semantics
+  - Files: `benchmarks/snapshots/*.snapshot.json`,
+    `benchmarks/reviews/*.readability.review.json`
+  - Verify: `cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM` and
+    `cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE`
 
-- bounded generics admission
-  - rationale: I7 already deferred this to `V1.1`
-- async or IO admission
-  - rationale: I7 already froze Rust V1 as synchronous-only
-- benchmark schema redesign
-  - rationale: M67 and M68 already own benchmark roles and mechanics
-- new benchmark roots or new benchmark kinds
-  - rationale: the I8 claim closes over the existing three-benchmark roster
-- repo-root `export .` support
-  - rationale: this workspace shape still truthfully rejects aggregate export
-- turning repo-root `status .` into a globally green ship gate
-  - rationale: broad inventory is intentionally wider than the positive proof wall
-- reopening I3.5 command-wall semantics
-  - rationale: I8 consumes that wall as frozen authority
-- inventing a checked-in `I9`
-  - rationale: the active ladder ends at I8 until a new bounded post-V1 milestone exists
+## Acceptance Criteria
 
-## Immediate Next Move
+This plan is complete only when all of the following are true:
 
-Execute I8 in this order:
+1. the repo has one authoritative category truth registry in `spec-core`
+2. every current seam-category consumer calls the same qualification function
+3. positive benchmark credit is impossible without
+   `supported_qualified + eligible`
+4. a supported-labeled but producer-unqualified full benchmark becomes
+   `invalid`, not `passing`
+5. `spec status` and `spec export` both expose additive
+   `category_qualification`
+6. export keeps category qualification read-side only and does not persist it
+   into `.spec.passport.json`
+7. snapshot output matches live benchmark qualification output
+8. the current `BENCH-SERVICE` mismatch is explicit contract truth, not repo
+   folklore
 
-1. create `.runs/i8/` and freeze the exact input set
-2. rerun and archive the BENCH-ECOM proof wall
-3. rerun and archive the BENCH-SERVICE proof wall
-4. rerun and archive repo-root inventory status
-5. compare live outputs against the frozen claim and repo-facing docs
-6. patch only real drift
-7. write the final closeout packet
+## Verification Commands
 
-Do not start by changing code. Start by proving whether the already-ratified
-claim still holds on the live branch.
+Run at minimum:
+
+```bash
+cargo test -p spec-core
+cargo test -p spec-cli rust_v1_service
+cargo test -p spec-cli rust_v1_closure
+cargo test -p spec-cli m14_regressions
+cargo test -p spec-cli cli
+
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- export examples/service/units
+cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
+cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
+```
+
+Expected end state:
+
+- ecommerce full benchmark remains passing
+- service full benchmark becomes invalid/open
+- status and export both expose the same category qualification for seam rows
+- snapshots match live benchmark projections
+- `.spec.passport.json` files remain free of persisted `category_qualification`
+
+## Deferred Follow-On Work
+
+After this wedge lands, separate follow-on work may decide whether to:
+
+- widen producer routing so current service seam descriptors become supported
+- tighten `BENCH-SERVICE` labels so they stop asking for supported claims the
+  producer does not grant
+- externalize the registry for non-Rust consumers
+- expand category truth beyond the first four seam rows
+
+Those are real follow-ons. They are explicitly **not** prerequisites for this
+plan.
