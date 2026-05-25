@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "roots": [
     {
       "root": ".",
@@ -320,6 +320,7 @@
           "semantic_review": {
             "verdict": "backend_only_meaning_preserved",
             "compatibility_key": "sum.discount_strategy.v1",
+            "descriptor_id": "discount_strategy.ecommerce.v1",
             "reason_codes": [
               "backend_only_execution_marker",
               "proof_helper_only_marker"
@@ -354,6 +355,13 @@
               }
             ],
             "evaluator_scope": "supported_sum_surface"
+          },
+          "category_qualification": {
+            "category_id": "sum.discount_strategy.v1",
+            "descriptor_id": "discount_strategy.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
           }
         },
         {
@@ -396,6 +404,7 @@
           "semantic_review": {
             "verdict": "backend_only_meaning_preserved",
             "compatibility_key": "data.pricing_quote.v1",
+            "descriptor_id": "pricing_quote.ecommerce.v1",
             "reason_codes": [
               "backend_only_execution_marker"
             ],
@@ -437,6 +446,13 @@
               }
             ],
             "evaluator_scope": "supported_data_surface"
+          },
+          "category_qualification": {
+            "category_id": "data.pricing_quote.v1",
+            "descriptor_id": "pricing_quote.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
           }
         }
       ],
@@ -779,6 +795,7 @@
       "semantic_review": {
         "verdict": "backend_only_meaning_preserved",
         "compatibility_key": "sum.discount_strategy.v1",
+        "descriptor_id": "discount_strategy.ecommerce.v1",
         "reason_codes": [
           "backend_only_execution_marker",
           "proof_helper_only_marker"
@@ -813,6 +830,13 @@
           }
         ],
         "evaluator_scope": "supported_sum_surface"
+      },
+      "category_qualification": {
+        "category_id": "sum.discount_strategy.v1",
+        "descriptor_id": "discount_strategy.ecommerce.v1",
+        "claim_status": "supported_qualified",
+        "positive_credit_eligibility": "eligible",
+        "reason_code": "qualified"
       }
     },
     {
@@ -855,6 +879,7 @@
       "semantic_review": {
         "verdict": "backend_only_meaning_preserved",
         "compatibility_key": "data.pricing_quote.v1",
+        "descriptor_id": "pricing_quote.ecommerce.v1",
         "reason_codes": [
           "backend_only_execution_marker"
         ],
@@ -896,6 +921,13 @@
           }
         ],
         "evaluator_scope": "supported_data_surface"
+      },
+      "category_qualification": {
+        "category_id": "data.pricing_quote.v1",
+        "descriptor_id": "pricing_quote.ecommerce.v1",
+        "claim_status": "supported_qualified",
+        "positive_credit_eligibility": "eligible",
+        "reason_code": "qualified"
       }
     }
   ],
@@ -909,7 +941,7 @@
       "accounting_status": "valid",
       "benchmark_status": "passing",
       "gate_status": "satisfied",
-      "readability_review_status": "current",
+      "readability_review_status": "stale",
       "readability_verdict": {
         "decision": "approved",
         "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
@@ -1038,6 +1070,13 @@
           "classification": "supported",
           "status": "valid",
           "semantic_support_status": "supported",
+          "category_qualification": {
+            "category_id": "sum.discount_strategy.v1",
+            "descriptor_id": "discount_strategy.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
+          },
           "proof_refs": {
             "passport": "examples/ecommerce/units/pricing/discount_strategy.spec.passport.json",
             "covering_molecule_evidence": [
@@ -1053,6 +1092,13 @@
           "classification": "supported",
           "status": "valid",
           "semantic_support_status": "supported",
+          "category_qualification": {
+            "category_id": "data.pricing_quote.v1",
+            "descriptor_id": "pricing_quote.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
+          },
           "proof_refs": {
             "passport": "examples/ecommerce/units/pricing/pricing_quote.spec.passport.json",
             "covering_molecule_evidence": [

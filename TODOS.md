@@ -1,5 +1,9 @@
 ## TODOs for M1 (Release 0.1)
 
+## M101 backlog
+
+- [ ] **Land the category truth contract implementation wedge** — The design anchor is [`docs/category_truth_contract_v0.1.md`](./docs/category_truth_contract_v0.1.md). The failure class is broader than one benchmark bug: read-side consumers must not infer supported category status or positive benchmark credit from partial truth. First adoption scope should cover `sum.discount_strategy.v1`, `data.pricing_quote.v1`, `unsupported.sum.v1`, and `unsupported.data.v1`, with benchmark accounting, `spec status`, `spec export`, and readability/snapshot surfaces consuming the same explicit contract.
+
 ### Required for Release
 - [x] **Set up GitHub Actions for automated builds and releases** — Completed v0.2.0 (2026-04-02)
   - Build matrix: linux/darwin x amd64/arm64 using `cross` crate
@@ -211,3 +215,9 @@
 - [x] **M68: Rust V1 benchmark mechanics landing** — Completed main (2026-05-18). The repo now ships `benchmarks/labels.json`, a shared benchmark projection core, additive schema-version-4 `benchmarks[]` in `spec status` / `spec export`, `spec benchmark snapshot <id>`, seeded readability review anchoring for `BENCH-ECOM`, reserved `BENCH-SERVICE` visibility, committed snapshot artifacts, and repo-facing CLI fixtures/docs for the full-versus-partial benchmark contract.
 
 - [x] **M69: supported-core closure after mechanics-only landing** — Completed main (2026-05-21). `BENCH-SERVICE` is now an active single-library benchmark rooted at `examples/service/units`, ships the frozen six-unit / three-molecule roster with fresh proof, keeps benchmark accounting read-only over specs/passports/evidence, and still does not widen the Rust V1 support vocabulary beyond the existing supported-core closure.
+
+## Post-I7 scope closure
+
+- [x] **I7: Rust V1 scope-decision closure** — Completed main (2026-05-22). The repo now freezes one explicit pre-I8 story: bounded generics defer to `V1.1`, Rust V1 stays synchronous-only so async/IO also defer to `V1.1`, `BENCH-CROSSLIB` remains the companion negative-proof wall, and the final I8 wall stays the existing five-command proof run.
+
+- [x] **I8: Rust V1 final proof run** — Completed main (2026-05-23). The frozen five-command wall still holds on the live branch: `BENCH-ECOM` and `BENCH-SERVICE` both reran as passing positive proof walls with current readability state, repo-root `status . --format json` remained the expected `inventory_only` non-green inventory surface with exit code `1`, and the bounded Rust V1 claim stayed narrow without widening scope.

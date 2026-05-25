@@ -1,26 +1,26 @@
 {
-  "generated_at": "2026-05-21T17:12:56Z",
+  "generated_at": "2026-05-25T19:41:28Z",
   "projection": {
     "benchmark_id": "BENCH-SERVICE",
     "kind": "positive",
     "lifecycle": "active",
     "required_for_v1": true,
     "path_scope": "full",
-    "accounting_status": "valid",
-    "benchmark_status": "passing",
-    "gate_status": "satisfied",
-    "readability_review_status": "current",
+    "accounting_status": "invalid",
+    "benchmark_status": "invalid",
+    "gate_status": "open",
+    "readability_review_status": "stale",
     "readability_verdict": {
       "decision": "approved",
       "summary": "Generated service benchmark surfaces remain readable and structurally traceable for the activated service closure."
     },
     "label_digest": "sha256:69eb48437324c944450825de3db57784b0b9e80496d0f9005ac7b595f066e9cc",
-    "projection_digest": "sha256:23b445f912ce8bc23a2430495cf57a8b8f866fe1be56ff2976667e26e742edda",
+    "projection_digest": "sha256:c3b32ffaa471d0d08e32b8e821f527f84b78ec6b4627e5f4011bb07551095705",
     "summary": {
       "total_cases": 6,
       "supported_cases": 6,
       "supported_valid_cases": 6,
-      "positive_credit_cases": 6,
+      "positive_credit_cases": 0,
       "case_status_counts": {
         "invalid": 0,
         "failing": 0,
@@ -70,7 +70,7 @@
             "examples/service/units/billing/checkout_success_flow.test.evidence.json"
           ]
         },
-        "counts_as_supported_positive": true
+        "counts_as_supported_positive": false
       },
       {
         "case_id": "billing/apply_regional_fee",
@@ -86,7 +86,7 @@
             "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
           ]
         },
-        "counts_as_supported_positive": true
+        "counts_as_supported_positive": false
       },
       {
         "case_id": "billing/checkout_net_total",
@@ -101,7 +101,7 @@
             "examples/service/units/billing/checkout_success_flow.test.evidence.json"
           ]
         },
-        "counts_as_supported_positive": true
+        "counts_as_supported_positive": false
       },
       {
         "case_id": "billing/checkout_net_total_guarded_fee",
@@ -116,7 +116,7 @@
             "examples/service/units/billing/checkout_declined_discount_flow.test.evidence.json"
           ]
         },
-        "counts_as_supported_positive": true
+        "counts_as_supported_positive": false
       },
       {
         "case_id": "billing/discount_strategy",
@@ -131,7 +131,7 @@
             "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
           ]
         },
-        "counts_as_supported_positive": true
+        "counts_as_supported_positive": false
       },
       {
         "case_id": "billing/pricing_quote",
@@ -147,7 +147,7 @@
             "examples/service/units/billing/discount_strategy_quote_flow.test.evidence.json"
           ]
         },
-        "counts_as_supported_positive": true
+        "counts_as_supported_positive": false
       }
     ],
     "readability_generated_files": [

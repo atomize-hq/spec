@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "spec_version": "0.3.0",
   "exported_at": "<normalized>",
   "provenance": {
@@ -365,6 +365,166 @@
         }
       ],
       "source_file": "examples/service/units/billing/pricing_quote.unit.spec"
+    }
+  ],
+  "projected_units": [
+    {
+      "id": "billing/apply_membership_discount",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the subtotal after applying the membership discount rate and clamping at zero."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "2 authored invariant(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_membership_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "billing/apply_regional_fee",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the discounted subtotal after applying the regional fee rate."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_regional_fee with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "billing/checkout_net_total",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the net checkout total after discounting the subtotal and then applying the regional fee."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_net_total with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "billing/checkout_net_total_guarded_fee",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the net checkout total after discounting the subtotal and applying a nonnegative regional fee only."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function checkout_net_total_guarded_fee with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "billing/discount_strategy",
+      "semantic_review": null,
+      "category_qualification": null
+    },
+    {
+      "id": "billing/pricing_quote",
+      "semantic_review": null,
+      "category_qualification": null
     }
   ],
   "molecule_tests": [
@@ -1440,7 +1600,7 @@
       "lifecycle": "active",
       "required_for_v1": true,
       "path_scope": "partial",
-      "accounting_status": "partial_valid",
+      "accounting_status": "partial_invalid",
       "cases": [
         {
           "case_id": "billing/apply_membership_discount",

@@ -1,22 +1,31 @@
 # Rust V1 Contract Stack
 
-This document is the repo-facing index for the Rust V1 contract stack and the
-frozen I3.5 command wall.
+This document is the repo-facing index for the Rust V1 contract stack, the
+frozen I3.5 command wall, and the active post-I6 implementation ladder.
 
-It exists to answer two questions quickly:
+It exists to answer three questions quickly:
 
 - which artifact owns which Rust V1 claim
 - which command surface is proof-authoritative versus diagnostic only
+- where the current I-series wrap to V1 actually stands
 
 ## Current Authority
 
-I3.5 freezes the public contract against these in-repo authority artifacts:
+I3.5 still freezes the public command contract against these in-repo authority
+artifacts:
 
 - `.runs/i3_5_authority_alignment/authority-plan.snapshot.md`
 - `.runs/i3_5_authority_alignment/phase2-freeze.json`
 
-Those files are the maintained repo authority for the current alignment work.
-This index deliberately avoids stale local-user planning paths.
+Those files remain the maintained repo authority for command-wall semantics.
+
+The active post-I6 milestone authority now lives in:
+
+- [`PLAN.md`](../PLAN.md) for the current `I7` milestone definition
+- [`ORCH_PLAN.md`](../ORCH_PLAN.md) for the current `I7` execution runbook
+
+This index deliberately avoids local-user planning paths and records only
+checked-in repo authority.
 
 ## Historical Stack Ownership
 
@@ -54,7 +63,8 @@ Owns:
 - benchmark roster and benchmark roles
 - writer-versus-reader boundaries
 - readability as an observation surface
-- `BENCH-SERVICE` as the required service benchmark that stays within the frozen Rust V1 support boundary
+- `BENCH-SERVICE` as the required service benchmark that stays within the
+  frozen Rust V1 support boundary
 
 ### M68: Mechanics-Landing Implementation Contract
 
@@ -83,7 +93,12 @@ Use this routing rule before editing or extending any artifact in the stack:
 
 The current ladder is:
 
-- `M65-M68 -> I3 -> I3.5 -> I4 -> I6`
+- `M65-M68 -> I3 -> I3.5 -> I4 -> I6 -> I7 -> I8`
+
+There is now checked-in authority for `I7`.
+
+There are currently no checked-in authoritative `I9` docs. The active wrap path
+to Rust V1 is `I7` then `I8`.
 
 ### I3: Benchmark Mechanics Baseline
 
@@ -146,21 +161,81 @@ Primary outcome:
 
 Goal:
 
-- activate `BENCH-SERVICE` as a real single-library proof wall without widening M66 support
+- activate `BENCH-SERVICE` as a real single-library proof wall without widening
+  M66 support
 
 Frozen outcomes:
 
-- `examples/service/units` is the benchmark root for the service activation slice
-- `BENCH-SERVICE` stays frozen to the six authored service units and three required molecule proofs
-- service-root `status` and `export` become proof-authoritative alongside the existing ecommerce wall
-- `BENCH-SERVICE` closeout includes a current readability review and a stable committed snapshot
+- `examples/service/units` is the benchmark root for the service activation
+  slice
+- `BENCH-SERVICE` stays frozen to the six authored service units and three
+  required molecule proofs
+- service-root `status` and `export` become proof-authoritative alongside the
+  existing ecommerce wall
+- `BENCH-SERVICE` closeout includes a current readability review and a stable
+  committed snapshot
 
 Primary outcome:
 
-- the service benchmark is now a shipped, benchmark-root Rust V1 proof surface instead of a reserved placeholder
+- the service benchmark is now a shipped, benchmark-root Rust V1 proof surface
+  instead of a reserved placeholder
+
+### I7: Rust V1 Scope-Decision Closure
+
+Goal:
+
+- resolve the remaining post-I6 scope pressure around bounded generics and
+  async/IO, then ratify the honest Rust V1 line without widening support by
+  accident
+
+Frozen outcomes:
+
+- bounded generics explicitly defer to `V1.1`
+- Rust V1 explicitly stays synchronous-only, so async/IO defer to `V1.1`
+- `BENCH-CROSSLIB` remains the active companion negative-proof wall
+- the post-I6 ladder stops implying a planning vacuum after the service
+  benchmark landed
+- `I8` is defined as the final proof-run milestone instead of an inferred
+  follow-on, and its wall stays the existing five-command proof wall
+
+Primary outcome:
+
+- the repo can answer "what is still in Rust V1?" without guessing or relying
+  on untracked design notes
+
+### I8: Rust V1 Final Proof Run
+
+Goal:
+
+- run the final end-state proof wall against the explicit V1 contract ratified
+  by I7
+
+Frozen outcomes:
+
+- one plain-English Rust V1 claim can be published honestly
+- the positive and companion-negative benchmark walls still match the ratified
+  claim
+- the proof wall remains:
+  - `cargo run -p spec-cli -- status examples/ecommerce/units --format json`
+  - `cargo run -p spec-cli -- export examples/ecommerce/units`
+  - `cargo run -p spec-cli -- status examples/service/units --format json`
+  - `cargo run -p spec-cli -- export examples/service/units`
+  - `cargo run -p spec-cli -- status . --format json`
+- deferred `V1.1` surfaces are named explicitly instead of remaining ambient
+  pressure
+
+Primary outcome:
+
+- Rust V1 reaches a truthful repo-backed done state instead of a merely shipped
+  narrow-core checkpoint
 
 ## Repo Note
 
-If you need the current execution truth, start with the authority snapshot and
-freeze record under `.runs/i3_5_authority_alignment/`, then use this document
-as the index that explains what each milestone owns.
+If you need the command-wall truth, start with the authority snapshot and
+freeze record under `.runs/i3_5_authority_alignment/`.
+
+If you need the active Rust V1 wrap plan, start with [`PLAN.md`](../PLAN.md)
+and [`ORCH_PLAN.md`](../ORCH_PLAN.md).
+
+Use this document as the index that explains what each milestone owns and why
+the current wrap path is `I7 -> I8`, not an inferred `I7 -> I8 -> I9`.

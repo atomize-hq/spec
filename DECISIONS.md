@@ -8,6 +8,31 @@ This file records project-level decisions that should remain stable across the r
 
 The ICP for v0.5 is a solo engineer or a small team of roughly 2-5 people who use AI coding assistants every day, work on systems where correctness matters, and want generated code they can trust because it is governed by explicit spec contracts and machine-readable evidence rather than terminal scraping or guesswork.
 
+---
+
+## 2026-05-22 — Rust V1 Scope Closure (I7)
+
+**Decision**
+
+Rust V1 stays narrow, synchronous, and benchmark-backed for the I8 proof run:
+
+- bounded generics defer to `V1.1`
+- async flows, runtime adapters, and IO-owned boundaries defer to `V1.1`
+- `BENCH-CROSSLIB` stays active as companion negative proof and never earns positive supported credit
+- `I8` uses the existing five-command proof wall without any new slice-specific commands
+
+**Rationale**
+
+- The existing `BENCH-ECOM` and `BENCH-SERVICE` walls already prove one honest narrow-core Rust claim.
+- No bounded-generic or async/IO slice could be named in one paragraph with believable proof commands on top of the frozen I3.5 wall.
+- Explicit deferral is safer than widening the Rust V1 claim by prose drift or by importing runtime/framework expectations as ambient support.
+
+**Revisit when**
+
+- A future milestone can name one bounded generic or async/IO slice, its exact repo surfaces, and the exact added proof commands required to prove it honestly.
+
+---
+
 ## 2026-04-02 — Validation Strategy (0.1.x–0.2.x): JSON Schema
 
 **Decision**
@@ -49,6 +74,7 @@ Until then: JSON Schema + semantic validation in Rust is the implementation path
 - The pipeline commands are optimized for validate → generate → cargo execution in one local flow.
 - The existing `.spec-generated` marker and output cleanup rules already model the output tree as spec-owned.
 - Teams that want committed generated code for diffs or IDE discoverability can continue to use `spec generate` directly and commit that output intentionally.
+- Co-located proof artifacts may still be tracked by examples or fixtures, so no-op `spec generate` runs should avoid timestamp-only passport rewrites when no proof or authored truth changed.
 
 **Revisit when**
 

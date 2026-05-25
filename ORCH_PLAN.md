@@ -1,652 +1,870 @@
-# I6 Orchestration Plan
+# M101 Orchestration Plan
 
-Status: **authoritative execution runbook**  
-Milestone: **I6 Rust V1 service benchmark activation**  
+Status: **authoritative execution runbook for the current `PLAN.md` wedge**  
+Milestone: **M101**  
 Plan authority: **`/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md`**  
-Frozen basis: **current `HEAD` of `codex/i6-service-benchmark-activation` when the run begins**  
+Historical context only: **prior `ORCH_PLAN.md` content is superseded in full**  
 Primary workspace: **`/home/azureuser/__Active_Code/atomize-hq/spec`**  
-Last rewritten: **2026-05-21**
+Parent baseline branch: **`feat/i8-final-proof-run`**  
+Parent baseline head: **`4c41fb36845b30d5527554b6a365f15f6fa58bc5`**  
+Last rewritten: **2026-05-25**
 
 ## Summary
 
-- Execute from `/home/azureuser/__Active_Code/atomize-hq/spec`.
-- Treat `PLAN.md` as the only milestone authority.
-- Treat the existing `ORCH_PLAN.md` as stale I5 context only.
-- Keep the live primary checkout on `codex/i6-service-benchmark-activation` as the parent lane and canonical run-state root.
-- Use dedicated worker worktrees under `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/`.
-- All worker lanes use **GPT-5.4** with **`reasoning_effort=high`**.
-- Cap concurrency at **2 active worker lanes**:
-  - Lane A runs first alone
-  - Lane B and conditional Lane C may overlap only after the Lane A freeze commit exists
-  - Lane D starts only after the post-B/C truth gate passes
-- The parent agent remains the **only integrator**, **only merge authority**, and **only final acceptance authority**.
-- Keep the critical path local to the parent for:
-  - basis freeze
-  - queue freeze
-  - service-freeze record
-  - worker launch
-  - gate decisions
-  - merge order
-  - final proof wall
-  - final fast-forward of the parent branch
+- This runbook executes the current category-truth wedge exactly as defined by
+  `PLAN.md`. It does not re-scope the wedge and it does not widen supported
+  surface area.
+- The parent agent keeps the producer contract and the final CLI integration
+  local. Those are the two drift-prone points.
+- The only safe parallel window is after the contract spine lands:
+  benchmark-core adoption and export projection adoption may run in parallel.
+- `spec-cli/src/commands.rs` is a known merge-conflict hotspot because
+  `PLAN.md` requires one shared helper there. No worker lane may touch it.
+- Final snapshot/readability refresh happens only after the benchmark, export,
+  and CLI projections agree from the same parent baseline.
 
-## Starting Truth
+## Outcome Target
 
-Observed on `codex/i6-service-benchmark-activation` at the then-current `HEAD`:
+This wedge is complete only when the branch can say all of the following
+honestly with fresh local verification:
 
-- `cargo run -p spec-cli -- status . --format json` reports:
-  - `schema_version: 4`
-  - `scope_authority: "inventory_only"`
-  - `BENCH-CROSSLIB` is `active`, `passing`, and `positive_credit_cases: 0`
-  - `BENCH-ECOM` is `active`, `passing`, and `readability_review_status: "current"`
-  - `BENCH-SERVICE` is `reserved`, `accounting_status: "reserved_missing_cases"`, and `summary.total_cases: 0`
-- `benchmarks/labels.json` already declares:
-  - `id: "BENCH-SERVICE"`
-  - `root: "examples/service/units"`
-  - `generated_root: "examples/service/src/generated"`
-  - `readability_scope: "supported_closure"`
-  - `cases: []`
-- `benchmarks/snapshots/BENCH-SERVICE.snapshot.json` exists and is still reserved-form.
-- `benchmarks/reviews/BENCH-SERVICE.readability.review.json` does not exist.
-- `examples/service/` does not exist.
-- `spec-cli/tests/rust_v1_service.rs` does not exist.
-- `.runs/` already exists and can host `.runs/i6/`.
-- Existing reusable patterns live in:
-  - `examples/ecommerce/units/pricing/discount_strategy.unit.spec`
-  - `examples/ecommerce/units/pricing/pricing_quote.unit.spec`
-  - `examples/ecommerce/units/pricing/*.test.spec`
-  - `spec-cli/tests/rust_v1_closure.rs`
-  - `spec-cli/tests/fixtures/benchmarks/**`
-  - `spec-cli/tests/fixtures/m19/semantic_falsification_pack/units/billing/**`
+- there is one producer-owned category registry in `spec-core`
+- category qualification is computed by one shared function
+- benchmark, status, export, and snapshot surfaces all consume that same
+  qualification result
+- `BENCH-ECOM` remains passing
+- `BENCH-SERVICE` full projection flips to `accounting_status = invalid`,
+  `benchmark_status = invalid`, and `gate_status = open`
+- `spec status --format json` and `spec export` both expose additive
+  `category_qualification`
+- export keeps qualification read-side only and does not persist it into
+  `.spec.passport.json`
 
 ## Hard Guards
 
-- Do not widen M66 support.
-- Do not reopen M68 benchmark design or command-scope mechanics.
-- Do not introduce async, IO, traits, generics, lifetimes, framework-heavy authored surfaces, or cross-library service proof.
-- Keep `BENCH-SERVICE` single-library under `examples/service/**`.
-- Keep the positive service roster exactly:
-  - `billing/apply_membership_discount`
-  - `billing/apply_regional_fee`
-  - `billing/checkout_net_total`
-  - `billing/checkout_net_total_guarded_fee`
-  - `billing/discount_strategy`
-  - `billing/pricing_quote`
-- Keep the required molecule roster exactly:
-  - `billing/checkout_success_flow`
-  - `billing/checkout_declined_discount_flow`
-  - `billing/discount_strategy_quote_flow`
-- Treat `.unit.spec` and `.test.spec` files as authored truth.
-- Treat generated Rust, passports, molecule evidence, snapshots, and readability reviews as derived or observation surfaces.
-- Allow projection/core edits only if the active service benchmark exposes a real read-side truth bug.
-- Keep `BENCH-ECOM` and `BENCH-CROSSLIB` green and truthful throughout I6.
-- Keep repo-root `status . --format json` diagnostic-only. It must remain `scope_authority: "inventory_only"` and is not a zero-exit acceptance gate.
+- Preserve the parent baseline exactly as:
+  - branch: `feat/i8-final-proof-run`
+  - head: `4c41fb36845b30d5527554b6a365f15f6fa58bc5`
+- Treat `PLAN.md` as the authority. Do not change wedge scope in the
+  orchestration flow.
+- Do not touch files outside the lane-owned write set.
+- Do not revert unrelated working-tree edits.
+- Do not change `benchmarks/labels.json`.
+- Do not add a checked-in external registry file.
+- Do not persist `category_qualification` into `.spec.passport.json`.
+- Do not let any worker lane edit `spec-cli/src/commands.rs`.
+- Do not let any lane infer support from benchmark labels, health, or semantic
+  review presence alone.
+- Do not merge a lane that passes its local tests but fails an out-of-scope
+  verification command.
+- Stop and escalate if the parent baseline head is no longer the branch head
+  when execution starts. The runbook assumes that exact commit as the frozen
+  parent base.
 
-## Worktree And Branch Plan
+## Parent Ownership
 
-Create the I6 worktree root once:
+The parent agent owns all of the following for the full run:
+
+- the canonical checkout at
+  `/home/azureuser/__Active_Code/atomize-hq/spec`
+- all state files under `.runs/category-truth/`
+- the contract spine:
+  - `spec-core/src/category_truth.rs`
+  - `spec-core/src/lib.rs`
+  - `spec-core/src/semantic_review.rs`
+- the `commands.rs` shared-helper consolidation and all final CLI integration:
+  - `spec-cli/src/commands.rs`
+  - `spec-cli/tests/cli.rs`
+  - `spec-cli/tests/m14_regressions.rs`
+- final snapshot/readability refresh:
+  - `benchmarks/snapshots/*.snapshot.json`
+  - `benchmarks/reviews/*.readability.review.json`
+- merge acceptance, conflict resolution, final verification, and closeout
+
+Workers own only their explicit lane write sets and worker-local artifacts.
+Workers do not own parent state, merge decisions, or final interpretation.
+
+## Subagent Execution Policy
+
+- All worker lanes use fresh `GPT-5.4` subagents with
+  `reasoning_effort=high`.
+- Maximum worker concurrency is `2`.
+- The benchmark lane and export lane are the only lanes allowed to run in
+  parallel.
+- The parent agent is the only integrator.
+- The parent agent is the only writer of canonical run-state files under
+  `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/`.
+- Worker-produced notes, sentinels, and verification captures are advisory
+  until the parent reviews them and updates canonical state.
+- Worker completion is not acceptance. Acceptance happens only when the parent:
+  - reviews the lane output
+  - updates `tasks.json`
+  - updates the canonical per-task sentinel
+  - records accepted verification artifacts in canonical run-state paths
+
+## Worktree Layout
+
+Parent checkout:
+
+- `/home/azureuser/__Active_Code/atomize-hq/spec`
+
+Worker worktree root:
+
+- `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth`
+
+Worker worktrees and branches:
+
+- benchmark lane:
+  - branch: `ws/ct-benchmark`
+  - worktree:
+    `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/benchmark`
+- export lane:
+  - branch: `ws/ct-export`
+  - worktree:
+    `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/export`
+- conditional blocker lane:
+  - branch: `ws/ct-blocker`
+  - worktree:
+    `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/blocker`
+
+No dedicated worker worktree is created for `commands.rs`. That lane stays in
+the parent checkout on the parent baseline branch.
+
+Exact worktree creation commands after Gate 1:
 
 ```bash
-mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6
+mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/benchmark -b ws/ct-benchmark feat/i8-final-proof-run
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/export -b ws/ct-export feat/i8-final-proof-run
 ```
 
-Freeze the live basis before any worker branch is created:
+Conditional blocker worktree command:
 
 ```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec rev-parse --abbrev-ref HEAD
-git -C /home/azureuser/__Active_Code/atomize-hq/spec rev-parse --short HEAD
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/blocker -b ws/ct-blocker feat/i8-final-proof-run
 ```
 
-Expected basis:
+## Canonical State And Queue Files
 
-- branch: `codex/i6-service-benchmark-activation`
-- commit: record the current `HEAD` in `.runs/i6/basis.json` at queue freeze and use that as the run-local basis for all later drift checks
+Run root:
 
-Use the live primary checkout as the parent lane:
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth`
 
-- Parent branch: `codex/i6-service-benchmark-activation`
-- Parent workspace: `/home/azureuser/__Active_Code/atomize-hq/spec`
+Canonical parent-owned files:
 
-Create Lane A first and only:
+- `tasks.json`
+- `session-log.md`
+- `preflight.json`
+- `merge-order.md`
+- `blockers.md`
+- `sentinels/<task-id>.json`
+- `verification/contract-spine/*`
+- `verification/benchmark/*`
+- `verification/export/*`
+- `verification/cli/*`
+- `verification/final/*`
+
+Worker-local advisory files:
+
+- `.runs/category-truth-worker/summary.md`
+- `.runs/category-truth-worker/verification/*`
+- `.runs/category-truth-worker/sentinel.json`
+
+Task state vocabulary:
+
+- `pending`
+- `running`
+- `worker_complete`
+- `accepted`
+- `rejected`
+- `blocked`
+- `done`
+
+The parent is the only writer of canonical state. `.runs/category-truth/` is
+the single source of truth for run progress, lane status, acceptance, block
+state, merge order, and accepted verification evidence.
+
+### Per-task Sentinel Contract
+
+Canonical sentinel path:
+
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/sentinels/<task-id>.json`
+
+Required fields for every canonical sentinel:
+
+- `task_id`
+- `owner`
+- `branch`
+- `worktree`
+- `status`
+- `started_at`
+- `updated_at`
+- `owned_write_set`
+- `required_commands`
+- `required_artifacts`
+- `worker_summary_path`
+- `worker_mirror_paths`
+- `canonical_artifact_paths`
+- `acceptance_notes`
+- `rejection_notes`
+- `blocker_notes`
+- `accepted_commit`
+
+Required status rules:
+
+- `pending`: task exists but work has not started
+- `running`: owner is actively executing the task
+- `worker_complete`: worker reports completion; parent review still pending
+- `accepted`: parent accepted the lane and canonicalized its state
+- `rejected`: parent rejected the lane; rerun required
+- `blocked`: a hard guard or direct blocker stopped the lane
+- `done`: parent-only terminal state for completed parent tasks
+
+Worker-local mirror sentinel path convention:
+
+- `<worktree>/.runs/category-truth-worker/sentinel.json`
+
+Worker mirrors may include the same fields, but they remain non-canonical until
+the parent copies the accepted facts into the canonical sentinel.
+
+### Canonical vs Worker-local Verification Outputs
+
+Canonical verification outputs live only under:
+
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/verification/contract-spine/`
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/verification/benchmark/`
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/verification/export/`
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/verification/cli/`
+- `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/verification/final/`
+
+Worker-local mirrors live only under:
+
+- `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/benchmark/.runs/category-truth-worker/verification/`
+- `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/export/.runs/category-truth-worker/verification/`
+- `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/blocker/.runs/category-truth-worker/verification/`
+
+Rules:
+
+- worker captures remain mirrors until parent acceptance
+- parent acceptance copies or re-runs the accepted verification outputs into
+  canonical verification paths
+- rejected or blocked worker outputs stay worker-local and are referenced from
+  the canonical sentinel only as diagnostics
+- `tasks.json` and canonical sentinels always outrank worker-local mirrors
+
+## Command Capture Rule
+
+Every archived verification command writes both raw output and a sibling
+`.exitcode` file. Use a `bash -lc` wrapper with `set -o pipefail` so captured
+stdout does not mask failure.
+
+Locked pattern:
 
 ```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a -b codex/i6-lane-a-service-root codex/i6-service-benchmark-activation
+bash -lc '
+set -o pipefail
+<command> | tee <output-path>
+cmd_status=$?
+printf "%s\n" "$cmd_status" > <exitcode-path>
+exit "$cmd_status"
+'
 ```
 
-After Lane A merges and the parent records `service_freeze_commit`, create integration and Lane B from that exact commit:
+If a command is expected to fail meaningfully, assert the expected exit code
+explicitly in the wrapper and record that fact in the lane summary.
 
-```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/int -b codex/i6-int <service_freeze_commit>
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-b -b codex/i6-lane-b-service-regressions <service_freeze_commit>
-```
+## Workstream Matrix
 
-Create Lane C only if the parent confirms a real read-side truth bug:
+| Workstream | Task id | Owner | Branch / worktree | Owned modules and artifacts | Start gate |
+| --- | --- | --- | --- | --- | --- |
+| Preflight freeze | `task/ct-p0-preflight` | parent | parent checkout | `.runs/category-truth/**` | run start |
+| Contract spine | `task/ct-p1-contract-spine` | parent | parent checkout | `spec-core/src/category_truth.rs`, `spec-core/src/lib.rs`, `spec-core/src/semantic_review.rs`, substrate tests | Gate 0 |
+| Benchmark adoption | `task/ct-b1-benchmark` | worker | `ws/ct-benchmark` | `spec-core/src/benchmark.rs`, `spec-cli/tests/rust_v1_service.rs`, `spec-cli/tests/rust_v1_closure.rs`, `spec-cli/tests/fixtures/benchmarks/*.json` | Gate 1 |
+| Export adoption | `task/ct-c1-export` | worker | `ws/ct-export` | `spec-core/src/export.rs`, `spec-core/src/passport.rs`, export-focused tests | Gate 1 |
+| CLI integration | `task/ct-p2-cli-integration` | parent | parent checkout | `spec-cli/src/commands.rs`, `spec-cli/tests/cli.rs`, `spec-cli/tests/m14_regressions.rs` | Gate 2 |
+| Snapshot/readability refresh | `task/ct-p3-snapshot-refresh` | parent | parent checkout | `benchmarks/snapshots/*.snapshot.json`, `benchmarks/reviews/*.readability.review.json`, final expectation fixes caused by CLI output shape | Gate 3 |
+| Conditional blocker lane | `task/ct-x1-blocker` | parent or worker | `ws/ct-blocker` only if needed | only the direct failing surface plus proof reruns | conditional |
+| Final closeout | `task/ct-p4-closeout` | parent | parent checkout | `.runs/category-truth/**` | Gate 4 |
 
-```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-c -b codex/i6-lane-c-projection-fix <service_freeze_commit>
-```
+## Lane Boundaries
 
-Create Lane D only after Gate 2 passes:
+### Contract spine stays local
 
-```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-d -b codex/i6-lane-d-closeout codex/i6-int
-```
+The parent keeps category substrate and semantic-review descriptor work in one
+local stream because together they define the producer-owned truth contract.
+This stream includes:
 
-Final landing is parent-owned only:
+- `spec-core/src/category_truth.rs`
+- `spec-core/src/lib.rs`
+- `spec-core/src/semantic_review.rs`
+- unit tests proving:
+  - supported ecommerce descriptors qualify
+  - service seam siblings do not qualify as supported
+  - unsupported rows qualify only as unsupported
+  - missing `descriptor_id` is explicit failure
 
-```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec merge --ff-only codex/i6-int
-```
+Do not split category substrate and semantic-review descriptor work into
+separate workers. The type boundary is too shared and the merge win is too
+small.
 
-## Orchestration State
+### Benchmark lane
 
-Canonical run state lives under:
+The benchmark lane owns benchmark truth adoption only:
 
-- `I6_RUN_ROOT=/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6`
-- queue: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/tasks.json`
-- session log: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/session-log.md`
-- basis record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/basis.json`
-- Gate 1 record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/service-freeze.json`
-- Gate 2 record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/service-truth-gate.json`
-- Gate 3 record: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/final-acceptance.json`
-- per-task state: `/home/azureuser/__Active_Code/atomize-hq/spec/.runs/i6/task/<task-id>/`
+- `spec-core/src/benchmark.rs`
+- benchmark-facing service and closure tests
+- benchmark JSON fixtures under `spec-cli/tests/fixtures/benchmarks/`
 
-The parent owns all writes under `.runs/i6/`. Workers do not update orchestration state directly.
+This lane must not touch:
 
-Per-task sentinels inside `.runs/i6/task/<task-id>/`:
+- `spec-cli/src/commands.rs`
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+- `benchmarks/snapshots/*.snapshot.json`
+- `benchmarks/reviews/*.readability.review.json`
 
-| Sentinel | Meaning |
-| --- | --- |
-| `QUEUED` | task frozen, not started |
-| `RUNNING` | lane or parent actively executing |
-| `BLOCKED` | waiting on parent decision or dependency |
-| `READY` | lane believes acceptance is satisfied |
-| `MERGED` | parent merged result |
-| `REJECTED` | parent bounced lane for scope or quality reasons |
+### Export lane
 
-Each task directory carries:
+The export lane owns export projection adoption only:
 
-- `scope.md`
-- `acceptance.md`
-- `handoff.md`
-- `decisions.md`
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+- export/passport regression coverage
 
-## Lane Map
+This lane must not touch:
 
-| Lane | Branch | Worktree | Owned write set | Goal |
-| --- | --- | --- | --- | --- |
-| Parent | `codex/i6-service-benchmark-activation` | `/home/azureuser/__Active_Code/atomize-hq/spec` | `.runs/i6/**`, gate records, merge decisions, final fast-forward | orchestration and final authority |
-| Lane A | `codex/i6-lane-a-service-root` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-a` | `benchmarks/labels.json`, `examples/service/**`, generated Rust under `examples/service/src/generated/**`, service passports, service molecule evidence | service scaffold, active labels, authored proof wall |
-| Lane B | `codex/i6-lane-b-service-regressions` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-b` | `spec-cli/tests/rust_v1_service.rs`, `spec-cli/tests/fixtures/benchmarks/**` | service regression truth and benchmark fixtures |
-| Lane C | `codex/i6-lane-c-projection-fix` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-c` | `spec-core/src/benchmark.rs`, `spec-cli/src/commands.rs` | minimal read-side truth fix only if needed |
-| Lane D | `codex/i6-lane-d-closeout` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/lane-d` | `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`, `benchmarks/reviews/BENCH-SERVICE.readability.review.json`, `README.md`, `docs/rust_v1_contract_stack.md`, `TODOS.md`, `CHANGELOG.md`, and only-if-truthfully-required closeout refreshes for existing ECOM/CROSSLIB snapshot or readability or doc surfaces | artifact/docs closeout only |
-| Integration | `codex/i6-int` | `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/int` | merge-only plus minimal parent reconciliation | integration and gate execution |
+- `spec-cli/src/commands.rs`
+- benchmark fixtures
+- snapshots or readability artifacts
+
+### CLI integration lane
+
+The parent-owned CLI lane owns the shared helper consolidation required by
+`PLAN.md`. This lane must:
+
+- add one shared `commands.rs` helper for projected unit truth
+- wire `status`, benchmark read-side, and snapshot paths to that helper
+- add `category_qualification` to status JSON
+- keep benchmark snapshot output aligned with live benchmark projection
+
+No other lane may add benchmark-truth extraction logic in `spec-cli`.
+
+### Snapshot/readability lane
+
+The parent-owned refresh lane runs only after CLI integration is stable. It
+owns:
+
+- snapshot refresh for `BENCH-ECOM` and `BENCH-SERVICE`
+- readability review refresh only as additive artifact maintenance
+- no semantic reinterpretation of readability freshness
 
 ## Gate Model
 
-### Gate 0: Basis Freeze / Queue Freeze
+- Gate 0: preflight freeze
+  - confirm branch and exact head
+  - record current dirty files without reverting them
+  - create run state and worktree plan
+  - on pass, parent updates:
+    - `preflight.json`
+    - `tasks.json`
+    - `session-log.md`
+    - `sentinels/task-ct-p0-preflight.json`
+  - on fail, parent updates:
+    - `blockers.md`
+    - `tasks.json`
+    - `session-log.md`
+    - `sentinels/task-ct-p0-preflight.json`
+  - stop immediately on fail
+- Gate 1: contract spine complete
+  - category substrate and semantic-review descriptor work merged locally
+  - substrate verification is green
+  - worker worktrees are created from this updated parent head only after this
+  - on pass, parent updates:
+    - `tasks.json`
+    - `session-log.md`
+    - `merge-order.md`
+    - `verification/contract-spine/*`
+    - `sentinels/task-ct-p1-contract-spine.json`
+  - on fail, parent updates:
+    - `blockers.md`
+    - `tasks.json`
+    - `session-log.md`
+    - `sentinels/task-ct-p1-contract-spine.json`
+  - do not spawn workers if Gate 1 fails
+- Gate 2: benchmark and export lanes accepted
+  - both worker lanes return in-scope diffs only
+  - both lane verification sets are green
+  - worker completion alone is insufficient; each lane must be parent-reviewed
+    and explicitly marked `accepted`
+  - on pass, parent updates:
+    - `tasks.json`
+    - `session-log.md`
+    - `merge-order.md`
+    - `verification/benchmark/*`
+    - `verification/export/*`
+    - `sentinels/task-ct-b1-benchmark.json`
+    - `sentinels/task-ct-c1-export.json`
+  - on fail, parent updates:
+    - `blockers.md`
+    - `tasks.json`
+    - `session-log.md`
+    - rejected lane sentinel(s)
+  - if one lane is rejected, stop the run, document the rejection, and rerun
+    from a clean worker lane before proceeding
+- Gate 3: CLI integration complete
+  - `commands.rs` helper is in place
+  - status, benchmark, export, and snapshot read-side surfaces agree
+  - on pass, parent updates:
+    - `tasks.json`
+    - `session-log.md`
+    - `verification/cli/*`
+    - `sentinels/task-ct-p2-cli-integration.json`
+  - on fail, parent updates:
+    - `blockers.md`
+    - `tasks.json`
+    - `session-log.md`
+    - `sentinels/task-ct-p2-cli-integration.json`
+  - conditional blocker lane may be activated only after this failure is
+    written canonically
+- Gate 4: snapshot/readability refresh and full sweep complete
+  - frozen artifacts match live output
+  - no remaining consumer drift
+  - on pass, parent updates:
+    - `tasks.json`
+    - `session-log.md`
+    - `verification/final/*`
+    - `sentinels/task-ct-p3-snapshot-refresh.json`
+  - on fail, parent updates:
+    - `blockers.md`
+    - `tasks.json`
+    - `session-log.md`
+    - `sentinels/task-ct-p3-snapshot-refresh.json`
+  - blocker lane may run only after those files are updated
+- Gate 5: closeout
+  - canonical state updated to `done` or `blocked`
+  - on pass, parent updates:
+    - `tasks.json`
+    - `session-log.md`
+    - `merge-order.md`
+    - `sentinels/task-ct-p4-closeout.json`
+  - on blocked stop, parent updates:
+    - `blockers.md`
+    - `tasks.json`
+    - `session-log.md`
+    - `sentinels/task-ct-p4-closeout.json`
 
-Owner: parent  
-Task id: `i6-a0-freeze-basis`
+The flow is human-free by default. Pause only if a gate fails or a hard guard
+is tripped.
 
-Advance only when:
+### Blocked Path
 
-- live branch is `codex/i6-service-benchmark-activation`
-- live commit is the branch `HEAD` recorded in `basis.json` for this run
-- `.runs/i6/` exists
-- `basis.json`, `tasks.json`, and task packets exist
-- frozen positive service roster and required molecules are recorded
-- Lane A is the only worker branch created
+When a task or gate blocks:
 
-Reopens if:
+- parent writes the blocker first to:
+  - `blockers.md`
+  - `tasks.json`
+  - the task sentinel
+  - `session-log.md`
+- parent records:
+  - the failing command
+  - exit code
+  - affected files
+  - whether the blocker is rerunnable or terminal
+- if the blocker is rerunnable within scope:
+  - rerun only the affected task commands
+  - then rerun all downstream parent verification gates
+- if the blocker would require scope expansion or forbidden-file ownership:
+  - mark the run `blocked`
+  - do not proceed to downstream gates
+  - stop after closeout state is written
 
-- the live parent basis drifts before worker launch
-- queue ownership or frozen rosters are unclear
-- any worker needs to guess write-set or gate behavior
+## Execution Order
 
-### Gate 1: Post-Lane-A Service-Freeze Gate
+1. Initialize `.runs/category-truth/` in the parent checkout.
+2. Record branch, head, and dirty files in `preflight.json`,
+   `session-log.md`, `tasks.json`, and the preflight sentinel.
+3. Execute the contract spine locally on `feat/i8-final-proof-run`.
+4. Run contract-spine verification and archive accepted outputs under
+   `verification/contract-spine/`.
+5. Update parent task state for `task/ct-p1-contract-spine` to `done`.
+6. Create worker worktrees with the exact `git worktree add ... -b ws/...`
+   commands in this document.
+7. Spawn exactly two fresh `GPT-5.4` worker lanes:
+   - benchmark
+   - export
+8. Mark both worker tasks `running` in `tasks.json` and canonical sentinels
+   before the workers start editing.
+9. Wait for worker completion via worker summaries and worker-local mirrors.
+10. When a worker reports complete, mark only `worker_complete` in canonical
+    state. Do not mark `accepted` yet.
+11. Review the export lane first:
+    - inspect owned-file diff
+    - inspect worker command exits
+    - inspect worker-local verification mirrors
+    - reject if any forbidden surface changed
+12. If export lane is accepted:
+    - cherry-pick its commit into the parent branch
+    - copy or rerun accepted verification outputs into
+      `verification/export/`
+    - update `tasks.json`, `merge-order.md`, `session-log.md`, and the export
+      sentinel to `accepted`
+    - close the export worker
+13. If export lane is rejected:
+    - write rejection details canonically
+    - close the worker
+    - stop and rerun that lane before benchmark acceptance proceeds
+14. Review the benchmark lane with the same acceptance process.
+15. If benchmark lane is accepted:
+    - cherry-pick its commit into the parent branch
+    - copy or rerun accepted verification outputs into
+      `verification/benchmark/`
+    - update `tasks.json`, `merge-order.md`, `session-log.md`, and the
+      benchmark sentinel to `accepted`
+    - close the benchmark worker
+16. If benchmark lane is rejected:
+    - write rejection details canonically
+    - close the worker
+    - stop and rerun that lane before continuing
+17. Run the parent-owned CLI integration lane in the parent checkout.
+18. Archive accepted CLI verification outputs under `verification/cli/` and
+    update canonical state.
+19. Refresh snapshots and readability artifacts locally from the post-CLI
+    truth.
+20. Run the full verification sweep and archive accepted final outputs under
+    `verification/final/`.
+21. If a direct blocker remains, activate `task/ct-x1-blocker`, run only the
+    narrow blocker repair, rerun the affected task verification, then rerun
+    the full verification sweep.
+22. Update closeout state, mark the run `done` or `blocked`, and stop.
 
-Owner: parent  
-Task id: `i6-a1-service-freeze`
+This flow walks the current `PLAN.md` session to completion. The run is not
+finished at code integration; it is finished only after canonical verification,
+state closeout, and final wedge-truth confirmation are complete.
 
-Advance only when:
+## Integration And Merge Rules
 
-- `examples/service/**` exists as a real single-library benchmark root
-- `benchmarks/labels.json` marks `BENCH-SERVICE` active
-- labels list exactly the frozen six service units and three required molecules
-- all six service units have fresh passports
-- all three service molecules have fresh evidence
-- the parent writes `service-freeze.json` with:
-  - `service_freeze_commit`
-  - frozen rosters
-  - current `label_digest`
-  - whether a projection bug is open
+- The contract spine is not optional staging. It is the branch-local truth base.
+- Each worker lane should produce one cohesive commit if possible.
+- Parent integration uses non-interactive git only.
+- Preferred integration method is `git cherry-pick -x <worker-commit>` into the
+  parent branch after parent review.
+- Merge order is fixed:
+  - export first because it is the smaller, more isolated core surface
+  - benchmark second because its invalid `BENCH-SERVICE` truth becomes the
+    parent baseline for CLI and snapshot adoption
+- Do not merge a worker branch directly if it touched a forbidden file. Reject
+  and rerun the lane instead.
+- If a worker lane conflicts with unrelated dirty parent files, stop and
+  rebase the lane around the current parent tree without reverting those files.
 
-Reopens Lane A if:
+## Conflict Flags
 
-- authored service truth is incomplete, stale, invalid, or out of roster
-- service root or labels drift from the frozen roster
-- any claimed proof depends on widened support
+| Flag | Surface | Risk | Required handling |
+| --- | --- | --- | --- |
+| `CF-1` | `spec-cli/src/commands.rs` | highest merge-conflict hotspot; shared helper required | parent-only lane; no worker edits permitted |
+| `CF-2` | `spec-core/src/semantic_review.rs` | producer contract drift if lane-split | keep inside parent contract spine |
+| `CF-3` | `spec-cli/tests/fixtures/benchmarks/*.json` vs snapshots | fixture truth can drift from final CLI truth | benchmark lane owns benchmark fixtures; snapshots wait for parent refresh lane |
+| `CF-4` | readability review artifacts | qualification failure can be misread as readability change | refresh artifact timestamps/content only as generated output; do not rewrite freshness semantics |
+| `CF-5` | dirty non-owned files in workspace | accidental overwrite of teammate work | record in preflight; never reset or force-checkout them |
 
-### Gate 2: Post-B/C Service-Truth Gate
+## Workstream Detail
 
-Owner: parent  
-Task id: `i6-d0-service-truth-gate`
+### `task/ct-p0-preflight`
 
-Advance only when:
+Required parent actions:
 
-- Lane B is merged into `codex/i6-int`
-- Lane C is either merged or explicitly skipped
-- `cargo run -p spec-cli -- status examples/service/units --format json` and `cargo run -p spec-cli -- export examples/service/units` project truthful service-root benchmark state
-- service-root benchmark truth is passing with full proof
-- service-root fixtures and assertions in Lane B are derived from direct service-root `status` and `export` truth, not only indirect unit-test expectations
-- partial service scopes emit zero positive credit
-- `BENCH-ECOM` remains green/current
-- `BENCH-CROSSLIB` remains green with zero positive credit
-
-Reopens prior lanes if:
-
-- service-root truth is wrong because authored proof or labels are wrong: reopen Lane A
-- service-root truth is wrong because regression tests or fixtures are missing or dishonest: reopen Lane B
-- service-root truth is wrong because projection/core behavior is wrong: reopen Lane C
-- any cross-lane disagreement conflicts with `PLAN.md`: bounce to the owning lane, do not resolve creatively in integration
-
-### Gate 3: Final Acceptance Gate
-
-Owner: parent  
-Task id: `i6-e-final-acceptance`
-
-Advance only when:
-
-- `BENCH-SERVICE` is active, passing, and gate-satisfied at service-root scope
-- `BENCH-SERVICE` readability review is `current`
-- committed `BENCH-SERVICE.snapshot.json` is stable on rerun
-- service-root `status` and `export` remain the proof wall
-- `BENCH-ECOM` and `BENCH-CROSSLIB` stay truthful
-- repo-root `status . --format json` remains diagnostic inventory with `scope_authority: "inventory_only"`
-
-Reopens prior lanes if:
-
-- snapshot or readability truth drifts: reopen Lane D
-- service-root proof wall drifts: reopen Lane A, B, or C based on cause
-- docs overstate shipped truth: reopen Lane D
-
-## Conflict And Bounce-Back Rules
-
-- If a lane edits outside its write set, the parent rejects it.
-- If a lane discovers required scope drift to the frozen positive roster or required molecule roster, it must stop, mark `BLOCKED`, and escalate to the parent.
-- Lane A may not change regression suites, fixtures, snapshots, reviews, or docs.
-- Lane B may not patch core behavior. If it requires `spec-core/src/benchmark.rs` or `spec-cli/src/commands.rs` changes, it must bounce to the parent and conditional Lane C.
-- Lane C may not patch labels, specs, proof artifacts, tests, fixtures, snapshots, reviews, or docs.
-- Lane D is closeout-only. It may not reopen service semantics, labels, tests, fixtures, or core behavior.
-- Integration does not resolve creative cross-lane disagreements. It either:
-  - applies `PLAN.md` literally, or
-  - bounces the issue back to the owning lane
-- If a lane believes another lane’s owned surface must change, it does not edit that surface directly. It returns a narrow parent escalation.
-
-## Shared Ownership And Artifact Policy
-
-- `PLAN.md` is the only milestone authority.
-- Source service specs are authored truth:
-  - `examples/service/units/**/*.unit.spec`
-  - `examples/service/units/**/*.test.spec`
-- Lane A may refresh the derived service proof surfaces required by those specs:
-  - `examples/service/src/generated/**`
-  - `examples/service/units/**/*.spec.passport.json`
-  - `examples/service/units/**/*.test.evidence.json`
-- No lane hand-edits generated Rust, passports, molecule evidence, snapshot JSON, or readability review JSON.
-- Lane D alone owns committed snapshot and readability refresh for `BENCH-SERVICE`.
-- If merged I6 truth makes `BENCH-ECOM` or `BENCH-CROSSLIB` snapshot or readability or closeout docs require refresh, that refresh belongs to Lane D and nowhere else.
-- Lane B owns benchmark test fixtures, including any repo-root benchmark fixture JSON that changes because `BENCH-SERVICE` becomes active.
-- Repo-root `status . --format json` is always interpreted as structured inventory, never as a zero-exit proof command.
-
-## Workstream Plan
-
-### WS-PARENT-0 — basis freeze and queue freeze
-
-Task id: `i6-a0-freeze-basis`
-
-Parent actions:
-
-- confirm live branch and commit
-- create `.runs/i6/`
-- write `basis.json`
-- write `tasks.json`, `session-log.md`, and task packets
-- create Lane A only
-- freeze the exact positive roster and required molecule roster in run state
-
-Acceptance:
-
-- Gate 0 is green
-- no worker needs to guess branch names, worktree paths, write-sets, or gate rules
-
-### WS-A — service scaffold, labels, and proof wall
-
-Task id: `i6-a1-service-freeze`
-
-Lane A owns:
-
-- `benchmarks/labels.json`
-- `examples/service/**`
-- generated Rust under `examples/service/src/generated/**`
-- service passports and service molecule evidence
-
-Required outcomes:
-
-- scaffold the service example
-- author the six frozen service units
-- author the three frozen molecule tests
-- activate `BENCH-SERVICE`
-- build generated Rust
-- refresh all six unit passports
-- refresh all three molecule evidence files
-
-Required commands:
-
-```bash
-cargo run -p spec-cli -- build examples/service/units --output examples/service/src/generated
-cargo run -p spec-cli -- test examples/service/units/billing/apply_membership_discount.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/apply_regional_fee.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total_guarded_fee.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/pricing_quote.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_success_flow.test.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_declined_discount_flow.test.spec
-cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy_quote_flow.test.spec
-cargo run -p spec-cli -- status examples/service/units --format json
-cargo run -p spec-cli -- export examples/service/units
-```
-
-Hard rules:
-
-- no snapshot refresh
-- no readability review authoring
-- no test fixture edits
-- no docs edits
-- no core projection edits
-
-Acceptance:
-
-- Gate 1 is green
-- if read-side truth is wrong, Lane A returns a narrow reproduced bug statement rather than patching core behavior itself
-
-### WS-PARENT-1 — post-freeze fan-out
-
-Task id: `i6-a2-launch-int-b-c`
-
-Parent actions:
-
-- create `codex/i6-int` and `codex/i6-lane-b-service-regressions` from `service_freeze_commit`
-- create `codex/i6-lane-c-projection-fix` only if needed
-- mark Lane B running
-- mark Lane C running only if spawned
-
-Acceptance:
-
-- all post-freeze branches fork from the exact same `service_freeze_commit`
-- active worker count never exceeds 2
-
-### WS-B — service regression truth and benchmark fixtures
-
-Task id: `i6-b1-service-regressions`
-
-Lane B owns:
-
-- `spec-cli/tests/rust_v1_service.rs`
-- `spec-cli/tests/fixtures/benchmarks/**`
-
-Required outcomes:
-
-- add a dedicated `rust_v1_service` suite
-- add or refresh benchmark fixtures for:
-  - full service-root `status`
-  - full service-root `export`
-  - partial service-scope zero-credit behavior
-  - active repo-root benchmark inventory with `BENCH-SERVICE`
-- prove regressions for:
-  - missing required molecule proof
-  - stale required molecule proof
-  - failing required molecule proof
-  - readability drift becoming non-current
-  - partial service scopes emitting zero positive credit
-  - preserved `BENCH-ECOM`
-  - preserved `BENCH-CROSSLIB`
-  - preserved repo-root inventory semantics
+- record:
+  - branch
+  - head
+  - `git status --short`
+  - worker worktree plan
+- initialize:
+  - `.runs/category-truth/tasks.json`
+  - `.runs/category-truth/session-log.md`
+  - `.runs/category-truth/preflight.json`
+  - `.runs/category-truth/sentinels/`
+  - `.runs/category-truth/verification/`
+  - `task/ct-p0-preflight` canonical sentinel
 
 Required commands:
 
 ```bash
-cargo run -p spec-cli -- status examples/service/units --format json
-cargo run -p spec-cli -- export examples/service/units
-cargo test -p spec-cli rust_v1_service
-cargo test -p spec-cli rust_v1_closure
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
-cargo run -p spec-cli -- status . --format json
+git -C /home/azureuser/__Active_Code/atomize-hq/spec branch --show-current
+git -C /home/azureuser/__Active_Code/atomize-hq/spec rev-parse HEAD
+git -C /home/azureuser/__Active_Code/atomize-hq/spec status --short
+mkdir -p /home/azureuser/__Active_Code/atomize-hq/spec/.runs/category-truth/{sentinels,verification}
+mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth
 ```
-
-Hard rules:
-
-- no edits to `benchmarks/labels.json`
-- no edits under `examples/service/**`
-- no snapshot or readability-review edits
-- no docs edits
-- no core behavior edits
 
 Acceptance:
 
-- lane diff stays entirely within Lane B ownership
-- service-root fixtures are derived from direct `status examples/service/units --format json` and `export examples/service/units` truth
-- service-root fixtures are not justified only by indirect unit-test expectations
-- repo-root inventory fixtures stay truthful to active `BENCH-SERVICE`
+- branch is `feat/i8-final-proof-run`
+- head is `4c41fb36845b30d5527554b6a365f15f6fa58bc5`
+- unrelated dirty files are recorded, not reverted
+- `tasks.json`, `session-log.md`, and the preflight sentinel all agree
 
-### WS-C — minimal projection/core fix only if needed
+### `task/ct-p1-contract-spine`
 
-Task id: `i6-c1-projection-fix`
+Owned files:
 
-Lane C owns:
+- `spec-core/src/category_truth.rs`
+- `spec-core/src/lib.rs`
+- `spec-core/src/semantic_review.rs`
+
+Required verification commands:
+
+```bash
+cargo test -p spec-core category_truth
+cargo test -p spec-core semantic_review
+```
+
+Acceptance:
+
+- registry rows and qualification types exist
+- `SemanticReview` exposes producer-owned `descriptor_id`
+- supported ecommerce descriptors qualify
+- service seam descriptors remain visible but not supported-qualified
+- parent writes accepted verification artifacts to
+  `verification/contract-spine/`
+- parent marks the task `done` in canonical state before workers are spawned
+
+### `task/ct-b1-benchmark`
+
+Owned files:
 
 - `spec-core/src/benchmark.rs`
+- `spec-cli/tests/rust_v1_service.rs`
+- `spec-cli/tests/rust_v1_closure.rs`
+- `spec-cli/tests/fixtures/benchmarks/*.json`
+
+Required worker verification commands:
+
+```bash
+cargo test -p spec-core benchmark
+cargo test -p spec-cli rust_v1_service
+cargo test -p spec-cli rust_v1_closure
+```
+
+Acceptance:
+
+- `BenchmarkCaseProjection` carries `category_qualification`
+- supported positive credit depends on qualified supported truth
+- `BENCH-SERVICE` full benchmark becomes invalid/open
+- partial mismatch projects `partial_invalid`
+- worker summary and worker-local mirrors are reviewed before acceptance
+- acceptance is recorded only after cherry-pick plus canonical state update
+
+### `task/ct-c1-export`
+
+Owned files:
+
+- `spec-core/src/export.rs`
+- `spec-core/src/passport.rs`
+
+Required worker verification commands:
+
+```bash
+cargo test -p spec-core export
+```
+
+Acceptance:
+
+- `ExportBundle` adds `projected_units`
+- projected units carry `semantic_review` plus `category_qualification`
+- `.spec.passport.json` persistence remains unchanged
+- export schema version is `5`
+- worker summary and worker-local mirrors are reviewed before acceptance
+- acceptance is recorded only after cherry-pick plus canonical state update
+
+### `task/ct-p2-cli-integration`
+
+Owned files:
+
 - `spec-cli/src/commands.rs`
+- `spec-cli/tests/cli.rs`
+- `spec-cli/tests/m14_regressions.rs`
 
-Required outcomes:
-
-- reproduce the exact read-side truth bug
-- fix only the minimum code needed for truthful service-root projection
-- preserve M68 mechanics and current command-scope behavior
-
-Required commands:
+Required parent verification commands:
 
 ```bash
-cargo run -p spec-cli -- status examples/service/units --format json
-cargo run -p spec-cli -- export examples/service/units
-```
-
-Hard rules:
-
-- no edits to specs, proof artifacts, labels, tests, fixtures, snapshots, reviews, or docs
-- no benchmark-schema redesign
-- no support expansion
-
-Acceptance:
-
-- diff stays entirely inside Lane C ownership
-- bug is explained as read-side truth repair, not feature work
-
-### WS-INT-2 — post-B/C service-truth gate
-
-Task id: `i6-d0-service-truth-gate`
-
-Parent actions in `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-i6/int`:
-
-- merge Lane C first if present
-- merge Lane B second
-- run Gate 2 before Lane D exists
-
-Required commands:
-
-```bash
-cargo run -p spec-cli -- status examples/service/units --format json
-cargo run -p spec-cli -- export examples/service/units
-cargo test -p spec-cli rust_v1_service
-cargo test -p spec-cli rust_v1_closure
+cargo test -p spec-cli cli
+cargo test -p spec-cli m14_regressions
 cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- export examples/service/units
 ```
 
 Acceptance:
 
-- Gate 2 is green
-- service-root `status` and `export` are truthful proof walls
-- `readability_review_status` may still be non-current here because Lane D has not run yet
+- `STATUS_JSON_SCHEMA_VERSION` is `5`
+- status rows include additive `category_qualification`
+- benchmark/status/snapshot paths share the same derived projected-unit truth
+- no extra consumer-local semantic-review extraction logic remains in
+  `commands.rs`
+- parent archives accepted verification outputs under `verification/cli/`
 
-### WS-D — artifact/docs closeout only
+### `task/ct-p3-snapshot-refresh`
 
-Task id: `i6-d1-closeout`
+Owned files:
 
-Lane D owns:
-
+- `benchmarks/snapshots/BENCH-ECOM.snapshot.json`
 - `benchmarks/snapshots/BENCH-SERVICE.snapshot.json`
+- `benchmarks/reviews/BENCH-ECOM.readability.review.json`
 - `benchmarks/reviews/BENCH-SERVICE.readability.review.json`
-- `README.md`
-- `docs/rust_v1_contract_stack.md`
-- `TODOS.md`
-- `CHANGELOG.md`
-- only-if-truthfully-required closeout refreshes for ECOM/CROSSLIB snapshot, readability, or docs surfaces
 
-Required outcomes:
-
-- refresh `BENCH-SERVICE.snapshot.json` from reserved-form to active-form
-- author the first `BENCH-SERVICE.readability.review.json`
-- align repo-facing docs to shipped truth only
-
-Required commands:
+Required parent verification commands:
 
 ```bash
+cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
 cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
-cargo run -p spec-cli -- status examples/service/units --format json
-cargo run -p spec-cli -- export examples/service/units
-```
-
-Hard rules:
-
-- no service semantic edits
-- no label edits
-- no spec edits
-- no test edits
-- no fixture edits
-- no core behavior edits
-- Lane D is artifact/docs closeout only
-
-Acceptance:
-
-- `BENCH-SERVICE` snapshot is active-form
-- `BENCH-SERVICE` readability review is current against final projection digest and generated file set
-- docs teach the same story the CLI now projects
-
-### WS-INT-3 — final acceptance and landing
-
-Task id: `i6-e-final-acceptance`
-
-Parent actions:
-
-- merge Lane D into `codex/i6-int`
-- run Gate 3
-- if green, fast-forward the parent branch
-- if red, bounce only the owning lane
-
-Required commands:
-
-```bash
-cargo run -p spec-cli -- build examples/service/units --output examples/service/src/generated
-cargo run -p spec-cli -- test examples/service/units/billing/apply_membership_discount.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/apply_regional_fee.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_net_total_guarded_fee.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/pricing_quote.unit.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_success_flow.test.spec
-cargo run -p spec-cli -- test examples/service/units/billing/checkout_declined_discount_flow.test.spec
-cargo run -p spec-cli -- test examples/service/units/billing/discount_strategy_quote_flow.test.spec
-cargo run -p spec-cli -- status examples/service/units --format json
-cargo run -p spec-cli -- export examples/service/units
-cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
-cargo test -p spec-cli rust_v1_service
-cargo test -p spec-cli rust_v1_closure
-cargo run -p spec-cli -- status examples/ecommerce/units --format json
-cargo run -p spec-cli -- status examples/crosslib-app/units --format json
-cargo run -p spec-cli -- status . --format json
 ```
 
 Acceptance:
 
-- Gate 3 is green
-- `BENCH-SERVICE` is active, passing, gate-satisfied, and `readability_review_status: "current"`
-- rerunning `cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE` leaves the committed snapshot stable
-- service-root `status` and `export` are the proof wall
-- repo-root `status . --format json` remains diagnostic inventory with `scope_authority: "inventory_only"`
+- snapshot output includes case `category_qualification`
+- `BENCH-ECOM` remains passing
+- `BENCH-SERVICE` full snapshot is invalid/open
+- readability freshness remains additive and unchanged in meaning
+- parent archives accepted verification outputs under `verification/final/`
 
-## Merge Order
+### `task/ct-x1-blocker`
 
-1. Parent freezes basis and queue.
-2. Lane A lands on the parent branch.
-3. Parent records `service_freeze_commit`.
-4. Parent creates `codex/i6-int` and Lane B from `service_freeze_commit`.
-5. Parent creates Lane C only if a real projection bug exists.
-6. Lane C, if present, merges into `codex/i6-int` first.
-7. Lane B rebases if Lane C changed truth-surface behavior, then merges into `codex/i6-int`.
-8. Parent runs Gate 2.
-9. Lane D branches from `codex/i6-int` only after Gate 2 passes.
-10. Lane D merges into `codex/i6-int`.
-11. Parent runs Gate 3.
-12. Parent fast-forwards `codex/i6-service-benchmark-activation` to `codex/i6-int`.
+Activate only if one of the following remains after the normal flow:
+
+- a worker lane can only pass by touching a forbidden surface
+- `commands.rs` integration reveals inconsistent qualification semantics that
+  cannot be fixed locally in the parent lane without crossing owned boundaries
+- the full verification sweep fails on a direct wedge surface
+
+Rules:
+
+- create `ws/ct-blocker` only after documenting the blocker in
+  `.runs/category-truth/blockers.md`
+- keep the owned write set as narrow as the failing surface allows
+- rerun the affected targeted commands and then rerun the full sweep
+- stop if fixing the blocker would widen support, alter schema scope beyond
+  `PLAN.md`, or require new orchestration lanes
 
 ## Context-Control Rules
 
-- Parent keeps only:
+- Parent context stays centered on:
   - `PLAN.md`
-  - `.runs/i6/tasks.json`
-  - gate records
-  - the latest narrow diff summary per lane
-- Each worker prompt contains only:
-  - owned files
-  - forbidden files
-  - relevant `PLAN.md` excerpt
-  - required commands
-  - the recorded `service_freeze_commit` when applicable
+  - `ORCH_PLAN.md`
+  - the current lane diff
+  - the current lane verification outputs
+  - `.runs/category-truth/tasks.json`
+  - `.runs/category-truth/session-log.md`
+- Worker prompts contain only:
+  - owned write set
+  - exact required commands
+  - forbidden surfaces
+  - acceptance criteria
+  - artifact output paths
 - Workers return only:
   - changed files
-  - commands run and exit codes
-  - blockers
-  - unresolved assumptions
-- Workers do not write `.runs/i6/**`.
-- Close each worker immediately after merge or rejection.
+  - commands run with exit codes
+  - blocker notes
+  - assumptions
+- Parent records worker completion as `worker_complete`, not `accepted`.
+- Close worker lanes immediately after parent acceptance or rejection.
+
+## Full Verification Sweep
+
+Run this exact sweep from the parent checkout after snapshot refresh and again
+after any blocker repair:
+
+```bash
+cargo test -p spec-core
+cargo test -p spec-cli rust_v1_service
+cargo test -p spec-cli rust_v1_closure
+cargo test -p spec-cli m14_regressions
+cargo test -p spec-cli cli
+
+cargo run -p spec-cli -- status examples/ecommerce/units --format json
+cargo run -p spec-cli -- status examples/service/units --format json
+cargo run -p spec-cli -- export examples/ecommerce/units
+cargo run -p spec-cli -- export examples/service/units
+cargo run -p spec-cli -- benchmark snapshot BENCH-ECOM
+cargo run -p spec-cli -- benchmark snapshot BENCH-SERVICE
+```
+
+Expected final truth:
+
+- ecommerce full benchmark remains passing
+- service full benchmark is invalid/open
+- status and export expose the same qualification result for seam-backed rows
+- snapshot output matches live benchmark projection
+- `.spec.passport.json` stays free of persisted `category_qualification`
 
 ## Tests And Acceptance
 
-- Lane A acceptance is authored service truth plus refreshed proof.
-- Lane B acceptance is direct service-root regression truth plus truthful benchmark fixtures.
-- Lane C acceptance is a minimal reproduced-and-fixed read-side bug.
-- Lane D acceptance is snapshot, readability, and docs closeout only.
-- Final acceptance is the full service benchmark wall plus non-regression across `BENCH-ECOM`, `BENCH-CROSSLIB`, and repo-root inventory semantics.
+### Workstream Acceptance
 
-The service benchmark wall is closed only when all are true at once:
+- Preflight is accepted only when:
+  - branch and head match the frozen baseline
+  - dirty files are recorded
+  - canonical run-state files are initialized
+- Contract spine is accepted only when:
+  - category substrate and semantic-review descriptor work are complete
+  - contract-spine verification artifacts are canonicalized
+  - worker lanes have not started yet
+- Benchmark lane is accepted only when:
+  - owned-file diff stays within lane boundaries
+  - worker verification passes
+  - `BENCH-SERVICE` benchmark truth flips to invalid/open
+  - parent cherry-picks the lane and updates canonical state
+- Export lane is accepted only when:
+  - owned-file diff stays within lane boundaries
+  - worker verification passes
+  - export schema is `5`
+  - parent cherry-picks the lane and updates canonical state
+- CLI integration is accepted only when:
+  - `commands.rs` remains parent-owned
+  - shared-helper consolidation is in place
+  - status and export commands reflect the same qualification contract
+- Snapshot/readability refresh is accepted only when:
+  - snapshot artifacts match live projection output
+  - readability artifacts remain additive only
+- Blocker lane is accepted only when:
+  - it fixes a direct, in-scope blocker
+  - it does not widen scope
+  - downstream verification is rerun and passes
 
-- `BENCH-SERVICE` is active rather than reserved.
-- the roster is exactly six positive units and three required molecules.
-- all six positive units are valid with fresh proof.
-- all three required molecules are valid with fresh evidence.
-- service-root `status` and `export` both project passing active truth.
-- service partial scopes do not launder positive credit.
-- `BENCH-SERVICE` readability review is current.
-- committed `BENCH-SERVICE.snapshot.json` is stable on rerun.
-- `BENCH-ECOM` remains passing/current.
-- `BENCH-CROSSLIB` remains passing with zero positive credit.
-- repo-root `status . --format json` remains diagnostic inventory and not a zero-exit acceptance gate.
+### Final Wedge Acceptance
+
+- `BENCH-ECOM` remains `passing`
+- `BENCH-SERVICE` full projection is:
+  - `accounting_status = invalid`
+  - `benchmark_status = invalid`
+  - `gate_status = open`
+- `spec status --format json` and `spec export` expose additive
+  `category_qualification`
+- seam-backed rows show status/export parity for qualification truth
+- benchmark snapshots match live benchmark projection
+- `.spec.passport.json` does not persist `category_qualification`
+- no worker lane edited `spec-cli/src/commands.rs`
+- the parent closeout records enough canonical evidence to replay the run logic
+
+## Closeout Criteria
+
+Mark the run `done` only when all of the following are true:
+
+- every workstream is `accepted` or `done`
+- no forbidden-file edits were needed
+- no worker lane changed `spec-cli/src/commands.rs`
+- the final verification sweep is green under the expected semantics
+- `tasks.json`, `merge-order.md`, and `session-log.md` let a future maintainer
+  reconstruct what landed and in what order
+
+Otherwise mark the run `blocked` and record the narrowest honest blocker in
+`.runs/category-truth/blockers.md`.
 
 ## Assumptions
 
-- The primary checkout on `codex/i6-service-benchmark-activation` remains the parent workspace for the full run.
-- `spec-cli/tests/fixtures/benchmarks/**` is broad enough that Lane B may own all service-root and repo-root benchmark fixture refresh required by active `BENCH-SERVICE`.
-- `.runs/i6/**` is parent-owned run state and is not assumed to be a checked-in deliverable.
+- The current `PLAN.md` frozen decisions remain valid at execution time.
+- The exact parent baseline head remains the correct launch point for this
+  wedge.
+- Benchmark and export adoption remain separable after the contract spine lands.
+- `commands.rs` remains the only shared-helper hotspot significant enough to
+  justify parent-only ownership.

@@ -8,6 +8,22 @@
 > [`README.md`](../README.md), [`CHANGELOG.md`](../CHANGELOG.md), [`PLAN.md`](../PLAN.md), and
 > [`DECISIONS.md`](../DECISIONS.md).
 
+## Current Grounding
+
+This architecture draft is still useful for boundaries, but some of the
+examples below were written before the current repo shape settled.
+
+Use these current facts as the grounding layer while reading it:
+
+- the current authored sources are `*.unit.spec`, `.test.spec`, and `.plan.spec`
+- the shipped top-level unit kinds are `function`, `data`, and `sum`
+- the current proof story is atom plus molecule proof; organism remains future vocabulary, not a shipped repo-wide contract
+- the current default backend lane is Rust, with a bounded additive TypeScript lane
+- passports and molecule evidence are co-located derived artifacts, while generated Rust lives under example `src/generated/` trees
+
+Treat this doc as architecture direction and component framing, not as the
+authoritative day-to-day CLI contract.
+
 ## Purpose
 
 This document captures the initial technical architecture for **spec**, a semantic-unit system for authoring, validating, compiling, linking, and verifying software as structured semantic records.
@@ -97,7 +113,7 @@ A test artifact represents verification at one of several levels:
 
 - atom
 - molecule
-- organism
+- organism (future vocabulary, not a current shipped repo-wide proof surface)
 
 Atom tests are usually owned directly by a unit. Molecule and organism tests are separate artifacts that may cover multiple units.
 
@@ -154,10 +170,10 @@ A semantic unit source file should contain human-authored truth:
 A non-local test file should contain:
 
 - `id`
-- `tier`
+- `intent`
 - `covers`
-- `scenario`
-- optional setup and fixtures metadata
+- optional `imports`
+- `body.rust`
 
 ### Derived artifacts
 The following should not be hand-authored in source files:
@@ -178,29 +194,26 @@ These belong in the build output.
 
 ```text
 spec/
-  schema/
-    unit.cue
-    test.cue
-    policies/
-  units/
-    pricing/
-      apply_discount.unit.spec
-      apply_tax.unit.spec
-    checkout/
-      finalize_total.unit.spec
-  tests/
-    pricing/
-      discount_plus_tax.test.spec
-    checkout/
-      final_total_flow.test.spec
-  build/
-    generated/
-    passports/
-    docs/
-    diagnostics/
+  README.md
+  docs/
+  examples/
+    ecommerce/
+      README.md
+      units/
+        money/round.unit.spec
+        pricing/apply_discount.unit.spec
+        pricing/apply_tax.unit.spec
+        pricing/calculate_total.unit.spec
+        pricing/pricing_quote.unit.spec
+        pricing/discount_strategy.unit.spec
+        pricing/discount_plus_tax.test.spec
+      src/generated/
 ```
 
-This shape is illustrative, not final.
+This shape is illustrative, but it is closer to the current checked-in repo
+than the original March draft layout. In the live repo, passports and molecule
+evidence are co-located next to the source specs rather than collected into one
+separate `build/passports/` tree.
 
 ---
 
@@ -242,14 +255,25 @@ links:
 ## Example Test File
 
 ```yaml
-kind: test
-tier: molecule
 id: pricing/discount_plus_tax
+spec_version: "0.3.0"
+intent:
+  why: Verify that applying discount then tax produces the correct final price.
 covers:
   - pricing/apply_discount
   - pricing/apply_tax
-scenario:
-  description: Discount is applied before tax in final pricing flow.
+  - money/round
+imports:
+  - rust_decimal::Decimal
+  - crate::pricing::apply_discount::apply_discount
+  - crate::pricing::apply_tax::apply_tax
+body:
+  rust: |
+    {
+        let discounted = apply_discount(Decimal::new(10000, 2), Decimal::new(10, 2));
+        let taxed = apply_tax(discounted, Decimal::new(725, 4));
+        assert!(taxed > Decimal::ZERO);
+    }
 ```
 
 ---

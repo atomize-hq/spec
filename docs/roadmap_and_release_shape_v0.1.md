@@ -8,6 +8,20 @@
 > [`README.md`](../README.md), [`CHANGELOG.md`](../CHANGELOG.md), [`PLAN.md`](../PLAN.md), and
 > [`DECISIONS.md`](../DECISIONS.md).
 
+## Current Grounding
+
+This roadmap draft is still useful for the "why this sequencing existed" story,
+but it is no longer the active milestone authority.
+
+Today:
+
+- shipped behavior is better captured by the root README, changelog, and active plan docs
+- much of the M1-M5 shape described below has already landed in narrower, repo-specific form
+- Rust-first proof loops, plan artifacts, benchmark-backed claim surfaces, and bounded second-language work are now concrete repo realities, not just roadmap aspirations
+
+Read this doc for sequencing logic and product intent. Read current authority
+docs for what the repo actually promises on a live checkout.
+
 ## Purpose
 
 This document translates the current **North Star vision** and **high-level technical architecture** into an execution sequence.

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-20T22:06:56Z",
+  "generated_at": "2026-05-25T19:41:28Z",
   "projection": {
     "benchmark_id": "BENCH-ECOM",
     "kind": "positive",
@@ -7,15 +7,15 @@
     "required_for_v1": true,
     "path_scope": "full",
     "accounting_status": "valid",
-    "benchmark_status": "passing",
-    "gate_status": "satisfied",
-    "readability_review_status": "current",
+    "benchmark_status": "incomplete",
+    "gate_status": "open",
+    "readability_review_status": "stale",
     "readability_verdict": {
       "decision": "approved",
       "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
     },
     "label_digest": "sha256:b3cb83c0fc1d42b0c2d469db332870227e1f4819e7274636cbef9a9d2dc9cee8",
-    "projection_digest": "sha256:07abdc7583aeb203ad6063fafc77bac72845674e5736acdda8fd6a8424f4e00e",
+    "projection_digest": "sha256:2715e254148589baa08e0d1454b9e5b770b157a554b3bf42e94119ac88834f53",
     "summary": {
       "total_cases": 7,
       "supported_cases": 7,
@@ -138,6 +138,13 @@
         "classification": "supported",
         "status": "valid",
         "semantic_support_status": "supported",
+        "category_qualification": {
+          "category_id": "sum.discount_strategy.v1",
+          "descriptor_id": "discount_strategy.ecommerce.v1",
+          "claim_status": "supported_qualified",
+          "positive_credit_eligibility": "eligible",
+          "reason_code": "qualified"
+        },
         "proof_refs": {
           "passport": "examples/ecommerce/units/pricing/discount_strategy.spec.passport.json",
           "covering_molecule_evidence": [
@@ -153,6 +160,13 @@
         "classification": "supported",
         "status": "valid",
         "semantic_support_status": "supported",
+        "category_qualification": {
+          "category_id": "data.pricing_quote.v1",
+          "descriptor_id": "pricing_quote.ecommerce.v1",
+          "claim_status": "supported_qualified",
+          "positive_credit_eligibility": "eligible",
+          "reason_code": "qualified"
+        },
         "proof_refs": {
           "passport": "examples/ecommerce/units/pricing/pricing_quote.spec.passport.json",
           "covering_molecule_evidence": [

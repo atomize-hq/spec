@@ -14,6 +14,9 @@ use spec_core::benchmark::{
     benchmark_root_path, benchmark_snapshot_path, compute_projection_digest, load_labels,
     project_benchmark, readability_review_path,
 };
+use spec_core::category_truth::{
+    CategoryQualification, ConsumerKind, is_seam_category_claim_candidate, qualify_category_claim,
+};
 use spec_core::escape_hatch::{EscapeHatchGate, EscapeHatchGateStatus};
 use spec_core::export::{build_export_bundle_with_benchmarks, build_plan_export_bundle};
 use spec_core::generator::{
@@ -41,8 +44,8 @@ use spec_core::passport::{
     apply_projected_passport_truth, build_passport_preserving_proof_state_with_context,
     build_passport_with_evidence, compute_contract_hash, ensure_gitignore_entry,
     passport_evidence_for_target, passport_target_proof, project_passport_truth_with_context,
-    read_passport, resolve_passport_freshness_for_target, rfc3339_now, target_proof_for_write,
-    write_passport,
+    read_passport, refresh_passport_target_proofs, resolve_passport_freshness_for_target,
+    rfc3339_now, target_proof_for_write, write_passport,
 };
 use spec_core::pipeline::{
     ParsedCargoTestResult, Verbosity, bun_available, cargo_available, output_module_prefix,
@@ -132,7 +135,7 @@ impl ValidationSpecCollection {
 }
 
 const VALIDATE_JSON_SCHEMA_VERSION: u8 = 3;
-const STATUS_JSON_SCHEMA_VERSION: u8 = 4;
+const STATUS_JSON_SCHEMA_VERSION: u8 = 5;
 const EXPORT_ERROR_JSON_SCHEMA_VERSION: u8 = 4;
 const CONCURRENT_PASSPORT_WRITER_TTL_SECS: u64 = 300;
 
@@ -208,6 +211,8 @@ struct JsonStatusEntry {
     escape_hatch_gate: Option<EscapeHatchGate>,
     #[serde(skip_serializing_if = "Option::is_none")]
     semantic_review: Option<SemanticReview>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category_qualification: Option<CategoryQualification>,
 }
 
 #[derive(Clone, Serialize)]
@@ -255,6 +260,43 @@ fn workspace_config_error_to_json_entry(err: &WorkspaceConfigError) -> JsonError
         id: None,
         path2: None,
         cycle: None,
+    }
+}
+
+struct CliProjectedUnitTruth {
+    preserved_truth: spec_core::passport::ProjectedPassportTruth,
+    category_qualification: Option<CategoryQualification>,
+}
+
+fn project_cli_unit_truth(
+    spec: &LoadedSpec,
+    existing_passport: Option<&spec_core::passport::Passport>,
+    projection_context: &PassportProjectionContext<'_>,
+    semantic_review_context: &SemanticReviewContext<'_>,
+    consumer_kind: ConsumerKind,
+) -> CliProjectedUnitTruth {
+    let mut refreshed_passport = existing_passport.cloned();
+    if let Some(passport) = refreshed_passport.as_mut() {
+        refresh_passport_target_proofs(passport, spec);
+    }
+
+    let preserved_truth = project_passport_truth_with_context(
+        spec,
+        refreshed_passport.as_ref(),
+        projection_context,
+        semantic_review_context,
+    );
+    let category_qualification = preserved_truth
+        .semantic_review
+        .as_ref()
+        .filter(|review| is_seam_category_claim_candidate(review))
+        .map(|review| {
+            qualify_category_claim(consumer_kind, Some(review), Some(spec.spec.id.as_str()))
+        });
+
+    CliProjectedUnitTruth {
+        preserved_truth,
+        category_qualification,
     }
 }
 
@@ -1426,12 +1468,14 @@ fn build_benchmark_projection_request(
     for spec in &validation_specs.root_specs {
         let source_path = Path::new(&spec.source.file_path);
         let passport = read_passport(source_path).unwrap_or_default();
-        let projected_truth = project_passport_truth_with_context(
+        let projected_unit_truth = project_cli_unit_truth(
             spec,
             passport.as_ref(),
             &projection_context,
             &semantic_review_context,
+            ConsumerKind::Benchmark,
         );
+        let projected_truth = projected_unit_truth.preserved_truth;
         let target_evidence = passport
             .as_ref()
             .and_then(|passport| passport_evidence_for_target(passport, target_language));
@@ -1455,6 +1499,7 @@ fn build_benchmark_projection_request(
             BenchmarkCaseTruth {
                 status: benchmark_truth_status_from_health(health.status),
                 reason: health.reason,
+                semantic_review: projected_truth.semantic_review.clone(),
                 semantic_support_status: semantic_review
                     .as_ref()
                     .map(|review| review.effective_support_status()),
@@ -1740,12 +1785,14 @@ fn status_command_for_target(
                     None
                 }
             };
-            let projected_truth = project_passport_truth_with_context(
+            let projected_unit_truth = project_cli_unit_truth(
                 spec,
                 passport.as_ref(),
                 &projection_context,
                 &semantic_review_context,
+                ConsumerKind::Status,
             );
+            let projected_truth = projected_unit_truth.preserved_truth;
             let target_evidence = passport
                 .as_ref()
                 .and_then(|passport| passport_evidence_for_target(passport, target_language));
@@ -1783,6 +1830,7 @@ fn status_command_for_target(
                 proof_coverage,
                 escape_hatch_gate,
                 semantic_review,
+                category_qualification: projected_unit_truth.category_qualification,
             });
         }
 
@@ -1809,6 +1857,7 @@ fn status_command_for_target(
                         proof_coverage: None,
                         escape_hatch_gate: None,
                         semantic_review: None,
+                        category_qualification: None,
                     });
                     continue;
                 }
@@ -1829,6 +1878,7 @@ fn status_command_for_target(
                 proof_coverage: None,
                 escape_hatch_gate: None,
                 semantic_review: None,
+                category_qualification: None,
             });
         }
 
@@ -2255,12 +2305,14 @@ fn build_full_benchmark_projection_request(
     for spec in &validation_specs.root_specs {
         let source_path = Path::new(&spec.source.file_path);
         let passport = read_passport(source_path).unwrap_or_default();
-        let projected_truth = project_passport_truth_with_context(
+        let projected_unit_truth = project_cli_unit_truth(
             spec,
             passport.as_ref(),
             &projection_context,
             &semantic_review_context,
+            ConsumerKind::Snapshot,
         );
+        let projected_truth = projected_unit_truth.preserved_truth;
         let target_evidence = passport
             .as_ref()
             .and_then(|passport| passport_evidence_for_target(passport, target_language));
@@ -2284,6 +2336,7 @@ fn build_full_benchmark_projection_request(
             BenchmarkCaseTruth {
                 status: snapshot_benchmark_truth_status_from_health(health.status),
                 reason: health.reason,
+                semantic_review: projected_truth.semantic_review.clone(),
                 semantic_support_status: semantic_review
                     .as_ref()
                     .map(|review| review.effective_support_status()),
@@ -7379,6 +7432,7 @@ body:
         let supported_incomplete_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
             compatibility_key: "data.pricing_quote.v1".to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7393,6 +7447,7 @@ body:
         let supported_failing_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::SemanticDrift,
             compatibility_key: "data.pricing_quote.v1".to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],

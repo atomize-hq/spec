@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.3 - 2026-05-22
+
+### Added
+
+- **I7 now ships a canonical scope-closure packet trail** — `.runs/i7/` records the frozen basis, bounded-generics packet, async/IO packet, decision freeze, authority merge, and explicit I8 handoff for the post-I6 Rust V1 closeout.
+
+### Changed
+
+- **Repo-facing docs now ratify one final pre-I8 Rust V1 story** — bounded generics defer to `V1.1`, Rust V1 stays synchronous-only, `BENCH-CROSSLIB` remains the companion negative-proof wall, and I8 inherits the existing five-command proof wall unchanged.
+
 ## 0.15.2 - 2026-05-21
 
 ### Added

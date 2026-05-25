@@ -1178,11 +1178,24 @@ pub fn read_passport(source_path: &Path) -> Result<Option<Passport>> {
 pub fn write_passport(passport: &Passport, source_file_path: &Path) -> Result<()> {
     let mut passport = passport.clone();
     sync_rust_target_proof_fields(&mut passport);
+    let passport_path = passport_path_for(source_file_path)?;
+    if let Ok(Some(existing)) = read_passport(source_file_path)
+        && passports_equal_ignoring_generated_at(&passport, &existing)
+    {
+        return Ok(());
+    }
     let json = serde_json::to_string_pretty(&passport).map_err(|e| SpecError::Generator {
         message: format!("Failed to serialize passport for '{}': {e}", passport.id),
     })?;
-    let passport_path = passport_path_for(source_file_path)?;
     write_generated_file(&passport_path.display().to_string(), &json)
+}
+
+fn passports_equal_ignoring_generated_at(left: &Passport, right: &Passport) -> bool {
+    let mut left = left.clone();
+    let mut right = right.clone();
+    left.generated_at.clear();
+    right.generated_at.clear();
+    left == right
 }
 
 fn sync_rust_target_proof_fields(passport: &mut Passport) {
@@ -1756,6 +1769,117 @@ mod tests {
             })
             .collect();
         spec
+    }
+
+    fn make_supported_discount_strategy_sum_seam() -> LoadedSpec {
+        LoadedSpec {
+            source: SpecSource {
+                file_path: "units/pricing/discount_strategy.unit.spec".to_string(),
+                id: "pricing/discount_strategy".to_string(),
+            },
+            spec: SpecStruct {
+                id: "pricing/discount_strategy".to_string(),
+                kind: "sum".to_string(),
+                intent: Intent {
+                    why: "Represent discount strategies that cap fixed discounts at the subtotal."
+                        .to_string(),
+                },
+                contract: None,
+                deps: vec![],
+                imports: vec![],
+                body: Body::default(),
+                local_tests: vec![],
+                links: None,
+                spec_version: Some("0.3.0".to_string()),
+                extensions: UnitExtensions {
+                    sum: Some(AuthoredSumShape {
+                        variants: IndexMap::from([
+                            ("none".to_string(), AuthoredSumVariant::default()),
+                            (
+                                "percentage".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "rate".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                            (
+                                "fixed_amount".to_string(),
+                                AuthoredSumVariant {
+                                    fields: IndexMap::from([(
+                                        "amount".to_string(),
+                                        AuthoredField {
+                                            type_: "Decimal".to_string(),
+                                        },
+                                    )]),
+                                },
+                            ),
+                        ]),
+                    }),
+                    methods: vec![
+                        AuthoredMethod {
+                            id: "discount_amount".to_string(),
+                            intent: Intent {
+                                why: "Return the capped discount amount to subtract from the subtotal."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: Some(IndexMap::from([(
+                                    "subtotal".to_string(),
+                                    "Decimal".to_string(),
+                                )])),
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+            match self {
+                Self::None => Decimal::ZERO,
+                Self::Percentage { rate } => subtotal * *rate,
+                Self::FixedAmount { amount } => (*amount).min(subtotal),
+            }
+        }"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                        AuthoredMethod {
+                            id: "discounted_subtotal".to_string(),
+                            intent: Intent {
+                                why: "Return the subtotal after applying the selected discount strategy."
+                                    .to_string(),
+                            },
+                            receiver: "shared_ref".to_string(),
+                            contract: Some(Contract {
+                                inputs: Some(IndexMap::from([(
+                                    "subtotal".to_string(),
+                                    "Decimal".to_string(),
+                                )])),
+                                returns: Some("Decimal".to_string()),
+                                invariants: vec![],
+                            }),
+                            deps: vec![],
+                            lowering: Some(AuthoredMethodLowering {
+                                rust: Some(AuthoredRustMethodLowering {
+                                    body: r#"{
+            subtotal - self.discount_amount(subtotal)
+        }"#
+                                    .to_string(),
+                                }),
+                            }),
+                        },
+                    ],
+                    backends: None,
+                    ..UnitExtensions::default()
+                },
+            },
+        }
     }
 
     fn make_discount_strategy_molecule_test() -> LoadedMoleculeTest {
@@ -2564,6 +2688,34 @@ mod tests {
     }
 
     #[test]
+    fn write_passport_skips_timestamp_only_rewrites() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+        fs::write(&source_path, "").unwrap();
+
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path.to_str().unwrap(),
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![],
+        );
+        let first = build_passport(&spec, "2026-04-04T00:00:00Z");
+        write_passport(&first, &source_path).unwrap();
+        let passport_path = dir.path().join("apply_tax.spec.passport.json");
+        let first_content = fs::read_to_string(&passport_path).unwrap();
+
+        let second = build_passport(&spec, "2026-04-05T00:00:00Z");
+        write_passport(&second, &source_path).unwrap();
+        let second_content = fs::read_to_string(&passport_path).unwrap();
+
+        assert_eq!(second_content, first_content);
+        let parsed: Passport = serde_json::from_str(&second_content).unwrap();
+        assert_eq!(parsed.generated_at, "2026-04-04T00:00:00Z");
+    }
+
+    #[test]
     fn build_passport_with_evidence_serializes_observed_results() {
         let spec = make_loaded_spec(
             "pricing/apply_tax",
@@ -2879,6 +3031,51 @@ mod tests {
 
         let rebuilt = build_passport_preserving_proof_state_with_context(
             &wrapper,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_keeps_missing_sum_seam_descriptor_id() {
+        let spec = make_supported_discount_strategy_sum_seam();
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let mut supported_review = evaluate_semantic_review(&spec).unwrap();
+        supported_review.descriptor_id = None;
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &spec,
+            "2026-04-23T00:00:00Z",
+            Some(&existing),
+            existing.contract_hash.clone(),
+            &semantic_review_context,
+        );
+
+        assert_eq!(rebuilt.semantic_review, Some(supported_review));
+    }
+
+    #[test]
+    fn build_passport_preserving_proof_state_with_context_keeps_missing_data_seam_descriptor_id() {
+        let spec = make_loaded_data_seam(
+            "pricing/pricing_quote",
+            "units/pricing/pricing_quote.unit.spec",
+        );
+        let specs_by_id = HashMap::from([(spec.spec.id.clone(), spec.clone())]);
+        let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+        let mut supported_review = evaluate_semantic_review(&spec).unwrap();
+        supported_review.descriptor_id = None;
+        let mut existing = make_current_passport(&spec);
+        existing.semantic_review = Some(supported_review.clone());
+
+        let rebuilt = build_passport_preserving_proof_state_with_context(
+            &spec,
             "2026-04-23T00:00:00Z",
             Some(&existing),
             existing.contract_hash.clone(),

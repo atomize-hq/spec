@@ -551,6 +551,20 @@ fn rewrite_json_field(path: &Path, field: &str, value: Value) {
     fs::write(path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
 }
 
+fn clear_passport_semantic_review_descriptor_id(passport_path: &Path) -> Value {
+    let mut passport = read_passport_json(passport_path);
+    passport["semantic_review"]
+        .as_object_mut()
+        .unwrap()
+        .remove("descriptor_id");
+    fs::write(
+        passport_path,
+        serde_json::to_string_pretty(&passport).unwrap(),
+    )
+    .unwrap();
+    read_passport_json(passport_path)["semantic_review"].clone()
+}
+
 fn write_status_project(project_dir: &Path) -> PathBuf {
     let units_dir = project_dir.join("units");
     let pricing_dir = units_dir.join("pricing");
@@ -750,6 +764,7 @@ fn supported_pricing_quote_semantic_review(
     SemanticReview {
         verdict,
         compatibility_key: DATA_SEAM_COMPATIBILITY_KEY.to_string(),
+        descriptor_id: Some("pricing_quote.ecommerce.v1".to_string()),
         support_status: None,
         unsupported_reason_codes: vec![],
         rewrite_hints: vec![],
@@ -1240,6 +1255,7 @@ fn unsupported_function_semantic_review(summary: &str) -> SemanticReview {
     SemanticReview {
         verdict: SemanticVerdict::UnderSpecified,
         compatibility_key: "unsupported.function.v1".to_string(),
+        descriptor_id: None,
         support_status: Some(SemanticSupportStatus::Unsupported),
         unsupported_reason_codes: vec![
             UnsupportedFunctionReasonCode::UnsupportedRequiredArgumentExpression,
@@ -1265,6 +1281,7 @@ fn supported_function_semantic_review(
     SemanticReview {
         verdict,
         compatibility_key: compatibility_key.to_string(),
+        descriptor_id: None,
         support_status: Some(SemanticSupportStatus::Supported),
         unsupported_reason_codes: vec![],
         rewrite_hints: vec![],
@@ -2686,7 +2703,7 @@ local_tests:
     assert!(output.status.success());
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 4);
+    assert_eq!(bundle["schema_version"], 5);
     assert_eq!(bundle["units"].as_array().unwrap().len(), 2);
     assert!(bundle.get("graph").is_some());
     assert!(bundle.get("molecule_tests").is_some());
@@ -4737,6 +4754,13 @@ fn seed_passport_semantic_review_compatibility_key(
 ) -> Value {
     let mut passport = read_passport_json(passport_path);
     passport["semantic_review"]["compatibility_key"] = serde_json::json!(compatibility_key);
+    if compatibility_key == DATA_SEAM_COMPATIBILITY_KEY {
+        passport["semantic_review"]["descriptor_id"] =
+            serde_json::json!("pricing_quote.ecommerce.v1");
+    } else if compatibility_key == SUM_SEAM_COMPATIBILITY_KEY {
+        passport["semantic_review"]["descriptor_id"] =
+            serde_json::json!("discount_strategy.ecommerce.v1");
+    }
     fs::write(
         passport_path,
         serde_json::to_string_pretty(&passport).unwrap(),
@@ -5374,6 +5398,58 @@ fn spec_generate_preserves_passport_evidence_from_prior_test() {
         after_generate.contains("\"contract_hash\": \"sha256:"),
         "spec generate must not erase contract_hash: {after_generate}"
     );
+}
+
+#[test]
+fn spec_generate_second_run_keeps_tracked_passport_bytes_when_nothing_changed() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed passports", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+
+    let first_generate = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["generate", "units/pricing", "--output", "src/generated"])
+        .output()
+        .expect("failed to run first spec generate");
+    assert_output_success(
+        "first spec generate should succeed after spec test",
+        &first_generate,
+    );
+    let first_content = fs::read_to_string(&passport_path).unwrap();
+
+    let second_generate = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["generate", "units/pricing", "--output", "src/generated"])
+        .output()
+        .expect("failed to run second spec generate");
+    assert_output_success(
+        "second spec generate should succeed after spec test",
+        &second_generate,
+    );
+    let second_content = fs::read_to_string(&passport_path).unwrap();
+
+    assert_eq!(second_content, first_content);
 }
 
 #[test]
@@ -6448,7 +6524,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
         "status stays non-green because sibling helper units remain untested"
     );
     let status_json = parse_stdout_json(&status_output);
-    assert_eq!(status_json["schema_version"], 4);
+    assert_eq!(status_json["schema_version"], 5);
     let unit = status_units(&status_json)
         .iter()
         .find(|unit| unit["id"] == "pricing/pricing_quote")
@@ -6459,7 +6535,7 @@ fn spec_status_json_and_export_include_compatibility_key_for_data_semantic_revie
     let export_output = run_in(&project_dir, &["export", "units"]);
     assert_output_success("supported data export should succeed", &export_output);
     let export_json = parse_stdout_json(&export_output);
-    assert_eq!(export_json["schema_version"], 4);
+    assert_eq!(export_json["schema_version"], 5);
     let passport = export_json["passports"]
         .as_array()
         .unwrap()
@@ -8326,7 +8402,7 @@ body:
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     let units = status_units(&json);
     assert_eq!(units.len(), 1);
     assert_eq!(units[0]["id"], "pricing/bad");
@@ -8362,7 +8438,7 @@ fn spec_status_json_loader_error_surfaces_in_response() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert!(
         !loader_errors.is_empty(),
@@ -8661,7 +8737,7 @@ fn spec_status_zero_roots_is_non_green() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     assert_eq!(json["roots"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors[0]["code"], "SPEC_NO_LIBRARY_ROOTS");
@@ -13214,7 +13290,7 @@ fn export_emits_schema_v3_bundle_for_valid_cross_library_dep() {
     assert!(output.status.success(), "export should succeed");
 
     let bundle: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(bundle["schema_version"], 4);
+    assert_eq!(bundle["schema_version"], 5);
     let edges = bundle["graph"]["edges"].as_array().unwrap();
     assert!(
         edges.iter().any(|edge| {
@@ -13962,7 +14038,7 @@ fn status_json_surfaces_missing_library_path_as_loader_error() {
     );
 
     let json = parse_stdout_json(&output);
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     assert_eq!(json["units"], serde_json::json!([]));
     let loader_errors = json["loader_errors"].as_array().unwrap();
     assert_eq!(loader_errors.len(), 1);
@@ -14879,7 +14955,7 @@ fn plan_export_matches_checked_in_fixture_and_preserves_spec_export_surface() {
     let spec_export = run_in(&ecommerce_dir, &["export", "units"]);
     assert_output_success("spec export should remain unchanged", &spec_export);
     let spec_export_json = parse_stdout_json(&spec_export);
-    assert_eq!(spec_export_json["schema_version"], 4);
+    assert_eq!(spec_export_json["schema_version"], 5);
     assert!(spec_export_json.get("plan").is_none(), "{spec_export_json}");
     assert!(
         spec_export_json.get("units").is_some(),
@@ -14929,7 +15005,7 @@ fn status_benchmark_root_contract_matches_frozen_fixture() {
     assert_output_success("benchmark-root status should succeed", &output);
     let json = parse_stdout_json(&output);
 
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     assert_eq!(json["benchmarks"][0]["path_scope"], "full");
     assert_eq!(json["benchmarks"][0]["benchmark_status"], "passing");
     assert!(
@@ -15101,7 +15177,7 @@ fn export_benchmark_root_contract_matches_frozen_fixture() {
     assert_output_success("benchmark-root export should succeed", &output);
     let json = parse_stdout_json(&output);
 
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     assert_eq!(json["benchmarks"][0]["path_scope"], "full");
     assert_eq!(json["benchmarks"][0]["benchmark_status"], "passing");
     assert!(
@@ -15116,6 +15192,163 @@ fn export_benchmark_root_contract_matches_frozen_fixture() {
         normalize_export_contract_json(json),
         "export-ecommerce-full.json",
     );
+}
+
+#[test]
+fn benchmark_read_surfaces_do_not_backfill_missing_supported_seam_descriptor_ids() {
+    let (_temp_dir, repo_dir) = copy_benchmark_repo_fixture();
+    let data_passport_path =
+        repo_dir.join("examples/ecommerce/units/pricing/pricing_quote.spec.passport.json");
+    let sum_passport_path =
+        repo_dir.join("examples/ecommerce/units/pricing/discount_strategy.spec.passport.json");
+
+    let stored_data_review = clear_passport_semantic_review_descriptor_id(&data_passport_path);
+    let stored_sum_review = clear_passport_semantic_review_descriptor_id(&sum_passport_path);
+    assert_eq!(stored_data_review["descriptor_id"], Value::Null);
+    assert_eq!(stored_sum_review["descriptor_id"], Value::Null);
+
+    let status_output = run_in(
+        &repo_dir,
+        &["status", "examples/ecommerce/units", "--format", "json"],
+    );
+    assert_output_success(
+        "benchmark-root status should not backfill missing seam descriptor ids",
+        &status_output,
+    );
+    let status_json = parse_stdout_json(&status_output);
+    let status_benchmark = status_json["benchmarks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|benchmark| benchmark["benchmark_id"] == "BENCH-ECOM")
+        .unwrap();
+    assert_eq!(status_benchmark["accounting_status"], "invalid");
+    assert_eq!(status_benchmark["benchmark_status"], "invalid");
+
+    for unit_id in ["pricing/pricing_quote", "pricing/discount_strategy"] {
+        let status_unit = status_units(&status_json)
+            .iter()
+            .find(|unit| unit["id"] == unit_id)
+            .unwrap();
+        assert_eq!(status_unit["semantic_review"]["descriptor_id"], Value::Null);
+        assert_eq!(
+            status_unit["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            status_unit["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+
+        let benchmark_case = status_benchmark["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["carrier_id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            benchmark_case["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            benchmark_case["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+        assert_eq!(
+            benchmark_case["counts_as_supported_positive"],
+            Value::Bool(false)
+        );
+    }
+
+    let export_output = run_in(&repo_dir, &["export", "examples/ecommerce/units"]);
+    assert_output_success(
+        "benchmark-root export should not backfill missing seam descriptor ids",
+        &export_output,
+    );
+    let export_json = parse_stdout_json(&export_output);
+    let export_benchmark = export_json["benchmarks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|benchmark| benchmark["benchmark_id"] == "BENCH-ECOM")
+        .unwrap();
+    assert_eq!(export_benchmark["accounting_status"], "invalid");
+    assert_eq!(export_benchmark["benchmark_status"], "invalid");
+
+    for unit_id in ["pricing/pricing_quote", "pricing/discount_strategy"] {
+        let projected_unit = export_json["projected_units"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|unit| unit["id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            projected_unit["semantic_review"]["descriptor_id"],
+            Value::Null
+        );
+        assert_eq!(
+            projected_unit["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            projected_unit["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+
+        let benchmark_case = export_benchmark["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["carrier_id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            benchmark_case["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            benchmark_case["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+        assert_eq!(
+            benchmark_case["counts_as_supported_positive"],
+            Value::Bool(false)
+        );
+    }
+
+    let snapshot_output = run_in(&repo_dir, &["benchmark", "snapshot", "BENCH-ECOM"]);
+    assert_output_success(
+        "benchmark snapshot should not backfill missing seam descriptor ids",
+        &snapshot_output,
+    );
+    let snapshot: Value = serde_json::from_str(
+        &fs::read_to_string(repo_dir.join("benchmarks/snapshots/BENCH-ECOM.snapshot.json"))
+            .unwrap(),
+    )
+    .unwrap();
+    let snapshot_projection = &snapshot["projection"];
+    assert_eq!(snapshot_projection["accounting_status"], "invalid");
+    assert_eq!(snapshot_projection["benchmark_status"], "invalid");
+
+    for unit_id in ["pricing/pricing_quote", "pricing/discount_strategy"] {
+        let benchmark_case = snapshot_projection["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["carrier_id"] == unit_id)
+            .unwrap();
+        assert_eq!(
+            benchmark_case["category_qualification"]["claim_status"],
+            "unqualified"
+        );
+        assert_eq!(
+            benchmark_case["category_qualification"]["reason_code"],
+            "descriptor_id_missing"
+        );
+        assert_eq!(
+            benchmark_case["counts_as_supported_positive"],
+            Value::Bool(false)
+        );
+    }
 }
 
 #[test]
@@ -15156,10 +15389,13 @@ fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(ecom_snapshot["projection"]["benchmark_status"], "passing");
+    assert_eq!(
+        ecom_snapshot["projection"]["benchmark_status"],
+        "incomplete"
+    );
     assert_eq!(
         ecom_snapshot["projection"]["readability_review_status"],
-        "current"
+        "stale"
     );
 
     let crosslib_snapshot: Value = serde_json::from_str(
@@ -15186,12 +15422,12 @@ fn benchmark_snapshot_writes_seeded_positive_negative_and_reserved_outputs() {
     .unwrap();
     assert_eq!(
         service_snapshot["projection"]["benchmark_status"],
-        "passing"
+        "invalid"
     );
-    assert_eq!(service_snapshot["projection"]["gate_status"], "satisfied");
+    assert_eq!(service_snapshot["projection"]["gate_status"], "open");
     assert_eq!(
         service_snapshot["projection"]["readability_review_status"],
-        "current"
+        "stale"
     );
 }
 
@@ -15246,7 +15482,7 @@ fn status_json_surfaces_invalid_benchmark_registry_root_machine_readably() {
     normalized_loader_errors[0]["path"] =
         Value::String("/tmp/benchmark-fixture/benchmarks/labels.json".to_string());
 
-    assert_eq!(json["schema_version"], 4);
+    assert_eq!(json["schema_version"], 5);
     assert_eq!(loader_errors.len(), 1);
     assert_eq!(
         normalized_loader_errors,
