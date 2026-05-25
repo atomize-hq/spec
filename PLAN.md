@@ -5,8 +5,7 @@ Milestone: **M101**
 Implementation readiness: **ready to execute**  
 Plan scope: **land one explicit category-truth contract for seam-backed support claims across benchmark accounting, `spec status`, `spec export`, and snapshot/readability projections**  
 Base branch: **main**  
-Working branch: **`feat/i8-final-proof-run`**  
-Validated at commit: **`4c41fb3`**  
+Working branch: **`feat/m101-category-truth-registry`**  
 Last rewritten: **2026-05-25**
 
 Supersedes:

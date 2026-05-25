@@ -5,8 +5,7 @@ Milestone: **M101**
 Plan authority: **`/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Historical context only: **prior `ORCH_PLAN.md` content is superseded in full**  
 Primary workspace: **`/home/azureuser/__Active_Code/atomize-hq/spec`**  
-Parent baseline branch: **`feat/i8-final-proof-run`**  
-Parent baseline head: **`4c41fb36845b30d5527554b6a365f15f6fa58bc5`**  
+Working branch: **`feat/m101-category-truth-registry`**  
 Last rewritten: **2026-05-25**
 
 ## Summary
@@ -21,7 +20,7 @@ Last rewritten: **2026-05-25**
 - `spec-cli/src/commands.rs` is a known merge-conflict hotspot because
   `PLAN.md` requires one shared helper there. No worker lane may touch it.
 - Final snapshot/readability refresh happens only after the benchmark, export,
-  and CLI projections agree from the same parent baseline.
+  and CLI projections agree from the same working branch.
 
 ## Outcome Target
 
@@ -42,9 +41,8 @@ honestly with fresh local verification:
 
 ## Hard Guards
 
-- Preserve the parent baseline exactly as:
-  - branch: `feat/i8-final-proof-run`
-  - head: `4c41fb36845b30d5527554b6a365f15f6fa58bc5`
+- Preserve the working branch for this run as:
+  - branch: `feat/m101-category-truth-registry`
 - Treat `PLAN.md` as the authority. Do not change wedge scope in the
   orchestration flow.
 - Do not touch files outside the lane-owned write set.
@@ -57,9 +55,9 @@ honestly with fresh local verification:
   review presence alone.
 - Do not merge a lane that passes its local tests but fails an out-of-scope
   verification command.
-- Stop and escalate if the parent baseline head is no longer the branch head
-  when execution starts. The runbook assumes that exact commit as the frozen
-  parent base.
+- Stop and escalate if execution starts from the wrong branch. This runbook
+  assumes `feat/m101-category-truth-registry` is the launch surface for the
+  wedge.
 
 ## Parent Ownership
 
@@ -128,20 +126,20 @@ Worker worktrees and branches:
     `/home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/blocker`
 
 No dedicated worker worktree is created for `commands.rs`. That lane stays in
-the parent checkout on the parent baseline branch.
+the parent checkout on the working branch.
 
 Exact worktree creation commands after Gate 1:
 
 ```bash
 mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/benchmark -b ws/ct-benchmark feat/i8-final-proof-run
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/export -b ws/ct-export feat/i8-final-proof-run
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/benchmark -b ws/ct-benchmark feat/m101-category-truth-registry
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/export -b ws/ct-export feat/m101-category-truth-registry
 ```
 
 Conditional blocker worktree command:
 
 ```bash
-git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/blocker -b ws/ct-blocker feat/i8-final-proof-run
+git -C /home/azureuser/__Active_Code/atomize-hq/spec worktree add /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth/blocker -b ws/ct-blocker feat/m101-category-truth-registry
 ```
 
 ## Canonical State And Queue Files
@@ -361,7 +359,7 @@ owns:
 ## Gate Model
 
 - Gate 0: preflight freeze
-  - confirm branch and exact head
+  - confirm branch and current head
   - record current dirty files without reverting them
   - create run state and worktree plan
   - on pass, parent updates:
@@ -483,7 +481,7 @@ When a task or gate blocks:
 1. Initialize `.runs/category-truth/` in the parent checkout.
 2. Record branch, head, and dirty files in `preflight.json`,
    `session-log.md`, `tasks.json`, and the preflight sentinel.
-3. Execute the contract spine locally on `feat/i8-final-proof-run`.
+3. Execute the contract spine locally on `feat/m101-category-truth-registry`.
 4. Run contract-spine verification and archive accepted outputs under
    `verification/contract-spine/`.
 5. Update parent task state for `task/ct-p1-contract-spine` to `done`.
@@ -551,7 +549,7 @@ state closeout, and final wedge-truth confirmation are complete.
 - Merge order is fixed:
   - export first because it is the smaller, more isolated core surface
   - benchmark second because its invalid `BENCH-SERVICE` truth becomes the
-    parent baseline for CLI and snapshot adoption
+    working-branch baseline for CLI and snapshot adoption
 - Do not merge a worker branch directly if it touched a forbidden file. Reject
   and rerun the lane instead.
 - If a worker lane conflicts with unrelated dirty parent files, stop and
@@ -598,8 +596,8 @@ mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/spec-category-truth
 
 Acceptance:
 
-- branch is `feat/i8-final-proof-run`
-- head is `4c41fb36845b30d5527554b6a365f15f6fa58bc5`
+- branch is `feat/m101-category-truth-registry`
+- current head is recorded for the run
 - unrelated dirty files are recorded, not reverted
 - `tasks.json`, `session-log.md`, and the preflight sentinel all agree
 
@@ -802,7 +800,7 @@ Expected final truth:
 ### Workstream Acceptance
 
 - Preflight is accepted only when:
-  - branch and head match the frozen baseline
+  - branch matches `feat/m101-category-truth-registry`
   - dirty files are recorded
   - canonical run-state files are initialized
 - Contract spine is accepted only when:
@@ -863,8 +861,7 @@ Otherwise mark the run `blocked` and record the narrowest honest blocker in
 ## Assumptions
 
 - The current `PLAN.md` frozen decisions remain valid at execution time.
-- The exact parent baseline head remains the correct launch point for this
-  wedge.
+- The working branch remains the correct launch point for this wedge.
 - Benchmark and export adoption remain separable after the contract spine lands.
 - `commands.rs` remains the only shared-helper hotspot significant enough to
   justify parent-only ownership.
