@@ -7432,6 +7432,7 @@ body:
         let supported_incomplete_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::UnderSpecified,
             compatibility_key: "data.pricing_quote.v1".to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7446,6 +7447,7 @@ body:
         let supported_failing_review = SemanticReview {
             verdict: spec_core::semantic_review::SemanticVerdict::SemanticDrift,
             compatibility_key: "data.pricing_quote.v1".to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
