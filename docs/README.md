@@ -30,6 +30,8 @@ and durable decisions aligned.
   The detailed `kind:data` taxonomy. Use this when you need the exact supported data descriptor, its benchmark role, and the remaining unnamed pressure inside seam categories.
 - [`sum_category_taxonomy_v0.1.md`](./sum_category_taxonomy_v0.1.md)
   The detailed `kind:sum` taxonomy. Use this when you need the exact supported sum descriptor, its benchmark role, and the current split between canonical detector wording and the broader service sibling surface.
+- [`category_truth_contract_v0.1.md`](./category_truth_contract_v0.1.md)
+  The cross-cutting honesty contract for category-backed read-side claims. Use this when you need to know how benchmark, status, export, and future consumers should decide support and positive-credit eligibility without inferring from partial truth.
 - [`examples/ecommerce/README.md`](../examples/ecommerce/README.md)
   The canonical concrete walkthrough. Use it when you want one real example root to run and inspect.
 - [`AGENTS.md`](../AGENTS.md)
