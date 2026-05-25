@@ -62,6 +62,11 @@ Files that change during that loop:
 - unit proof in `*.spec.passport.json`
 - molecule proof in `*.test.evidence.json`
 
+`src/generated/` is ephemeral output and is gitignored in this repo. The
+canonical example's proof artifacts are tracked on purpose so `spec status` stays
+truthful on a fresh clone. Re-running `spec generate` on an unchanged tree
+should not rewrite tracked passports just to bump `generated_at`.
+
 If you install the binary, the command name is `spec`, but the repo-native
 `cargo run -p spec-cli -- ...` flow is the safest place to start.
 

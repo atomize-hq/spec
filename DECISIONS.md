@@ -74,6 +74,7 @@ Until then: JSON Schema + semantic validation in Rust is the implementation path
 - The pipeline commands are optimized for validate → generate → cargo execution in one local flow.
 - The existing `.spec-generated` marker and output cleanup rules already model the output tree as spec-owned.
 - Teams that want committed generated code for diffs or IDE discoverability can continue to use `spec generate` directly and commit that output intentionally.
+- Co-located proof artifacts may still be tracked by examples or fixtures, so no-op `spec generate` runs should avoid timestamp-only passport rewrites when no proof or authored truth changed.
 
 **Revisit when**
 

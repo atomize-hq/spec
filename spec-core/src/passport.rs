@@ -1178,11 +1178,24 @@ pub fn read_passport(source_path: &Path) -> Result<Option<Passport>> {
 pub fn write_passport(passport: &Passport, source_file_path: &Path) -> Result<()> {
     let mut passport = passport.clone();
     sync_rust_target_proof_fields(&mut passport);
+    let passport_path = passport_path_for(source_file_path)?;
+    if let Ok(Some(existing)) = read_passport(source_file_path)
+        && passports_equal_ignoring_generated_at(&passport, &existing)
+    {
+        return Ok(());
+    }
     let json = serde_json::to_string_pretty(&passport).map_err(|e| SpecError::Generator {
         message: format!("Failed to serialize passport for '{}': {e}", passport.id),
     })?;
-    let passport_path = passport_path_for(source_file_path)?;
     write_generated_file(&passport_path.display().to_string(), &json)
+}
+
+fn passports_equal_ignoring_generated_at(left: &Passport, right: &Passport) -> bool {
+    let mut left = left.clone();
+    let mut right = right.clone();
+    left.generated_at.clear();
+    right.generated_at.clear();
+    left == right
 }
 
 fn sync_rust_target_proof_fields(passport: &mut Passport) {
@@ -2672,6 +2685,34 @@ mod tests {
                 invariants: vec![],
             }
         );
+    }
+
+    #[test]
+    fn write_passport_skips_timestamp_only_rewrites() {
+        let dir = TempDir::new().unwrap();
+        let source_path = dir.path().join("apply_tax.unit.spec");
+        fs::write(&source_path, "").unwrap();
+
+        let spec = make_loaded_spec(
+            "pricing/apply_tax",
+            source_path.to_str().unwrap(),
+            Some("0.3.0"),
+            None,
+            vec![],
+            vec![],
+        );
+        let first = build_passport(&spec, "2026-04-04T00:00:00Z");
+        write_passport(&first, &source_path).unwrap();
+        let passport_path = dir.path().join("apply_tax.spec.passport.json");
+        let first_content = fs::read_to_string(&passport_path).unwrap();
+
+        let second = build_passport(&spec, "2026-04-05T00:00:00Z");
+        write_passport(&second, &source_path).unwrap();
+        let second_content = fs::read_to_string(&passport_path).unwrap();
+
+        assert_eq!(second_content, first_content);
+        let parsed: Passport = serde_json::from_str(&second_content).unwrap();
+        assert_eq!(parsed.generated_at, "2026-04-04T00:00:00Z");
     }
 
     #[test]

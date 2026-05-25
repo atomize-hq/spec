@@ -32,6 +32,11 @@ What changes when you run that loop:
 - unit proof in `examples/ecommerce/units/**/*.spec.passport.json`
 - molecule proof in `examples/ecommerce/units/**/*.test.evidence.json`
 
+In this example, `src/generated/` is ephemeral and gitignored, but the proof
+artifacts are tracked so the example stays truthful on a fresh clone. Re-running
+`spec generate` on an unchanged tree should leave those tracked passports alone
+instead of churning `generated_at`.
+
 If you have `spec` installed locally, the shorter example-root form is:
 
 ```bash

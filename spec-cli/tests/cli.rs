@@ -5401,6 +5401,58 @@ fn spec_generate_preserves_passport_evidence_from_prior_test() {
 }
 
 #[test]
+fn spec_generate_second_run_keeps_tracked_passport_bytes_when_nothing_changed() {
+    if !cargo_available() {
+        return;
+    }
+
+    let temp_dir = temp_repo_dir();
+    write_pricing_project(temp_dir.path(), true);
+
+    let seed = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args([
+            "test",
+            "units/pricing",
+            "--output",
+            "src/generated",
+            "--crate-root",
+            temp_dir.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to seed spec passports");
+    assert_output_success("spec test should seed passports", &seed);
+
+    let passport_path = temp_dir
+        .path()
+        .join("units/pricing/apply_tax.spec.passport.json");
+
+    let first_generate = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["generate", "units/pricing", "--output", "src/generated"])
+        .output()
+        .expect("failed to run first spec generate");
+    assert_output_success(
+        "first spec generate should succeed after spec test",
+        &first_generate,
+    );
+    let first_content = fs::read_to_string(&passport_path).unwrap();
+
+    let second_generate = Command::new(bin())
+        .current_dir(temp_dir.path())
+        .args(["generate", "units/pricing", "--output", "src/generated"])
+        .output()
+        .expect("failed to run second spec generate");
+    assert_output_success(
+        "second spec generate should succeed after spec test",
+        &second_generate,
+    );
+    let second_content = fs::read_to_string(&passport_path).unwrap();
+
+    assert_eq!(second_content, first_content);
+}
+
+#[test]
 fn spec_generate_preserves_passport_provenance_from_prior_test() {
     if !cargo_available() || !git_available() {
         return;
