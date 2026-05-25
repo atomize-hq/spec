@@ -1,6 +1,7 @@
-# Category Truth Orchestration Plan
+# M101 Orchestration Plan
 
 Status: **authoritative execution runbook for the current `PLAN.md` wedge**  
+Milestone: **M101**  
 Plan authority: **`/home/azureuser/__Active_Code/atomize-hq/spec/PLAN.md`**  
 Historical context only: **prior `ORCH_PLAN.md` content is superseded in full**  
 Primary workspace: **`/home/azureuser/__Active_Code/atomize-hq/spec`**  

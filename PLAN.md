@@ -1,6 +1,7 @@
-# Category Truth Registry and Consumer Qualification Plan
+# M101: Category Truth Registry and Consumer Qualification Plan
 
 Status: **authoritative implementation plan**  
+Milestone: **M101**  
 Implementation readiness: **ready to execute**  
 Plan scope: **land one explicit category-truth contract for seam-backed support claims across benchmark accounting, `spec status`, `spec export`, and snapshot/readability projections**  
 Base branch: **main**  
@@ -15,7 +16,7 @@ Supersedes:
 Primary authority inputs:
 
 - design anchor: `docs/category_truth_contract_v0.1.md`
-- backlog anchor: `TODOS.md` under `Post-I8 truth-contract follow-up`
+- backlog anchor: `TODOS.md` under `M101 backlog`
 - current benchmark registry: `benchmarks/labels.json`
 - current producer and consumer code:
   - `spec-core/src/semantic_review.rs`
@@ -159,7 +160,7 @@ plan.
 ### TODOS cross-reference
 
 This plan is the executable version of the active backlog item already recorded
-in `TODOS.md` under `Post-I8 truth-contract follow-up`. It should land the
+in `TODOS.md` under `M101 backlog`. It should land the
 implementation wedge, not create a second overlapping TODO.
 
 ### Completeness check

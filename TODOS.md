@@ -1,6 +1,6 @@
 ## TODOs for M1 (Release 0.1)
 
-## Post-I8 truth-contract follow-up
+## M101 backlog
 
 - [ ] **Land the category truth contract implementation wedge** — The design anchor is [`docs/category_truth_contract_v0.1.md`](./docs/category_truth_contract_v0.1.md). The failure class is broader than one benchmark bug: read-side consumers must not infer supported category status or positive benchmark credit from partial truth. First adoption scope should cover `sum.discount_strategy.v1`, `data.pricing_quote.v1`, `unsupported.sum.v1`, and `unsupported.data.v1`, with benchmark accounting, `spec status`, `spec export`, and readability/snapshot surfaces consuming the same explicit contract.
 
