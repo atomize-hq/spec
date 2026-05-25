@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "spec_version": "0.3.0",
   "exported_at": "<normalized>",
   "provenance": {
@@ -393,6 +393,312 @@
         }
       ],
       "source_file": "examples/ecommerce/units/pricing/pricing_quote.unit.spec"
+    }
+  ],
+  "projected_units": [
+    {
+      "id": "money/round",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.helper.identity_passthrough.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Round monetary values (placeholder for compilation proof)."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "1 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function round with 1 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "pricing/apply_discount",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_down_nonnegative.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Apply a discount to a subtotal while keeping the result nonnegative."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "2 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_discount with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "pricing/apply_tax",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.arithmetic_leaf.monotone_up.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Add sales tax to a subtotal using a rate expressed as a decimal fraction and round the total."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "2 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "1 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function apply_tax with 2 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "pricing/calculate_total",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Combine discount and tax so a checkout flow can produce the final price."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          },
+          {
+            "path": "body.typescript",
+            "summary": "authored TypeScript body present"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function calculate_total with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "pricing/calculate_total_guarded_tax",
+      "semantic_review": {
+        "verdict": "aligned",
+        "compatibility_key": "function.wrapper.pipeline.normalized_required_arg.v1",
+        "support_status": "supported",
+        "summary": "authored semantics and executable lowering agree on the supported function surface",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Return the total after discounting the subtotal and then applying tax while clamping the tax rate at zero."
+          },
+          {
+            "path": "contract.inputs",
+            "summary": "3 authored input(s)"
+          },
+          {
+            "path": "contract.returns",
+            "summary": "returns Decimal"
+          },
+          {
+            "path": "contract.invariants",
+            "summary": "1 authored invariant(s)"
+          },
+          {
+            "path": "deps",
+            "summary": "2 declared dep(s)"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "body.rust",
+            "summary": "projects to Rust function calculate_total_guarded_tax with 3 input(s)"
+          }
+        ],
+        "evaluator_scope": "supported_function_surface"
+      },
+      "category_qualification": null
+    },
+    {
+      "id": "pricing/discount_strategy",
+      "semantic_review": {
+        "verdict": "backend_only_meaning_preserved",
+        "compatibility_key": "sum.discount_strategy.v1",
+        "descriptor_id": "discount_strategy.ecommerce.v1",
+        "reason_codes": [
+          "backend_only_execution_marker",
+          "proof_helper_only_marker"
+        ],
+        "summary": "backend-only execution markers are present without changing authored meaning",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Represent mutually exclusive discount strategies for checkout pricing."
+          },
+          {
+            "path": "sum.variants",
+            "summary": "3 authored variant(s)"
+          },
+          {
+            "path": "methods",
+            "summary": "2 semantic method(s) on pricing/discount_strategy"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "sum",
+            "summary": "projects to Rust enum DiscountStrategy"
+          },
+          {
+            "path": "methods.*.lowering.rust.body",
+            "summary": "2 executable semantic method(s)"
+          },
+          {
+            "path": "backends.rust.derives",
+            "summary": "Rust derives contribute backend-only execution metadata"
+          }
+        ],
+        "evaluator_scope": "supported_sum_surface"
+      },
+      "category_qualification": {
+        "category_id": "sum.discount_strategy.v1",
+        "descriptor_id": "discount_strategy.ecommerce.v1",
+        "claim_status": "supported_qualified",
+        "positive_credit_eligibility": "eligible",
+        "reason_code": "qualified"
+      }
+    },
+    {
+      "id": "pricing/pricing_quote",
+      "semantic_review": {
+        "verdict": "backend_only_meaning_preserved",
+        "compatibility_key": "data.pricing_quote.v1",
+        "descriptor_id": "pricing_quote.ecommerce.v1",
+        "reason_codes": [
+          "backend_only_execution_marker"
+        ],
+        "summary": "backend-only execution markers are present without changing authored meaning",
+        "authored_surfaces": [
+          {
+            "path": "intent.why",
+            "summary": "Quote a checkout total from subtotal plus discount and tax rates."
+          },
+          {
+            "path": "data.fields",
+            "summary": "3 authored data field(s)"
+          },
+          {
+            "path": "constructors",
+            "summary": "1 authored constructor(s)"
+          },
+          {
+            "path": "methods",
+            "summary": "2 semantic method(s) on pricing/pricing_quote"
+          }
+        ],
+        "executable_surfaces": [
+          {
+            "path": "data",
+            "summary": "projects to Rust struct PricingQuote"
+          },
+          {
+            "path": "constructors",
+            "summary": "1 executable constructor(s)"
+          },
+          {
+            "path": "methods.*.lowering.rust.body",
+            "summary": "2 executable semantic method(s)"
+          },
+          {
+            "path": "backends.rust.derives",
+            "summary": "Rust derives contribute backend-only execution metadata"
+          }
+        ],
+        "evaluator_scope": "supported_data_surface"
+      },
+      "category_qualification": {
+        "category_id": "data.pricing_quote.v1",
+        "descriptor_id": "pricing_quote.ecommerce.v1",
+        "claim_status": "supported_qualified",
+        "positive_credit_eligibility": "eligible",
+        "reason_code": "qualified"
+      }
     }
   ],
   "molecule_tests": [
@@ -1343,6 +1649,7 @@
       "semantic_review": {
         "verdict": "backend_only_meaning_preserved",
         "compatibility_key": "sum.discount_strategy.v1",
+        "descriptor_id": "discount_strategy.ecommerce.v1",
         "reason_codes": [
           "backend_only_execution_marker",
           "proof_helper_only_marker"
@@ -1571,6 +1878,7 @@
       "semantic_review": {
         "verdict": "backend_only_meaning_preserved",
         "compatibility_key": "data.pricing_quote.v1",
+        "descriptor_id": "pricing_quote.ecommerce.v1",
         "reason_codes": [
           "backend_only_execution_marker"
         ],
@@ -1763,7 +2071,7 @@
       "accounting_status": "valid",
       "benchmark_status": "passing",
       "gate_status": "satisfied",
-      "readability_review_status": "current",
+      "readability_review_status": "stale",
       "readability_verdict": {
         "decision": "approved",
         "summary": "Generated benchmark surfaces remain readable and structurally traceable for the seeded BENCH-ECOM closure."
@@ -1892,6 +2200,13 @@
           "classification": "supported",
           "status": "valid",
           "semantic_support_status": "supported",
+          "category_qualification": {
+            "category_id": "sum.discount_strategy.v1",
+            "descriptor_id": "discount_strategy.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
+          },
           "proof_refs": {
             "passport": "examples/ecommerce/units/pricing/discount_strategy.spec.passport.json",
             "covering_molecule_evidence": [
@@ -1907,6 +2222,13 @@
           "classification": "supported",
           "status": "valid",
           "semantic_support_status": "supported",
+          "category_qualification": {
+            "category_id": "data.pricing_quote.v1",
+            "descriptor_id": "pricing_quote.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
+          },
           "proof_refs": {
             "passport": "examples/ecommerce/units/pricing/pricing_quote.spec.passport.json",
             "covering_molecule_evidence": [

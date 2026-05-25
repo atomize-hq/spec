@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "roots": [],
   "units": [],
   "benchmarks": [
@@ -77,6 +77,13 @@
           "classification": "supported",
           "status": "valid",
           "semantic_support_status": "supported",
+          "category_qualification": {
+            "category_id": "sum.discount_strategy.v1",
+            "descriptor_id": "discount_strategy.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
+          },
           "proof_refs": {
             "passport": "examples/ecommerce/units/pricing/discount_strategy.spec.passport.json",
             "covering_molecule_evidence": [
@@ -92,6 +99,13 @@
           "classification": "supported",
           "status": "valid",
           "semantic_support_status": "supported",
+          "category_qualification": {
+            "category_id": "data.pricing_quote.v1",
+            "descriptor_id": "pricing_quote.ecommerce.v1",
+            "claim_status": "supported_qualified",
+            "positive_credit_eligibility": "eligible",
+            "reason_code": "qualified"
+          },
           "proof_refs": {
             "passport": "examples/ecommerce/units/pricing/pricing_quote.spec.passport.json",
             "covering_molecule_evidence": [

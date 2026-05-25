@@ -4,7 +4,11 @@
 //! registry/accounting inputs plus already-projected proof status and emits one
 //! shared benchmark surface for status, export, and snapshotting.
 
-use crate::semantic_review::SemanticSupportStatus;
+use crate::category_truth::{
+    CategoryQualification, ClaimStatus, ConsumerKind, PositiveCreditEligibility,
+    is_first_scope_seam_unit_id, is_seam_category_claim_candidate, qualify_category_claim,
+};
+use crate::semantic_review::{SemanticReview, SemanticSupportStatus};
 use crate::{BenchmarkRegistryInvalidDetails, Result, SpecError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -170,6 +174,8 @@ pub struct BenchmarkCaseTruth {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_review: Option<SemanticReview>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_support_status: Option<SemanticSupportStatus>,
 }
 
@@ -238,6 +244,8 @@ pub struct BenchmarkCaseProjection {
     pub reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_support_status: Option<SemanticSupportStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_qualification: Option<CategoryQualification>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof_refs: Option<BenchmarkProofRefs>,
     pub counts_as_supported_positive: bool,
@@ -357,8 +365,6 @@ pub fn project_benchmark(
     let case_labels =
         selected_case_labels(benchmark, request.path_scope, &request.selected_carrier_ids);
     let unlabeled_loaded_carrier_ids = unlabeled_loaded_carrier_ids(benchmark, request);
-    let accounting_status =
-        determine_accounting_status(benchmark, request.path_scope, &unlabeled_loaded_carrier_ids);
 
     let mut required_molecule_proofs = if matches!(request.path_scope, BenchmarkPathScope::Full) {
         benchmark
@@ -383,8 +389,22 @@ pub fn project_benchmark(
 
     let mut cases = case_labels
         .iter()
-        .map(|label| project_case(benchmark, label, request, accounting_status))
+        .map(|label| project_case(benchmark, label, request))
         .collect::<Vec<_>>();
+    let accounting_status = determine_accounting_status(
+        benchmark,
+        request.path_scope,
+        &unlabeled_loaded_carrier_ids,
+        &cases,
+    );
+    for case_projection in &mut cases {
+        case_projection.counts_as_supported_positive = counts_as_supported_positive(
+            benchmark,
+            request.path_scope,
+            accounting_status,
+            case_projection,
+        );
+    }
     cases.sort_by(|left, right| left.case_id.cmp(&right.case_id));
 
     let readability_generated_files = matches!(request.path_scope, BenchmarkPathScope::Full)
@@ -810,17 +830,21 @@ fn determine_accounting_status(
     benchmark: &BenchmarkLabel,
     path_scope: BenchmarkPathScope,
     unlabeled_loaded_carrier_ids: &[String],
+    cases: &[BenchmarkCaseProjection],
 ) -> BenchmarkAccountingStatus {
     if matches!(benchmark.lifecycle, BenchmarkLifecycle::Reserved) {
         return BenchmarkAccountingStatus::ReservedMissingCases;
     }
+    let has_unqualified_supported_seam_case = cases
+        .iter()
+        .any(supported_seam_case_requires_qualified_truth);
     if matches!(path_scope, BenchmarkPathScope::Partial) {
-        if unlabeled_loaded_carrier_ids.is_empty() {
+        if unlabeled_loaded_carrier_ids.is_empty() && !has_unqualified_supported_seam_case {
             BenchmarkAccountingStatus::PartialValid
         } else {
             BenchmarkAccountingStatus::PartialInvalid
         }
-    } else if unlabeled_loaded_carrier_ids.is_empty() {
+    } else if unlabeled_loaded_carrier_ids.is_empty() && !has_unqualified_supported_seam_case {
         BenchmarkAccountingStatus::Valid
     } else {
         BenchmarkAccountingStatus::Invalid
@@ -831,7 +855,6 @@ fn project_case(
     benchmark: &BenchmarkLabel,
     label: &BenchmarkCaseLabel,
     request: &BenchmarkProjectionRequest,
-    accounting_status: BenchmarkAccountingStatus,
 ) -> BenchmarkCaseProjection {
     let truth = request.root_case_truths.get(&label.carrier_id);
     let status = truth
@@ -845,18 +868,16 @@ fn project_case(
             )
         })
     });
-    let semantic_support_status = truth.and_then(|truth| truth.semantic_support_status);
+    let semantic_support_status = truth
+        .and_then(|truth| {
+            truth
+                .semantic_review
+                .as_ref()
+                .map(SemanticReview::effective_support_status)
+        })
+        .or_else(|| truth.and_then(|truth| truth.semantic_support_status));
+    let category_qualification = project_case_category_qualification(&label.carrier_id, truth);
     let proof_refs = build_case_proof_refs(benchmark, label, request);
-    let counts_as_supported_positive = matches!(benchmark.kind, BenchmarkKind::Positive)
-        && matches!(benchmark.lifecycle, BenchmarkLifecycle::Active)
-        && matches!(request.path_scope, BenchmarkPathScope::Full)
-        && matches!(accounting_status, BenchmarkAccountingStatus::Valid)
-        && matches!(label.classification, BenchmarkClassification::Supported)
-        && matches!(status, BenchmarkTruthStatus::Valid)
-        && matches!(
-            semantic_support_status,
-            Some(SemanticSupportStatus::Supported)
-        );
 
     BenchmarkCaseProjection {
         case_id: label.case_id.clone(),
@@ -866,9 +887,75 @@ fn project_case(
         status,
         reason,
         semantic_support_status,
+        category_qualification,
         proof_refs,
-        counts_as_supported_positive,
+        counts_as_supported_positive: false,
     }
+}
+
+fn counts_as_supported_positive(
+    benchmark: &BenchmarkLabel,
+    path_scope: BenchmarkPathScope,
+    accounting_status: BenchmarkAccountingStatus,
+    case_projection: &BenchmarkCaseProjection,
+) -> bool {
+    matches!(benchmark.kind, BenchmarkKind::Positive)
+        && matches!(benchmark.lifecycle, BenchmarkLifecycle::Active)
+        && matches!(path_scope, BenchmarkPathScope::Full)
+        && matches!(accounting_status, BenchmarkAccountingStatus::Valid)
+        && matches!(
+            case_projection.classification,
+            BenchmarkClassification::Supported
+        )
+        && matches!(case_projection.status, BenchmarkTruthStatus::Valid)
+        && match &case_projection.category_qualification {
+            Some(qualification) => {
+                matches!(qualification.claim_status, ClaimStatus::SupportedQualified)
+                    && matches!(
+                        qualification.positive_credit_eligibility,
+                        PositiveCreditEligibility::Eligible
+                    )
+            }
+            None => {
+                !is_first_scope_seam_unit_id(&case_projection.carrier_id)
+                    && matches!(
+                        case_projection.semantic_support_status,
+                        Some(SemanticSupportStatus::Supported)
+                    )
+            }
+        }
+}
+
+fn supported_seam_case_requires_qualified_truth(case_projection: &BenchmarkCaseProjection) -> bool {
+    matches!(
+        case_projection.classification,
+        BenchmarkClassification::Supported
+    ) && if let Some(qualification) = case_projection.category_qualification.as_ref() {
+        !matches!(qualification.claim_status, ClaimStatus::SupportedQualified)
+            || !matches!(
+                qualification.positive_credit_eligibility,
+                PositiveCreditEligibility::Eligible
+            )
+    } else {
+        is_first_scope_seam_unit_id(&case_projection.carrier_id)
+    }
+}
+
+fn project_case_category_qualification(
+    carrier_id: &str,
+    truth: Option<&BenchmarkCaseTruth>,
+) -> Option<CategoryQualification> {
+    let semantic_review = truth.and_then(|truth| truth.semantic_review.as_ref());
+    if let Some(review) = semantic_review
+        && is_seam_category_claim_candidate(review)
+    {
+        return Some(qualify_category_claim(
+            ConsumerKind::Benchmark,
+            Some(review),
+            Some(carrier_id),
+        ));
+    }
+    None
 }
 
 fn build_case_proof_refs(
@@ -1254,6 +1341,7 @@ mod tests {
         BenchmarkCaseTruth {
             status,
             reason: None,
+            semantic_review: None,
             semantic_support_status,
         }
     }
@@ -1817,6 +1905,7 @@ mod tests {
                 status: BenchmarkTruthStatus::Valid,
                 reason: None,
                 semantic_support_status: Some(SemanticSupportStatus::Supported),
+                category_qualification: None,
                 proof_refs: None,
                 counts_as_supported_positive: true,
             },
@@ -1828,6 +1917,7 @@ mod tests {
                 status: BenchmarkTruthStatus::Valid,
                 reason: None,
                 semantic_support_status: Some(SemanticSupportStatus::Supported),
+                category_qualification: None,
                 proof_refs: None,
                 counts_as_supported_positive: false,
             },

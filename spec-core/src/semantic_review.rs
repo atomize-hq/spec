@@ -85,6 +85,8 @@ pub struct SemanticReview {
     pub verdict: SemanticVerdict,
     pub compatibility_key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub support_status: Option<SemanticSupportStatus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unsupported_reason_codes: Vec<UnsupportedFunctionReasonCode>,
@@ -453,6 +455,10 @@ enum FamilyBArgClassification {
 
 const SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY: &str = "sum.discount_strategy.v1";
 const DATA_PRICING_QUOTE_COMPATIBILITY_KEY: &str = "data.pricing_quote.v1";
+const DISCOUNT_STRATEGY_ECOMMERCE_DESCRIPTOR_ID: &str = "discount_strategy.ecommerce.v1";
+const DISCOUNT_STRATEGY_SERVICE_DESCRIPTOR_ID: &str = "discount_strategy.service.v1";
+const PRICING_QUOTE_ECOMMERCE_DESCRIPTOR_ID: &str = "pricing_quote.ecommerce.v1";
+const PRICING_QUOTE_SERVICE_DESCRIPTOR_ID: &str = "pricing_quote.service.v1";
 const FUNCTION_WRAPPER_PIPELINE_CHAIN3_COMPATIBILITY_KEY: &str =
     "function.wrapper.pipeline.chain3.v1";
 const FUNCTION_WRAPPER_PIPELINE_NORMALIZED_REQUIRED_ARG_COMPATIBILITY_KEY: &str =
@@ -721,7 +727,7 @@ pub fn project_semantic_review_with_context(
         surface @ (SupportedSurface::Function(_) | SupportedSurface::Seam(_)) => match mode {
             SemanticProjectionMode::Preserve => existing
                 .filter(|review| supported_surface_matches_existing_review(surface, review))
-                .cloned(),
+                .map(|review| canonicalize_preserved_supported_review(spec, surface, review)),
             SemanticProjectionMode::Refresh => {
                 evaluate_supported_semantic_review(spec, surface, context, &mut stack)
             }
@@ -730,11 +736,23 @@ pub fn project_semantic_review_with_context(
             SemanticProjectionMode::Preserve => None,
             SemanticProjectionMode::Refresh => Some(match unit_kind {
                 UnitKind::Function => unsupported_function_review(spec, context, &mut stack),
-                kind if is_portability_seam_kind(kind) => unsupported_surface_review(kind),
+                kind if is_portability_seam_kind(kind) => unsupported_surface_review(spec, kind),
                 _ => unreachable!("non-function unit kinds are portability seams"),
             }),
         },
     }
+}
+
+fn canonicalize_preserved_supported_review(
+    spec: &LoadedSpec,
+    surface: SupportedSurface,
+    review: &SemanticReview,
+) -> SemanticReview {
+    let mut review = review.clone();
+    if matches!(surface, SupportedSurface::Seam(_)) && review.descriptor_id.is_none() {
+        review.descriptor_id = seam_descriptor_id(spec);
+    }
+    review
 }
 
 pub fn semantic_health_effect(review: Option<&SemanticReview>) -> SemanticHealthEffect {
@@ -792,7 +810,7 @@ pub fn evaluate_semantic_review_with_context(
         }
         SupportedSurface::Unsupported(unit_kind) => Some(match unit_kind {
             UnitKind::Function => unsupported_function_review(spec, context, &mut stack),
-            kind if is_portability_seam_kind(kind) => unsupported_surface_review(kind),
+            kind if is_portability_seam_kind(kind) => unsupported_surface_review(spec, kind),
             _ => unreachable!("non-function unit kinds are portability seams"),
         }),
     }
@@ -839,10 +857,11 @@ fn evaluate_supported_semantic_review(
     }
 }
 
-fn unsupported_surface_review(unit_kind: UnitKind) -> SemanticReview {
+fn unsupported_surface_review(spec: &LoadedSpec, unit_kind: UnitKind) -> SemanticReview {
     SemanticReview {
         verdict: SemanticVerdict::UnderSpecified,
         compatibility_key: unsupported_surface_compatibility_key(unit_kind),
+        descriptor_id: seam_descriptor_id(spec),
         support_status: (unit_kind == UnitKind::Function)
             .then_some(SemanticSupportStatus::Unsupported),
         unsupported_reason_codes: Vec::new(),
@@ -867,6 +886,7 @@ impl UnsupportedFunctionDiagnostic {
         SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: UNSUPPORTED_FUNCTION_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Unsupported),
             unsupported_reason_codes: vec![self.reason_code],
             rewrite_hints: self
@@ -1146,6 +1166,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_sum_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1202,6 +1223,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_sum_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1225,6 +1247,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict,
             compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_sum_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1244,6 +1267,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
             compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_sum_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1270,6 +1294,7 @@ fn evaluate_supported_sum_semantic_review(spec: &LoadedSpec) -> Option<SemanticR
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
         compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
+        descriptor_id: supported_sum_descriptor_id(spec),
         support_status: None,
         unsupported_reason_codes: Vec::new(),
         rewrite_hints: Vec::new(),
@@ -1315,6 +1340,7 @@ fn evaluate_supported_function_semantic_review(
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: compatibility_key.to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1330,6 +1356,7 @@ fn evaluate_supported_function_semantic_review(
         SupportedBodyClassification::Aligned => Some(SemanticReview {
             verdict: SemanticVerdict::Aligned,
             compatibility_key: compatibility_key.to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1344,6 +1371,7 @@ fn evaluate_supported_function_semantic_review(
         SupportedBodyClassification::Contradictory => Some(SemanticReview {
             verdict: SemanticVerdict::SemanticDrift,
             compatibility_key: compatibility_key.to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1356,6 +1384,7 @@ fn evaluate_supported_function_semantic_review(
         SupportedBodyClassification::OutsideHonestSubset => Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: compatibility_key.to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1447,6 +1476,30 @@ fn detect_data_pricing_quote_family(spec: &LoadedSpec) -> bool {
         && authored_matches_checkout_quote_fields(&executable.fields)
         && authored_matches_checkout_quote_constructors(&executable.constructors)
         && executable_has_required_checkout_quote_roles(&executable.methods)
+}
+
+fn seam_descriptor_id(spec: &LoadedSpec) -> Option<String> {
+    match spec.spec.unit_kind().ok()? {
+        UnitKind::Sum => supported_sum_descriptor_id(spec),
+        UnitKind::Data => supported_data_descriptor_id(spec),
+        _ => None,
+    }
+}
+
+fn supported_sum_descriptor_id(spec: &LoadedSpec) -> Option<String> {
+    match spec.spec.id.as_str() {
+        "pricing/discount_strategy" => Some(DISCOUNT_STRATEGY_ECOMMERCE_DESCRIPTOR_ID.to_string()),
+        "billing/discount_strategy" => Some(DISCOUNT_STRATEGY_SERVICE_DESCRIPTOR_ID.to_string()),
+        _ => None,
+    }
+}
+
+fn supported_data_descriptor_id(spec: &LoadedSpec) -> Option<String> {
+    match spec.spec.id.as_str() {
+        "pricing/pricing_quote" => Some(PRICING_QUOTE_ECOMMERCE_DESCRIPTOR_ID.to_string()),
+        "billing/pricing_quote" => Some(PRICING_QUOTE_SERVICE_DESCRIPTOR_ID.to_string()),
+        _ => None,
+    }
 }
 
 fn authored_function_contract_is_supported(
@@ -1879,6 +1932,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         return Some(SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_data_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1922,6 +1976,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
                         return Some(SemanticReview {
                             verdict: SemanticVerdict::UnderSpecified,
                             compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
+                            descriptor_id: supported_data_descriptor_id(spec),
                             support_status: None,
                             unsupported_reason_codes: Vec::new(),
                             rewrite_hints: Vec::new(),
@@ -1951,6 +2006,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         return Some(SemanticReview {
             verdict,
             compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_data_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1970,6 +2026,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
         return Some(SemanticReview {
             verdict: SemanticVerdict::BackendOnlyMeaningPreserved,
             compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: supported_data_descriptor_id(spec),
             support_status: None,
             unsupported_reason_codes: Vec::new(),
             rewrite_hints: Vec::new(),
@@ -1985,6 +2042,7 @@ fn evaluate_supported_checkout_quote_data_review(spec: &LoadedSpec) -> Option<Se
     Some(SemanticReview {
         verdict: SemanticVerdict::Aligned,
         compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
+        descriptor_id: supported_data_descriptor_id(spec),
         support_status: None,
         unsupported_reason_codes: Vec::new(),
         rewrite_hints: Vec::new(),
@@ -6925,6 +6983,7 @@ mod tests {
         let supported_review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: SUM_DISCOUNT_STRATEGY_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -6943,6 +7002,7 @@ mod tests {
             verdict: SemanticVerdict::SemanticDrift,
             compatibility_key: FUNCTION_ARITHMETIC_LEAF_MONOTONE_DOWN_NONNEGATIVE_COMPATIBILITY_KEY
                 .to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7059,6 +7119,24 @@ mod tests {
     }
 
     #[test]
+    fn project_semantic_review_preserve_restores_missing_seam_descriptor_id() {
+        let spec = canonical_discount_strategy_sum_spec();
+        let mut review = evaluate_semantic_review(&spec).unwrap();
+        review.descriptor_id = None;
+
+        let preserved =
+            project_semantic_review(&spec, Some(&review), SemanticProjectionMode::Preserve)
+                .unwrap();
+
+        assert_eq!(
+            preserved.descriptor_id,
+            Some("discount_strategy.ecommerce.v1".to_string())
+        );
+        assert_eq!(preserved.compatibility_key, review.compatibility_key);
+        assert_eq!(preserved.verdict, review.verdict);
+    }
+
+    #[test]
     fn project_semantic_review_preserve_drops_legacy_sum_compatibility_key() {
         let spec = discount_strategy_sum_spec("billing/discount_strategy");
         let mut review = evaluate_semantic_review(&spec).unwrap();
@@ -7161,6 +7239,7 @@ mod tests {
         let existing = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: "unsupported.function.v0".to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Unsupported),
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7420,6 +7499,7 @@ mod tests {
         let review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: "unsupported.function.v1".to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7442,6 +7522,7 @@ mod tests {
         let review = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Unsupported),
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7464,6 +7545,7 @@ mod tests {
         let review = SemanticReview {
             verdict: SemanticVerdict::SemanticDrift,
             compatibility_key: "unsupported.function.v1".to_string(),
+            descriptor_id: None,
             support_status: Some(SemanticSupportStatus::Supported),
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7485,6 +7567,7 @@ mod tests {
         let unsupported_scope = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: FUNCTION_ARITHMETIC_LEAF_MONOTONE_UP_COMPATIBILITY_KEY.to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7497,6 +7580,7 @@ mod tests {
         let unsupported_key = SemanticReview {
             verdict: SemanticVerdict::UnderSpecified,
             compatibility_key: "unsupported.function.v1".to_string(),
+            descriptor_id: None,
             support_status: None,
             unsupported_reason_codes: vec![],
             rewrite_hints: vec![],
@@ -7527,6 +7611,7 @@ mod tests {
             let review = SemanticReview {
                 verdict: SemanticVerdict::Aligned,
                 compatibility_key: DATA_PRICING_QUOTE_COMPATIBILITY_KEY.to_string(),
+                descriptor_id: None,
                 support_status: None,
                 unsupported_reason_codes: vec![],
                 rewrite_hints: vec![],

@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "roots": [],
   "units": [],
   "benchmarks": [
@@ -9,7 +9,7 @@
       "lifecycle": "active",
       "required_for_v1": true,
       "path_scope": "partial",
-      "accounting_status": "partial_valid",
+      "accounting_status": "partial_invalid",
       "cases": [
         {
           "case_id": "billing/apply_membership_discount",

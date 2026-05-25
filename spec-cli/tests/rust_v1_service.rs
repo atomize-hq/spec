@@ -283,10 +283,10 @@ fn rust_v1_service_status_contract_matches_frozen_fixture() {
     let benchmark = benchmark(&json, "BENCH-SERVICE");
 
     assert_eq!(benchmark["path_scope"], "full");
-    assert_eq!(benchmark["benchmark_status"], "passing");
+    assert_eq!(benchmark["benchmark_status"], "invalid");
     assert_eq!(benchmark["gate_status"], "open");
     assert_eq!(benchmark["summary"]["required_molecule_total"], 3);
-    assert_eq!(benchmark["summary"]["positive_credit_cases"], 4);
+    assert_eq!(benchmark["summary"]["positive_credit_cases"], 0);
     assert_eq!(
         benchmark_case(benchmark, "billing/discount_strategy")["counts_as_supported_positive"],
         Value::Bool(false)
@@ -312,10 +312,10 @@ fn rust_v1_service_export_contract_matches_frozen_fixture() {
     let benchmark = benchmark(&json, "BENCH-SERVICE");
 
     assert_eq!(benchmark["path_scope"], "full");
-    assert_eq!(benchmark["benchmark_status"], "passing");
+    assert_eq!(benchmark["benchmark_status"], "invalid");
     assert_eq!(benchmark["gate_status"], "open");
     assert_eq!(benchmark["summary"]["required_molecule_total"], 3);
-    assert_eq!(benchmark["summary"]["positive_credit_cases"], 4);
+    assert_eq!(benchmark["summary"]["positive_credit_cases"], 0);
     assert_eq!(
         benchmark_case(benchmark, "billing/discount_strategy")["counts_as_supported_positive"],
         Value::Bool(false)
@@ -350,7 +350,7 @@ fn rust_v1_service_namespace_status_contract_matches_frozen_fixture() {
 
     assert_eq!(json["loader_errors"][0]["code"], "SPEC_NO_LIBRARY_ROOTS");
     assert_eq!(benchmark["path_scope"], "partial");
-    assert_eq!(benchmark["accounting_status"], "partial_valid");
+    assert_eq!(benchmark["accounting_status"], "partial_invalid");
     assert!(
         benchmark["cases"]
             .as_array()
@@ -378,7 +378,7 @@ fn rust_v1_service_namespace_export_contract_matches_frozen_fixture() {
     let benchmark = benchmark(&json, "BENCH-SERVICE");
 
     assert_eq!(benchmark["path_scope"], "partial");
-    assert_eq!(benchmark["accounting_status"], "partial_valid");
+    assert_eq!(benchmark["accounting_status"], "partial_invalid");
     assert!(
         benchmark["cases"]
             .as_array()
@@ -412,11 +412,11 @@ fn rust_v1_service_repo_root_inventory_contract_matches_updated_fixture() {
     let crosslib = benchmark(&json, "BENCH-CROSSLIB");
 
     assert_eq!(json["scope_authority"], "inventory_only");
-    assert_eq!(service["benchmark_status"], "passing");
+    assert_eq!(service["benchmark_status"], "invalid");
     assert_eq!(service["gate_status"], "open");
-    assert_eq!(service["summary"]["positive_credit_cases"], 4);
+    assert_eq!(service["summary"]["positive_credit_cases"], 0);
     assert_eq!(ecom["benchmark_status"], "passing");
-    assert_eq!(ecom["readability_review_status"], "current");
+    assert_eq!(ecom["readability_review_status"], "stale");
     assert_eq!(crosslib["benchmark_status"], "passing");
     assert_eq!(crosslib["summary"]["positive_credit_cases"], 0);
 }
@@ -440,7 +440,7 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_missing() {
     );
     let status_json = parse_stdout_json(&status_output);
     let status_benchmark = benchmark(&status_json, "BENCH-SERVICE");
-    assert_eq!(status_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(status_benchmark["benchmark_status"], "invalid");
     assert_eq!(status_benchmark["gate_status"], "open");
     assert_eq!(
         required_molecule_proof(status_benchmark, "billing/checkout_success_flow")["status"],
@@ -454,7 +454,7 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_missing() {
     );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
-    assert_eq!(export_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(export_benchmark["benchmark_status"], "invalid");
     assert_eq!(
         required_molecule_proof(export_benchmark, "billing/checkout_success_flow")["status"],
         "untested"
@@ -488,7 +488,7 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_stale() {
     );
     let status_json = parse_stdout_json(&status_output);
     let status_benchmark = benchmark(&status_json, "BENCH-SERVICE");
-    assert_eq!(status_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(status_benchmark["benchmark_status"], "invalid");
     assert_eq!(status_benchmark["gate_status"], "open");
     assert_eq!(
         required_molecule_proof(status_benchmark, "billing/checkout_success_flow")["status"],
@@ -502,7 +502,7 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_stale() {
     );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
-    assert_eq!(export_benchmark["benchmark_status"], "incomplete");
+    assert_eq!(export_benchmark["benchmark_status"], "invalid");
     assert_eq!(
         required_molecule_proof(export_benchmark, "billing/checkout_success_flow")["status"],
         "stale"
@@ -549,7 +549,7 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_failing() {
     );
     let status_json = parse_stdout_json(&status_output);
     let status_benchmark = benchmark(&status_json, "BENCH-SERVICE");
-    assert_eq!(status_benchmark["benchmark_status"], "failing");
+    assert_eq!(status_benchmark["benchmark_status"], "invalid");
     assert_eq!(status_benchmark["gate_status"], "open");
     assert_eq!(
         required_molecule_proof(status_benchmark, "billing/checkout_success_flow")["status"],
@@ -563,7 +563,7 @@ fn rust_v1_service_is_non_passing_when_required_molecule_proof_is_failing() {
     );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
-    assert_eq!(export_benchmark["benchmark_status"], "failing");
+    assert_eq!(export_benchmark["benchmark_status"], "invalid");
     assert_eq!(
         required_molecule_proof(export_benchmark, "billing/checkout_success_flow")["status"],
         "failing"
@@ -603,7 +603,7 @@ fn rust_v1_service_readability_review_becomes_stale_when_projection_digest_drift
     );
     let status_json = parse_stdout_json(&status_output);
     let status_benchmark = benchmark(&status_json, "BENCH-SERVICE");
-    assert_eq!(status_benchmark["benchmark_status"], "passing");
+    assert_eq!(status_benchmark["benchmark_status"], "invalid");
     assert_eq!(status_benchmark["readability_review_status"], "stale");
 
     let export_output = run_spec(&repo_dir, &["export", "examples/service/units"]);
@@ -613,6 +613,6 @@ fn rust_v1_service_readability_review_becomes_stale_when_projection_digest_drift
     );
     let export_json = parse_stdout_json(&export_output);
     let export_benchmark = benchmark(&export_json, "BENCH-SERVICE");
-    assert_eq!(export_benchmark["benchmark_status"], "passing");
+    assert_eq!(export_benchmark["benchmark_status"], "invalid");
     assert_eq!(export_benchmark["readability_review_status"], "stale");
 }

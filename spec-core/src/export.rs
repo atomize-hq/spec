@@ -13,6 +13,9 @@
 
 use crate::AUTHORED_SPEC_VERSION;
 use crate::benchmark::BenchmarkProjection;
+use crate::category_truth::{
+    CategoryQualification, ConsumerKind, is_seam_category_claim_candidate, qualify_category_claim,
+};
 use crate::graph::{SpecEdge, SpecGraph, top_level_deps};
 use crate::molecule_evidence::{MoleculeEvidence, read_molecule_evidence};
 use crate::passport::{
@@ -20,7 +23,7 @@ use crate::passport::{
     passport_path_for, project_passport_truth_with_context, refresh_passport_target_proofs,
 };
 use crate::plan::{LoadedPlan, PlanAcceptanceClosure, PlanComputedImpact, PlanReport, PlanStruct};
-use crate::semantic_review::{SemanticProjectionMode, SemanticReviewContext};
+use crate::semantic_review::{SemanticProjectionMode, SemanticReview, SemanticReviewContext};
 use crate::types::{
     AuthoredBackends, AuthoredConstructor, AuthoredDataShape, AuthoredMethod, AuthoredSumShape,
     Contract, DepRef, LoadedMoleculeTest, LoadedSpec, LocalTest, UnitKind,
@@ -31,7 +34,7 @@ use std::fs;
 use std::path::Path;
 
 /// Export schema version. Bumped in M9 for structured dep refs.
-const EXPORT_SCHEMA_VERSION: u8 = 4;
+const EXPORT_SCHEMA_VERSION: u8 = 5;
 const PLAN_EXPORT_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,6 +45,7 @@ pub struct ExportBundle {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provenance: Option<ArtifactProvenance>,
     pub units: Vec<ExportUnit>,
+    pub projected_units: Vec<ProjectedExportUnit>,
     pub molecule_tests: Vec<ExportMoleculeTest>,
     pub passports: Vec<Passport>,
     pub graph: ExportGraph,
@@ -71,6 +75,13 @@ pub struct ExportUnit {
     pub deps: Vec<ExportDepRef>,
     pub local_tests: Vec<LocalTest>,
     pub source_file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProjectedExportUnit {
+    pub id: String,
+    pub semantic_review: Option<SemanticReview>,
+    pub category_qualification: Option<CategoryQualification>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -157,6 +168,24 @@ pub fn build_export_bundle_with_benchmarks(
         .map(|spec| (spec.spec.id.clone(), spec.clone()))
         .collect();
     let molecule_evidence_by_id = load_molecule_evidence_for_tests(molecule_tests);
+    let semantic_review_context = SemanticReviewContext::new(&specs_by_id);
+    let projection_context = PassportProjectionContext {
+        molecule_tests,
+        molecule_evidence_by_id: &molecule_evidence_by_id,
+        specs_by_id: &specs_by_id,
+        semantic_projection_mode: SemanticProjectionMode::Preserve,
+    };
+    let existing_passports_by_id: HashMap<String, Passport> = passports
+        .iter()
+        .cloned()
+        .map(|passport| (passport.id.clone(), passport))
+        .collect();
+    let projected_units = build_projected_export_units(
+        specs,
+        &existing_passports_by_id,
+        &projection_context,
+        &semantic_review_context,
+    );
     let passports = enrich_passports_for_export(
         specs,
         molecule_tests,
@@ -193,12 +222,67 @@ pub fn build_export_bundle_with_benchmarks(
         exported_at: exported_at.to_string(),
         provenance: provenance.cloned(),
         units: specs.iter().map(ExportUnit::from).collect(),
+        projected_units,
         molecule_tests: export_molecule_tests,
         passports,
         graph: ExportGraph { edges },
         benchmarks,
         warnings,
     }
+}
+
+fn build_projected_export_units(
+    specs: &[LoadedSpec],
+    existing_passports_by_id: &HashMap<String, Passport>,
+    projection_context: &PassportProjectionContext<'_>,
+    semantic_review_context: &SemanticReviewContext<'_>,
+) -> Vec<ProjectedExportUnit> {
+    specs
+        .iter()
+        .map(|spec| {
+            let semantic_review = project_semantic_review_for_export_unit(
+                spec,
+                existing_passports_by_id.get(&spec.spec.id),
+                projection_context,
+                semantic_review_context,
+            );
+            let category_qualification = semantic_review
+                .as_ref()
+                .filter(|review| is_seam_category_claim_candidate(review))
+                .map(|review| {
+                    qualify_category_claim(
+                        ConsumerKind::Export,
+                        Some(review),
+                        Some(spec.spec.id.as_str()),
+                    )
+                });
+
+            ProjectedExportUnit {
+                id: spec.spec.id.clone(),
+                semantic_review,
+                category_qualification,
+            }
+        })
+        .collect()
+}
+
+fn project_semantic_review_for_export_unit(
+    spec: &LoadedSpec,
+    existing_passport: Option<&Passport>,
+    projection_context: &PassportProjectionContext<'_>,
+    semantic_review_context: &SemanticReviewContext<'_>,
+) -> Option<SemanticReview> {
+    let mut refreshed_passport = existing_passport.cloned();
+    if let Some(passport) = refreshed_passport.as_mut() {
+        refresh_passport_target_proofs(passport, spec);
+    }
+    project_passport_truth_with_context(
+        spec,
+        refreshed_passport.as_ref(),
+        projection_context,
+        semantic_review_context,
+    )
+    .semantic_review
 }
 
 fn enrich_passports_for_export(
@@ -1220,7 +1304,7 @@ mod tests {
 
         let bundle = build_export_bundle(&[spec], &[], "2026-04-05T00:00:00Z", None);
 
-        assert_eq!(bundle.schema_version, 4);
+        assert_eq!(bundle.schema_version, 5);
         assert_eq!(bundle.spec_version, crate::AUTHORED_SPEC_VERSION);
         assert_ne!(bundle.schema_version.to_string(), bundle.spec_version);
     }
@@ -2689,8 +2773,9 @@ mod tests {
             vec![projection.clone()],
         );
 
-        assert_eq!(bundle.schema_version, 4);
+        assert_eq!(bundle.schema_version, 5);
         assert_eq!(bundle.units.len(), 1);
+        assert_eq!(bundle.projected_units.len(), 1);
         assert_eq!(bundle.graph.edges.len(), 0);
         assert_eq!(bundle.benchmarks, vec![projection]);
     }
